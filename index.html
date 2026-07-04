@@ -1,0 +1,2612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Skincare Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #F4EFE8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: #2A2420; min-height: 100vh;
+  display: flex; justify-content: center; padding: 0 0 60px;
+}
+.phone { width: 100%; max-width: 420px; padding: 0 12px; }
+
+/* HEADER */
+.hdr { text-align: center; padding: 24px 0 14px; }
+.hdr h1 { font-family: Georgia, serif; font-size: 20px; font-weight: normal; color: #7A5A5A; letter-spacing: 2px; text-transform: uppercase; }
+.hdr .date { font-size: 13px; color: #A09090; margin-top: 6px; }
+.hdr .today-tx {
+  display: inline-block;
+  background: linear-gradient(135deg, #C4818A, #A86B75);
+  color: white; font-size: 12px; padding: 5px 16px; border-radius: 20px; margin-top: 10px;
+  box-shadow: 0 2px 8px rgba(168,107,117,0.35);
+}
+
+/* TABS */
+.tabs { display: flex; gap: 6px; margin: 0 0 16px; background: rgba(255,255,255,0.55); border-radius: 13px; padding: 4px; }
+.tab-btn { flex: 1; background: none; border: none; padding: 9px 4px; font-size: 12px; font-family: inherit; color: #9A8888; cursor: pointer; border-radius: 10px; transition: all 0.2s; font-weight: 500; }
+.tab-btn.active { background: white; color: #C4818A; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* SECTIONS */
+.section { background: white; border-radius: 18px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.sec-hdr { display: flex; align-items: center; padding: 14px 16px; cursor: pointer; gap: 10px; transition: background 0.15s; }
+.sec-hdr:hover { background: rgba(0,0,0,0.015); }
+.sec-icon { font-size: 22px; flex-shrink: 0; }
+.sec-title { font-weight: 700; font-size: 15px; flex: 1; }
+.sec-sub { font-size: 11px; color: #A09090; margin-top: 2px; font-weight: 400; }
+.sec-progress { font-size: 11px; font-weight: 700; background: #EAF5EA; color: #5A9A5A; padding: 2px 8px; border-radius: 10px; margin-left: 6px; display: none; }
+.sec-progress.visible { display: inline-block; }
+.sec-progress.all-done { background: #5A9A5A; color: white; }
+.sec-arrow { font-size: 16px; color: #C4818A; transition: transform 0.25s; flex-shrink: 0; }
+.section.open .sec-arrow { transform: rotate(180deg); }
+.sec-body { display: none; }
+.section.open .sec-body { display: block; }
+.am-hdr  { background: linear-gradient(to right, #FFF9F0, #FFF4E6); }
+.pm-hdr  { background: linear-gradient(to right, #F5F0FA, #EDE8F5); }
+.bod-hdr { background: linear-gradient(to right, #EEF5EE, #E6F0E6); }
+.ft-hdr  { background: linear-gradient(to right, #F5F0EB, #EDE8E3); }
+
+/* STEPS */
+.step { display: flex; align-items: flex-start; padding: 11px 16px; gap: 12px; border-bottom: 1px solid #F8F4F0; transition: background 0.12s; }
+.step:last-child { border-bottom: none; }
+.sn { width: 28px; height: 28px; background: #C4818A; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: white; flex-shrink: 0; margin-top: 1px; cursor: pointer; user-select: none; transition: background 0.2s, transform 0.15s; -webkit-tap-highlight-color: transparent; }
+.sn:hover { background: #B07080; transform: scale(1.08); }
+.sn:active { transform: scale(0.93); }
+.sn .sn-check { display: none; font-size: 14px; }
+.step.done .sn { background: #5A9A5A; }
+.step.done .sn .sn-num { display: none; }
+.step.done .sn .sn-check { display: block; }
+.step.done .sc-name { text-decoration: line-through; color: #B0A8A8; }
+.step.done .sc-brand { color: #C8C0C0; }
+.step.done .step-chevron { color: #DCDCDC; }
+.sc { flex: 1; min-width: 0; cursor: pointer; }
+.sc-top { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.sc-name { font-weight: 600; font-size: 13px; color: #2A2420; transition: color 0.2s; }
+.sc-brand { font-size: 11px; color: #A09090; margin-top: 2px; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 12px; font-weight: 700; white-space: nowrap; }
+.badge-today { background: #F9ECF0; color: #C4818A; }
+.badge-buy   { background: #FFF0D6; color: #D4820A; }
+.sc-detail { display: none; margin-top: 10px; padding: 12px; background: #FDFAF8; border-radius: 10px; border-left: 3px solid #C4818A; font-size: 12px; line-height: 1.75; color: #4A3E3A; }
+.sc-detail.open { display: block; }
+.det-title { font-size: 10px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; color: #C4818A; margin-bottom: 6px; }
+.det-why { margin-top: 10px; padding-top: 10px; border-top: 1px solid #EDE8E3; color: #7A6E6A; font-style: italic; }
+.sc-picked { margin-top: 7px; padding: 9px 11px; background: #FDFAF8; border-radius: 10px; border-left: 3px solid #C4818A; }
+.sc-picked-name { font-size: 12px; font-weight: 700; color: #C4818A; }
+.sc-picked-why { font-size: 11.5px; color: #7A6E6A; font-style: italic; line-height: 1.6; margin-top: 5px; padding-top: 6px; border-top: 1px solid #EDE8E3; }
+.sc-picked-change { font-size: 10.5px; color: #B0A4A4; margin-top: 6px; }
+.det-warn { margin-top: 9px; padding: 8px 10px; background: #FFF3E0; border-radius: 8px; color: #B06010; font-weight: 600; }
+.step-chevron { font-size: 14px; color: #C4C0BC; flex-shrink: 0; margin-top: 6px; transition: transform 0.2s; }
+.step.open .step-chevron { transform: rotate(90deg); }
+.step:not(.done):hover { background: #FDFBF9; }
+.tap-hint { text-align: center; font-size: 11px; color: #C0B0B0; padding: 8px 0 4px; }
+
+/* NOTES + SAVE */
+.notes-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.notes-label { font-weight: 700; font-size: 13px; color: #7A5A5A; margin-bottom: 10px; }
+.notes-ta { width: 100%; min-height: 80px; border: 1.5px solid #EAE4E0; border-radius: 12px; padding: 12px; font-family: inherit; font-size: 13px; color: #2A2420; resize: none; outline: none; transition: border-color 0.2s; background: #FDFAF8; }
+.notes-ta:focus { border-color: #C4818A; }
+.notes-ta::placeholder { color: #C0B8B0; }
+.reset-row { text-align: right; padding: 2px 2px 10px; }
+.reset-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: #C4A0A5; font-family: inherit; padding: 4px 8px; border-radius: 8px; }
+.reset-btn:hover { color: #C4818A; background: rgba(196,129,138,0.08); }
+.save-btn { width: 100%; padding: 15px; background: linear-gradient(135deg, #C4818A, #A86B75); color: white; border: none; border-radius: 16px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(168,107,117,0.4); transition: transform 0.15s, box-shadow 0.15s; }
+.save-btn:hover { transform: translateY(-1px); }
+.save-btn:active { transform: translateY(0); }
+.save-btn:disabled { background: #C0B0B0; box-shadow: none; cursor: not-allowed; transform: none; }
+
+/* PHOTOS TAB */
+.upload-card { background: white; border-radius: 18px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.upload-card h3 { font-size: 15px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
+.photo-drop { border: 2px dashed #E0D8D8; border-radius: 14px; padding: 30px 16px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; background: #FDFAF8; }
+.photo-drop:hover { border-color: #C4818A; background: #FDF5F6; }
+.photo-drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.photo-drop-icon { font-size: 36px; margin-bottom: 10px; }
+.photo-drop-text { font-size: 13px; color: #9A8888; line-height: 1.5; }
+.photo-drop-sub { font-size: 11px; color: #BEB0B0; margin-top: 6px; }
+.photo-preview-wrap { margin-top: 14px; display: none; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.12); }
+.photo-preview-wrap img { width: 100%; max-height: 300px; object-fit: cover; display: block; }
+.caption-input { width: 100%; margin-top: 12px; padding: 12px; border: 1.5px solid #EAE4E0; border-radius: 12px; font-family: inherit; font-size: 13px; color: #2A2420; background: #FDFAF8; outline: none; resize: none; min-height: 60px; }
+.caption-input:focus { border-color: #C4818A; }
+.caption-input::placeholder { color: #C0B8B0; }
+.upload-btn { width: 100%; margin-top: 12px; padding: 14px; background: linear-gradient(135deg, #C4818A, #A86B75); color: white; border: none; border-radius: 14px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; box-shadow: 0 4px 14px rgba(168,107,117,0.35); transition: transform 0.15s; }
+.upload-btn:hover { transform: translateY(-1px); }
+.upload-btn:active { transform: translateY(0); }
+.upload-btn:disabled { background: #C0B0B0; box-shadow: none; cursor: not-allowed; transform: none; }
+
+/* WEEK MINI CALENDAR */
+.week-card { background: white; border-radius: 18px; padding: 16px 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.week-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
+.week-grid { display: flex; gap: 6px; }
+.wk-cell { flex: 1; text-align: center; padding: 8px 2px; border-radius: 10px; background: #F8F4F0; }
+.wk-cell.wk-today { background: linear-gradient(135deg, #F9ECF0, #F0E4E8); }
+.wk-cell.wk-photo { background: linear-gradient(135deg, #EAF5EA, #DFF0DF); }
+.wk-cell-day { font-size: 10px; color: #9A8888; font-weight: 600; text-transform: uppercase; }
+.wk-cell-num { font-size: 14px; font-weight: 700; margin: 2px 0; }
+.wk-cell-dot { font-size: 12px; }
+.wk-cell.wk-today .wk-cell-num { color: #C4818A; }
+.wk-cell.wk-photo .wk-cell-num { color: #5A9A5A; }
+
+/* HISTORY */
+.stats-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.stat-card { flex: 1; background: white; border-radius: 14px; padding: 14px 10px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+.stat-val { font-size: 22px; font-weight: 800; color: #C4818A; line-height: 1; }
+.stat-lbl { font-size: 10px; color: #9A8888; margin-top: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.compare-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.compare-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
+.compare-grid { display: flex; gap: 10px; }
+.compare-slot { flex: 1; }
+.compare-img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 12px; display: block; }
+.compare-lbl { font-size: 11px; font-weight: 700; text-align: center; margin-top: 6px; letter-spacing: 0.5px; }
+.compare-dt { font-size: 10px; color: #9A8888; text-align: center; margin-top: 2px; }
+.compare-empty { width: 100%; aspect-ratio: 3/4; border-radius: 12px; background: #F8F4F0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; }
+.compare-empty-icon { font-size: 28px; }
+.compare-empty-txt { font-size: 11px; color: #B0A8A8; }
+.gallery-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.gallery-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
+.gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.gallery-thumb { aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: transform 0.15s; width: 100%; }
+.gallery-thumb:hover { transform: scale(1.03); }
+.logs-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.logs-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
+.log-item { padding: 12px 0; border-bottom: 1px solid #F4EFE8; display: flex; align-items: center; gap: 12px; }
+.log-item:last-child { border-bottom: none; }
+.log-date-col { font-size: 12px; font-weight: 700; color: #2A2420; min-width: 52px; }
+.log-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.log-bar-row { display: flex; align-items: center; gap: 6px; }
+.log-bar-label { font-size: 10px; color: #9A8888; width: 20px; text-align: right; }
+.log-bar-track { flex: 1; height: 5px; background: #F0EBE8; border-radius: 3px; overflow: hidden; }
+.log-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(to right, #C4818A, #A86B75); }
+.log-pct { font-size: 12px; font-weight: 700; color: #C4818A; min-width: 32px; text-align: right; }
+.log-notes-txt { font-size: 11px; color: #7A6E6A; margin-top: 5px; font-style: italic; }
+.hist-day { padding: 14px 0; border-bottom: 1px solid #F4EFE8; }
+.hist-day:last-child { border-bottom: none; }
+.hist-day-date { font-size: 14px; font-weight: 800; color: #2A2420; margin-bottom: 4px; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
+.hist-day-date::-webkit-details-marker { display: none; }
+.hist-day-date::before { content: '▸'; color: #A09090; font-size: 12px; transition: transform 0.15s; }
+.hist-day[open] .hist-day-date::before { transform: rotate(90deg); }
+.hist-day-count { font-size: 11px; font-weight: 600; color: #A09090; background: #F4EFE8; border-radius: 10px; padding: 1px 8px; }
+.hist-day[open] .hist-day-date { margin-bottom: 8px; }
+.empty-state { text-align: center; padding: 24px 16px; color: #B0A8A8; font-size: 13px; line-height: 1.6; }
+.loading-state { text-align: center; padding: 30px; color: #B0A8A8; font-size: 13px; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spinner { display: inline-block; animation: spin 1s linear infinite; font-size: 22px; }
+
+/* PHOTO TYPE SELECTOR */
+.photo-type-section { margin-bottom: 14px; }
+.photo-type-label { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.photo-type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.photo-type-btn { padding: 10px 8px; border: 2px solid #EAE4E0; border-radius: 12px; background: #FDFAF8; font-family: inherit; font-size: 12px; font-weight: 600; color: #7A6E6A; cursor: pointer; transition: all 0.2s; text-align: center; -webkit-tap-highlight-color: transparent; }
+.photo-type-btn.selected { border-color: #C4818A; background: #F9ECF0; color: #C4818A; }
+
+/* REAPPLICATIONS */
+.reapp-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.reapp-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 12px; }
+.reapp-categories { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+.reapp-cat-btn { padding: 12px 10px; border: 2px solid #EAE4E0; border-radius: 12px; background: #FDFAF8; font-family: inherit; font-size: 13px; font-weight: 600; color: #7A6E6A; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; text-align: center; line-height: 1.3; }
+.reapp-cat-btn:hover { border-color: #C4818A; color: #C4818A; background: #FDF5F6; }
+.reapp-cat-btn:active { transform: scale(0.97); background: #F9ECF0; border-color: #C4818A; }
+.reapp-history-title { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
+.reapp-entry { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #F4EFE8; }
+.reapp-entry:last-child { border-bottom: none; }
+.reapp-entry-product { font-size: 13px; font-weight: 600; color: #2A2420; }
+.reapp-entry-time { font-size: 12px; color: #9A8888; }
+.backdate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.backdate-lbl { font-size: 12px; font-weight: 600; color: #7A5A5A; white-space: nowrap; }
+.backdate-row input[type="datetime-local"] { flex: 1; min-width: 160px; padding: 8px 10px; border: 1.5px solid #EAE4E0; border-radius: 10px; font-family: inherit; font-size: 12px; color: #2A2420; background: #FDFAF8; }
+.backdate-reset { background: #FBEAF0; border: 1.5px solid #C4818A; color: #C4818A; border-radius: 10px; padding: 7px 12px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.backdate-active-note { font-size: 11.5px; color: #B06010; background: #FFF3E0; border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; font-weight: 600; }
+
+/* MODALS */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s, pointer-events 0.25s; }
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-sheet { width: 100%; max-width: 420px; background: white; border-radius: 24px 24px 0 0; max-height: 85vh; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.3s cubic-bezier(.34,1.1,.64,1); }
+.modal-overlay.open .modal-sheet { transform: translateY(0); }
+.modal-handle { width: 36px; height: 4px; background: #DDD; border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 12px; border-bottom: 1px solid #F4EFE8; flex-shrink: 0; }
+.modal-title { font-size: 15px; font-weight: 700; color: #2A2420; }
+.modal-close { background: none; border: none; font-size: 18px; color: #9A8888; cursor: pointer; padding: 4px 8px; line-height: 1; }
+.modal-body { overflow-y: auto; padding: 14px 20px 40px; -webkit-overflow-scrolling: touch; }
+.spf-item { padding: 14px; border-radius: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+.spf-item:active { transform: scale(0.98); }
+.spf-item.tier-best { border-left: 4px solid #5A9A5A; background: #F2FAF2; }
+.spf-item.tier-good { border-left: 4px solid #C4818A; background: #FDF8F8; }
+.spf-item.tier-ok   { border-left: 4px solid #C8C0B8; background: #FDFAF8; }
+.spf-item-name { font-size: 13px; font-weight: 700; color: #2A2420; margin-bottom: 7px; }
+.spf-item-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.spf-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.spf-tag-tinted  { background: #F9ECF0; color: #C4818A; }
+.spf-tag-clear   { background: #F0F5FF; color: #4A6A9A; }
+.spf-tag-uva400  { background: #EAF5EA; color: #3A8A3A; }
+.spf-tag-uvalong { background: #EAF0FA; color: #3A5A9A; }
+.spf-tag-pa4     { background: #F5F0FA; color: #6A5A9A; }
+.spf-tag-best    { background: #FFF9E0; color: #8A6A00; }
+.spf-tag-treats  { background: #FFF0E8; color: #9A5A00; }
+.spf-item-note { font-size: 11px; color: #7A6E6A; line-height: 1.5; }
+.spf-guide-btn { display: block; width: 100%; margin-top: 6px; padding: 13px; background: none; border: 1.5px solid #EAE4E0; border-radius: 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: #7A6E6A; cursor: pointer; text-align: center; transition: all 0.2s; }
+.spf-guide-btn:hover { border-color: #C4818A; color: #C4818A; }
+
+/* TOAST */
+#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #2A2420; color: white; padding: 12px 22px; border-radius: 24px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 9999; transition: transform 0.3s cubic-bezier(.34,1.56,.64,1); white-space: nowrap; }
+#toast.show { transform: translateX(-50%) translateY(0); }
+#toast.success { background: #4A8A4A; }
+#toast.error { background: #C03A3A; }
+
+/* INVENTORY */
+/* ── STREAK CARDS ─────────────────────────────────────────────────────────── */
+.streak-section-title { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 4px 8px; }
+.streak-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+.streak-card { background: white; border-radius: 14px; padding: 16px 12px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); border-top: 3px solid #EDE8E2; text-align: center; }
+.streak-card.hot  { border-top-color: #3A8A3A; }
+.streak-card.warm { border-top-color: #C47A00; }
+.streak-icon { font-size: 20px; margin-bottom: 6px; }
+.streak-num  { font-size: 36px; font-weight: 800; color: #2A2420; line-height: 1; }
+.streak-num.hot  { color: #287848; }
+.streak-num.warm { color: #C47A00; }
+.streak-days-lbl { font-size: 10px; color: #A09090; text-transform: uppercase; letter-spacing: 0.5px; margin: 4px 0 6px; }
+.streak-name { font-size: 12px; font-weight: 600; color: #4A3E3A; }
+
+/* ── PROGRESO REDESIGN (constancia → resultado) ───────────────────────────── */
+.pj-card { background: white; border-radius: 16px; padding: 16px 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 14px; }
+.pj-top { display: flex; align-items: center; justify-content: space-between; }
+.pj-title { font-size: 15px; font-weight: 700; color: #4A3E3A; }
+.pj-const { font-size: 12px; color: #287848; font-weight: 600; }
+.pj-week { font-size: 12px; color: #9A8888; margin: 2px 0 18px; }
+.pj-track { position: relative; height: 4px; background: #EDE8E2; border-radius: 99px; margin: 0 6px 8px; }
+.pj-fill { position: absolute; left: 0; top: 0; height: 100%; background: #C4818A; border-radius: 99px; }
+.pj-dot { position: absolute; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: #D8D2CC; transform: translateX(-50%); }
+.pj-dot.on { background: #C4818A; }
+.pj-miles { display: flex; justify-content: space-between; font-size: 10px; color: #A09090; padding: 0 2px; }
+.pj-note { font-size: 10.5px; color: #A09090; margin-top: 11px; border-top: 1px solid #EDE8E2; padding-top: 9px; line-height: 1.45; }
+.adh-label { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 4px 8px; }
+.adh-card { background: white; border-radius: 16px; padding: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 14px; }
+.adh-row { margin-bottom: 13px; }
+.adh-row:last-child { margin-bottom: 0; }
+.adh-top { display: flex; align-items: center; justify-content: space-between; }
+.adh-name { display: flex; align-items: center; gap: 7px; font-size: 14px; color: #4A3E3A; font-weight: 500; }
+.adh-ic { font-size: 15px; }
+.adh-val { font-size: 15px; font-weight: 800; }
+.adh-track { height: 7px; background: #EDE8E2; border-radius: 99px; margin: 7px 0 4px; }
+.adh-fill { height: 100%; border-radius: 99px; }
+.adh-sub { font-size: 11.5px; color: #9A8888; }
+
+.inv-summary { background: white; border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); display: flex; gap: 10px; }
+.inv-sum-card { flex: 1; text-align: center; }
+.inv-sum-val { font-size: 22px; font-weight: 700; color: #2A2420; }
+.inv-sum-val.amber { color: #C47A00; }
+.inv-sum-val.red { color: #C43020; }
+.inv-sum-lbl { font-size: 10px; color: #A09090; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.inv-group { margin-bottom: 14px; }
+.inv-group-hdr { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 4px 6px; }
+.inv-item { background: white; border-radius: 14px; margin-bottom: 6px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,0.06); border-left: 3px solid transparent; transition: border-color 0.2s; }
+.inv-item.status-low { border-left-color: #D4820A; }
+.inv-item.status-out { border-left-color: #D44040; }
+.inv-row { display: flex; align-items: center; padding: 11px 14px; gap: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.inv-emoji { font-size: 18px; flex-shrink: 0; }
+.inv-info { flex: 1; min-width: 0; }
+.inv-name { font-size: 13px; font-weight: 600; color: #2A2420; }
+.inv-brand { font-size: 11px; color: #A09090; margin-top: 2px; }
+.inv-chips { display: flex; gap: 4px; flex-shrink: 0; }
+.inv-chip { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; border: 1.5px solid #EDEAE8; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s; color: #C8C0C0; background: transparent; }
+.inv-chip.active-ok  { background: #EAF5EA; color: #3A8A3A; border-color: #3A8A3A; }
+.inv-chip.active-low { background: #FFF3E0; color: #C47A00; border-color: #C47A00; }
+.inv-chip.active-out { background: #FDECEA; color: #C43020; border-color: #C43020; }
+.inv-arrow { font-size: 14px; color: #C4C0BC; flex-shrink: 0; transition: transform 0.2s; margin-left: 4px; }
+.inv-item.open .inv-arrow { transform: rotate(90deg); }
+.inv-detail { display: none; padding: 0 14px 14px 46px; }
+.inv-item.open .inv-detail { display: block; }
+.inv-detail-inner { padding: 12px; background: #FDFAF8; border-radius: 10px; border-left: 3px solid #C4818A; font-size: 12px; line-height: 1.75; color: #4A3E3A; }
+.inv-detail-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #EDE8E3; }
+.inv-detail-section-title { font-size: 10px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; color: #C4818A; margin-bottom: 4px; }
+.inv-custom-del { display: block; width: 100%; margin-top: 12px; padding: 8px; background: none; border: 1px solid #FDECEA; border-radius: 10px; font-family: inherit; font-size: 12px; color: #C43020; cursor: pointer; text-align: center; }
+.inv-custom-del:hover { background: #FDECEA; }
+/* ADD PRODUCT FORM */
+.add-prod-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 16px; background: white; border: 1.5px dashed #C4818A; border-radius: 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: #C4818A; cursor: pointer; margin-bottom: 16px; transition: all 0.15s; }
+.add-prod-btn:hover { background: #FDF8F8; }
+.prod-field { margin-bottom: 14px; }
+.prod-label { font-size: 11px; font-weight: 700; color: #7A5A5A; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; display: block; }
+.prod-input { width: 100%; padding: 10px 12px; border: 1.5px solid #EAE4E0; border-radius: 12px; font-family: inherit; font-size: 13px; color: #2A2420; background: #FDFAF8; outline: none; transition: border-color 0.2s; }
+.prod-input:focus { border-color: #C4818A; }
+.seg-row { display: flex; gap: 6px; }
+.seg-btn { flex: 1; padding: 9px 4px; border: 1.5px solid #EAE4E0; border-radius: 12px; background: #FDFAF8; font-family: inherit; font-size: 12px; font-weight: 600; color: #9A8888; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
+.seg-btn.on { background: #FBEAF0; color: #C4818A; border-color: #C4818A; }
+.day-row { display: flex; gap: 5px; }
+.day-chip { flex: 1; padding: 8px 0; text-align: center; border: 1.5px solid #EAE4E0; border-radius: 10px; background: #FDFAF8; font-size: 12px; font-weight: 700; color: #B0A4A4; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
+.day-chip.on { background: #FBEAF0; color: #C4818A; border-color: #C4818A; }
+.field-hint { font-size: 10.5px; color: #A09090; margin-top: 5px; }
+.rout-card-sched { font-size: 11px; color: #C4818A; font-weight: 600; margin: 1px 0; }
+.prod-ta { min-height: 72px; resize: none; }
+.prod-emoji-row { display: flex; gap: 8px; align-items: center; }
+.prod-emoji-preview { font-size: 26px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; background: #F4EFE8; border-radius: 12px; flex-shrink: 0; }
+.prod-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23A09090' d='M5 6L0 0h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
+
+/* ROUTINE EDITOR */
+.rout-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.rout-hdr-title { font-size: 15px; font-weight: 700; color: #7A5A5A; }
+.rout-add-btn { padding: 8px 16px; background: linear-gradient(135deg, #C4818A, #A86B75); color: white; border: none; border-radius: 12px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.rout-card { background: white; border-radius: 14px; margin-bottom: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); display: flex; align-items: center; padding: 14px 16px; gap: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.rout-card:hover { background: #FDFBF9; }
+.rout-card-emoji { font-size: 22px; flex-shrink: 0; }
+.rout-card-info { flex: 1; }
+.rout-card-name { font-size: 14px; font-weight: 700; color: #2A2420; }
+.rout-card-sub { font-size: 11px; color: #A09090; margin-top: 2px; }
+.rout-card-arrow { font-size: 16px; color: #C4818A; }
+.rout-card-del { background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; color: #C0B0B0; }
+.rout-card-del:hover { color: #C43020; }
+.rout-back-btn { display: flex; align-items: center; gap: 6px; background: none; border: none; font-family: inherit; font-size: 14px; font-weight: 600; color: #C4818A; cursor: pointer; padding: 0 0 16px; }
+.rout-step-item { background: white; border-radius: 12px; margin-bottom: 6px; padding: 12px 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 10px; }
+.rout-step-num { width: 24px; height: 24px; background: #C4818A; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: white; flex-shrink: 0; }
+.rout-step-info { flex: 1; min-width: 0; }
+.rout-step-name { font-size: 13px; font-weight: 600; color: #2A2420; }
+.rout-step-brand { font-size: 11px; color: #A09090; margin-top: 1px; }
+.rout-step-picker { font-size: 10px; color: #C4818A; margin-top: 2px; font-style: italic; }
+.rout-step-actions { display: flex; gap: 2px; flex-shrink: 0; align-items: center; }
+.rout-move-btn { background: none; border: 1px solid #EAE4E0; border-radius: 6px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; color: #9A8888; }
+.rout-move-btn:hover { border-color: #C4818A; color: #C4818A; }
+.rout-move-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.rout-step-del { background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 6px; color: #C0B0B0; margin-left: 4px; }
+.rout-step-del:hover { color: #C43020; }
+.rout-add-step-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 16px; background: white; border: 1.5px dashed #C4818A; border-radius: 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: #C4818A; cursor: pointer; margin-top: 8px; }
+.rout-add-step-btn:hover { background: #FDF8F8; }
+
+/* LOGIN */
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.login-card { width: 100%; max-width: 340px; background: white; border-radius: 20px; padding: 28px 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.login-title { text-align: center; font-family: Georgia, serif; font-size: 19px; color: #7A5A5A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 24px; }
+.login-field { margin-bottom: 14px; }
+.login-error { font-size: 12px; color: #C43020; background: #FDECEA; border-radius: 10px; padding: 8px 10px; margin-bottom: 12px; display: none; }
+.logout-btn { position: absolute; top: 20px; right: 12px; background: none; border: none; font-size: 11px; color: #B0A0A0; cursor: pointer; font-family: inherit; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="login-screen">
+  <div class="login-card">
+    <div class="login-title">✦ Skincare Tracker ✦</div>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-field">
+      <input class="prod-input" id="login-email" type="email" placeholder="Email" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <input class="prod-input" id="login-password" type="password" placeholder="Contraseña" autocomplete="current-password">
+    </div>
+    <button class="save-btn" id="login-btn" onclick="doLogin()" style="margin-bottom:0">Entrar</button>
+  </div>
+</div>
+
+<div class="phone" id="app-root" style="display:none; position:relative;">
+  <button class="logout-btn" onclick="doLogout()">Salir ↦</button>
+
+  <div class="hdr">
+    <h1>✦ Skincare Tracker ✦</h1>
+    <div class="date" id="hdr-date"></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('today',this)">☀️ Today</button>
+    <button class="tab-btn" onclick="showTab('photos',this)">📸 Photos</button>
+    <button class="tab-btn" onclick="showTab('history',this)">📈 Progreso</button>
+    <button class="tab-btn" onclick="showTab('stock',this)">🧴 Stock</button>
+    <button class="tab-btn" onclick="showTab('routines',this)">⚙️ Rutinas</button>
+  </div>
+
+  <!-- TODAY -->
+  <div id="tab-today" class="tab-content active">
+    <div class="reset-row">
+      <button class="reset-btn" onclick="resetAll()">↺ Reset day</button>
+    </div>
+
+    <div class="section" id="sec-am">
+      <div class="sec-hdr am-hdr" onclick="toggleSec('sec-am')">
+        <span class="sec-icon">☀️</span>
+        <div class="sec-title">Morning Routine
+          <div class="sec-sub" id="am-sec-sub">Face &amp; Neck · 9 steps <span class="sec-progress" id="prog-am-body"></span></div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="am-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-pm">
+      <div class="sec-hdr pm-hdr" onclick="toggleSec('sec-pm')">
+        <span class="sec-icon">🌙</span>
+        <div class="sec-title">Evening Routine
+          <div class="sec-sub" id="pm-sec-sub">Face &amp; Neck · 5 steps <span class="sec-progress" id="prog-pm-body"></span></div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="pm-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-body-card">
+      <div class="sec-hdr bod-hdr" onclick="toggleSec('sec-body-card')">
+        <span class="sec-icon">🧴</span>
+        <div class="sec-title">Body
+          <div class="sec-sub">Ducha · 5 pasos <span class="sec-progress" id="prog-body-body"></span></div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="body-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-feet">
+      <div class="sec-hdr ft-hdr" onclick="toggleSec('sec-feet')">
+        <span class="sec-icon">🦶</span>
+        <div class="sec-title">Feet
+          <div class="sec-sub">Nightly · 5 steps · ~15 min <span class="sec-progress" id="prog-feet-body"></span></div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="feet-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+
+    <!-- REAPPLICATIONS - category grid -->
+    <div class="reapp-card">
+      <h3>🔄 Reaplicaciones</h3>
+      <div class="backdate-row">
+        <span class="backdate-lbl">🕐 Registrar para:</span>
+        <input type="datetime-local" id="backdate-input" onchange="onBackdateChange()">
+        <button class="backdate-reset" id="backdate-reset-btn" onclick="resetBackdate()" style="display:none">Ahora</button>
+      </div>
+      <div class="backdate-active-note" id="backdate-active-note" style="display:none"></div>
+      <div class="reapp-categories">
+        <button class="reapp-cat-btn" onclick="openSPFPicker()">🌞 SPF Cara</button>
+        <button class="reapp-cat-btn" onclick="openBodySPFPicker()">☀️ SPF Cuerpo</button>
+        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'lips')">💋 Labios</button>
+        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'eye')">👁️ Ojos</button>
+        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'activos')">💊 Activos</button>
+        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'exfoliantes')">🫧 Exfoliantes</button>
+        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'hidratante')">🧴 Hidratante</button>
+        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'feet')">🦶 Pies</button>
+      </div>
+      <div id="reapp-history"></div>
+    </div>
+
+    <div class="notes-card">
+      <div class="notes-label">📝 Notes for today</div>
+      <textarea class="notes-ta" id="daily-notes" placeholder="How did your skin feel? Any reactions, observations..."></textarea>
+    </div>
+
+    <button class="save-btn" id="save-btn" onclick="saveAndReset()">💾 Save &amp; Reset Day</button>
+  </div>
+
+  <!-- PHOTOS -->
+  <div id="tab-photos" class="tab-content">
+    <div class="upload-card">
+      <h3>📸 Agregar foto de progreso</h3>
+      <div class="photo-type-section">
+        <div class="photo-type-label">Área del cuerpo</div>
+        <div class="photo-type-grid" id="photo-type-grid"></div>
+      </div>
+      <div class="photo-drop">
+        <input type="file" id="photo-input" accept="image/*" onchange="previewPhoto(this)">
+        <div class="photo-drop-icon">📷</div>
+        <div class="photo-drop-text">Toca para tomar foto o elegir de galería</div>
+        <div class="photo-drop-sub">Misma luz y ángulo cada semana para comparar bien</div>
+      </div>
+      <div class="photo-preview-wrap" id="photo-preview-wrap">
+        <img id="photo-preview" src="" alt="Preview">
+      </div>
+      <textarea class="caption-input" id="photo-caption" placeholder="Nota (opcional) — ej. 'Semana 3 · mejilla izquierda mejorando'"></textarea>
+      <button class="upload-btn" id="upload-btn" onclick="uploadPhoto()" disabled>Subir foto</button>
+    </div>
+
+    <div class="week-card">
+      <h3>This Week</h3>
+      <div class="week-grid" id="week-grid">
+        <div class="loading-state"><span class="spinner">⟳</span></div>
+      </div>
+    </div>
+
+    <div id="photo-gallery-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando fotos...</div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="tab-history" class="tab-content">
+    <div id="history-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Loading your history...</div>
+    </div>
+  </div>
+
+  <!-- STOCK -->
+  <div id="tab-stock" class="tab-content">
+    <div id="inventory-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando inventario...</div>
+    </div>
+  </div>
+
+  <!-- RUTINAS -->
+  <div id="tab-routines" class="tab-content">
+    <a href="rutinas-melasma-visual.html" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;background:linear-gradient(135deg,#fbe6ee,#f1e8f9);border:1px solid #efe5de;border-radius:14px;padding:13px 15px;margin-bottom:14px;box-shadow:0 2px 10px rgba(196,129,138,0.12);">
+      <span style="font-size:22px;">✨</span>
+      <span style="flex:1;">
+        <span style="display:block;font-weight:700;color:#C4818A;font-size:14px;">Plan anti-melasma</span>
+        <span style="display:block;color:#9A8888;font-size:11.5px;">Calendario semanal AM/PM y justificación</span>
+      </span>
+      <span style="color:#C4818A;font-size:18px;font-weight:700;">›</span>
+    </a>
+    <div id="routines-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando rutinas...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SPF Facial Picker -->
+<div class="modal-overlay" id="spf-modal" onclick="closeModal('spf-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">🌞 ¿Cuál SPF facial aplicaste?</div>
+      <button class="modal-close" onclick="closeModal('spf-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="spf-picker-body"></div>
+  </div>
+</div>
+
+<!-- Body SPF Picker -->
+<div class="modal-overlay" id="body-spf-modal" onclick="closeModal('body-spf-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">☀️ ¿Cuál SPF corporal aplicaste?</div>
+      <button class="modal-close" onclick="closeModal('body-spf-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="body-spf-picker-body"></div>
+  </div>
+</div>
+
+<!-- SPF Comparison -->
+<div class="modal-overlay" id="compare-modal" onclick="closeModal('compare-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📊 Comparativa — Melasma</div>
+      <button class="modal-close" onclick="closeModal('compare-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="compare-body"></div>
+  </div>
+</div>
+
+<!-- Generic Product Picker -->
+<div class="modal-overlay" id="product-picker-modal" onclick="closeModal('product-picker-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="product-picker-title">Elegir producto</div>
+      <button class="modal-close" onclick="closeModal('product-picker-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="product-picker-body"></div>
+  </div>
+</div>
+
+<!-- Add Product Modal -->
+<div class="modal-overlay" id="add-product-modal" onclick="closeModal('add-product-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">＋ Nuevo producto</div>
+      <button class="modal-close" onclick="closeModal('add-product-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="prod-field">
+        <label class="prod-label">Emoji y nombre</label>
+        <div class="prod-emoji-row">
+          <div class="prod-emoji-preview" id="emoji-preview">🧴</div>
+          <input class="prod-input" id="pf-emoji" type="text" placeholder="🧴" maxlength="2"
+            style="width:54px;text-align:center;font-size:20px;padding:8px 4px"
+            oninput="document.getElementById('emoji-preview').textContent=this.value||'🧴'">
+          <input class="prod-input" id="pf-name" type="text" placeholder="Nombre del producto" style="flex:1">
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Marca / subtítulo</label>
+        <input class="prod-input" id="pf-brand" type="text" placeholder="Ej: Isdin · SPF50">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Categoría</label>
+        <!-- Opciones generadas desde PRODUCT_CATEGORIES por renderCategorySelects() -->
+        <select class="prod-input prod-select" id="pf-cat" onchange="toggleCustomCat(this)"></select>
+        <input class="prod-input" id="pf-cat-custom" type="text" placeholder="Nombre de la nueva categoría" style="display:none;margin-top:8px">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Descripción del producto</label>
+        <textarea class="prod-input prod-ta" id="pf-note" placeholder="Para qué sirve, beneficios principales, ingredientes clave..."></textarea>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Cómo aplicar</label>
+        <textarea class="prod-input prod-ta" id="pf-how" placeholder="Pasos de aplicación, cantidad, frecuencia, precauciones..."></textarea>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Por qué funciona</label>
+        <textarea class="prod-input prod-ta" id="pf-why" placeholder="Mecanismo activo, ingredientes clave, qué hace a nivel de piel..."></textarea>
+      </div>
+      <button class="save-btn" id="save-prod-btn" onclick="saveCustomProduct()" style="margin-top:4px">Guardar producto</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Add Routine Modal -->
+<div class="modal-overlay" id="add-routine-modal" onclick="closeModal('add-routine-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">＋ Nueva rutina</div>
+      <button class="modal-close" onclick="closeModal('add-routine-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="prod-field">
+        <label class="prod-label">Emoji y nombre</label>
+        <div class="prod-emoji-row">
+          <div class="prod-emoji-preview" id="rf-emoji-preview">✨</div>
+          <input class="prod-input" id="rf-emoji" type="text" placeholder="✨" maxlength="2"
+            style="width:54px;text-align:center;font-size:20px;padding:8px 4px"
+            oninput="document.getElementById('rf-emoji-preview').textContent=this.value||'✨'">
+          <input class="prod-input" id="rf-name" type="text" placeholder="Nombre de la rutina" style="flex:1">
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Sección del día</label>
+        <div class="seg-row" id="rf-section-row">
+          <button type="button" class="seg-btn" data-sec="am" onclick="selectRoutineSection('am')">Mañana</button>
+          <button type="button" class="seg-btn" data-sec="pm" onclick="selectRoutineSection('pm')">Noche</button>
+          <button type="button" class="seg-btn" data-sec="body" onclick="selectRoutineSection('body')">Cuerpo</button>
+          <button type="button" class="seg-btn" data-sec="feet" onclick="selectRoutineSection('feet')">Pies</button>
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Días de la semana</label>
+        <div class="day-row" id="rf-day-row">
+          <button type="button" class="day-chip" data-dow="0" onclick="toggleRoutineDay(0)">D</button>
+          <button type="button" class="day-chip" data-dow="1" onclick="toggleRoutineDay(1)">L</button>
+          <button type="button" class="day-chip" data-dow="2" onclick="toggleRoutineDay(2)">M</button>
+          <button type="button" class="day-chip" data-dow="3" onclick="toggleRoutineDay(3)">X</button>
+          <button type="button" class="day-chip" data-dow="4" onclick="toggleRoutineDay(4)">J</button>
+          <button type="button" class="day-chip" data-dow="5" onclick="toggleRoutineDay(5)">V</button>
+          <button type="button" class="day-chip" data-dow="6" onclick="toggleRoutineDay(6)">S</button>
+        </div>
+        <div class="field-hint">Ninguno seleccionado = todos los días. (M = martes, X = miércoles)</div>
+      </div>
+      <button class="save-btn" id="save-routine-btn" onclick="saveNewRoutine()" style="margin-top:4px">Guardar rutina</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Step Modal -->
+<div class="modal-overlay" id="add-step-modal" onclick="closeModal('add-step-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">＋ Nuevo paso</div>
+      <button class="modal-close" onclick="closeModal('add-step-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sf-routine-id">
+      <div class="prod-field">
+        <label class="prod-label">Tipo de producto</label>
+        <!-- Opciones generadas desde PRODUCT_CATEGORIES por renderCategorySelects() -->
+        <select class="prod-input prod-select" id="sf-cat" onchange="onStepCatChange()"></select>
+      </div>
+      <div class="prod-field" id="sf-product-field" style="display:none">
+        <label class="prod-label">Producto</label>
+        <select class="prod-input prod-select" id="sf-product">
+          <option value="">— Sin fijar · rotar cada día —</option>
+        </select>
+        <div class="field-hint">Sin fijar = eliges el producto cada día en Today. Fija uno si quieres que ese paso siempre use el mismo.</div>
+      </div>
+      <div class="prod-field" id="sf-info-field" style="display:none">
+        <label class="prod-label">Nombre del paso</label>
+        <input class="prod-input" id="sf-info-name" type="text" placeholder="Ej: Esperar 15 min · piel seca">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Aplicación en esta rutina</label>
+        <textarea class="prod-input prod-ta" id="sf-how" placeholder="Cómo aplicarlo en esta rutina específica..."></textarea>
+      </div>
+      <button class="save-btn" id="save-step-btn" onclick="saveNewStep()" style="margin-top:4px">Guardar paso</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── SUPABASE ─────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://psvphqieczrlbovwnxgi.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_V4eBcTHlVl4JTj4EFszfTg_ReJU1Wy4';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── DATE UTILS ───────────────────────────────────────────────────────────────
+const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DAYS_S = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function dayOfYear(d) { return Math.floor((d - new Date(d.getFullYear(),0,0)) / 86400000); }
+function treatmentKey(d) { return dayOfYear(d) % 2 === 1 ? 'G' : 'M'; }
+function toDateStr(d) { return d.toISOString().split('T')[0]; }
+
+const TODAY = new Date();
+const TODAY_STR = toDateStr(TODAY);
+const TX_KEY = treatmentKey(TODAY);
+
+// ── PM NIGHT ROTATION ────────────────────────────────────────────────────────
+// 0=Sun=rest, 1=Mon=aha, 2=Tue=tret, 3=Wed=aha, 4=Thu=tret, 5=Fri=rest, 6=Sat=tret
+function pmNightType() {
+  return ['rest','aha','tret','aha','tret','rest','tret'][TODAY.getDay()];
+}
+
+const PM_NIGHT_INFO = {
+  tret: { label: '💊 Noche Tretinoína', color: '#F0EAFF', bg: '#6A40A8' },
+  aha:  { label: '🫧 Noche Exfoliante', color: '#E8F4FF', bg: '#2060A0' },
+  rest: { label: '😴 Noche Descanso',   color: '#EAFFF2', bg: '#287848' },
+};
+
+// ── PRODUCTS (from Supabase) ─────────────────────────────────────────────────
+let allProducts = [];
+
+async function loadProducts() {
+  const { data, error } = await db.from('products')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  if (!error && data) allProducts = data;
+}
+
+// ── PRODUCT CATEGORIES (lista maestra — única fuente de verdad) ──────────────
+// Antes esta lista vivía escrita a mano en dos <select> distintos (Agregar
+// producto y Agregar paso de rutina), y a "Labios" se le olvidó agregar en el
+// primero. Ahora ambos selects se generan desde aquí — agregar/renombrar una
+// categoría solo requiere tocar este arreglo.
+const PRODUCT_CATEGORIES = [
+  '🧼 Limpieza',
+  '✨ Serums AM',
+  '💧 Hidratantes',
+  '💊 Activos',
+  '🫧 Exfoliantes',
+  '👁️ Contorno Ojos',
+  '🌞 SPF Facial',
+  '☀️ SPF Corporal',
+  '🧴 Cuerpo',
+  '🦶 Pies',
+  '💋 Labios',
+];
+
+function renderCategorySelects() {
+  const catOptions = PRODUCT_CATEGORIES.map(c => `<option>${c}</option>`).join('');
+  document.getElementById('pf-cat').innerHTML =
+    '<option value="">— Elige categoría —</option>' + catOptions +
+    '<option value="__new__">✏️ Nueva categoría...</option>';
+  document.getElementById('sf-cat').innerHTML =
+    '<option value="">— Elige un tipo —</option>' + catOptions +
+    '<option value="__info__">📝 Sin producto (paso informativo)</option>';
+}
+
+const CATEGORY_MAP = {
+  eye:         '👁️ Contorno Ojos',
+  activos:     '💊 Activos',
+  exfoliantes: '🫧 Exfoliantes',
+  feet:        '🦶 Pies',
+  lips:        '💋 Labios',
+  hidratante:  '💧 Hidratantes',
+};
+
+function getRegistry(key) {
+  const cat = CATEGORY_MAP[key];
+  return cat ? allProducts.filter(p => p.category === cat && !p.no_reapp) : [];
+}
+
+const PICKER_TITLES = {
+  eye:         '👁️ Contorno de Ojos',
+  activos:     '💊 Activos',
+  exfoliantes: '🫧 Exfoliantes',
+  feet:        '🦶 Tratamiento de Pies',
+  lips:        '💋 Labios',
+  hidratante:  '💧 Hidratante',
+};
+// ── ROUTINE DATA ─────────────────────────────────────────────────────────────
+const TX = {
+  G: { name:'GlycoIsdin Serum', brand:'Isdin', emoji:'✨',
+    bg:'#FFE590', color:'#5A3A00',
+    how:'Dispense 3–4 drops onto clean, completely dry skin. Press gently into face and neck — do not rub. Allow to absorb fully (60 seconds).',
+    why:'Vitamin C + glycolic acid — brightens dark spots, boosts collagen, provides antioxidant protection against UV-triggered pigmentation.' },
+  M: { name:'Melascreen Serum', brand:'Ducray', emoji:'🌟',
+    bg:'#EFD0F8', color:'#5A1870',
+    how:'Apply 2–3 drops to clean skin. Press into areas of hyperpigmentation — cheeks, forehead, upper lip, neck. Do not rub. Allow 60 seconds to absorb.',
+    why:'Targets melanin overproduction at the source. Most effective layered directly under SPF to block the UV that would re-trigger pigmentation.' }
+};
+
+function buildAM(tx) {
+  return [
+    { n:1, e:'🫧', name:'Glycolic Bright Gel Cleanser', brand:'Neutrogena — Anti-Manchas',
+      how:'Wet face and neck with lukewarm water. Massage in gentle circular motions for 60 seconds — include the neck. Rinse and pat dry.',
+      why:'Glycolic acid gently exfoliates surface dead skin and fades dark spots. Morning cleansing activates skin to absorb serums more effectively.' },
+    { n:2, e:TX[tx].emoji, name:TX[tx].name, brand:TX[tx].brand, isAlt:true, how:TX[tx].how, why:TX[tx].why },
+    { n:3, e:'🛡️', name:'Barrier Support Serum', brand:'The Ordinary',
+      how:'Apply 2–3 drops after treatment serum. Press gently — no rubbing. Allow 30 seconds to absorb before next step.',
+      why:'Repairs and reinforces the skin barrier. Prevents redness and sensitivity from actives without reducing their effectiveness.' },
+    { n:4, e:'👁️', name:'Contorno de Ojos AM', brand:'Caffeine Stick · desinflamante mañanero', picker:'eye' },
+    { n:5, e:'💧', name:'Hydro Boost Gel Cream', brand:'Neutrogena',
+      how:'Apply pea-sized amount to face, neck, and décolleté using upward strokes. For neck: start at collarbone and smooth toward jaw.',
+      why:'Hyaluronic acid hydrates and plumps. Well-hydrated skin responds dramatically better to all treatment serums.' },
+    { n:6, e:'☀️', name:'Revitalift Laser Day Cream', brand:"L'Oréal Paris",
+      how:'Apply generous layer over moisturized face and neck. Smooth in upward strokes. Let settle 1–2 minutes before Finacea.',
+      why:'Pro-retinol + vitamin C daytime formula for brightening and anti-aging. Apply before Finacea and SPF.' },
+    { n:7, e:'💊', name:'Finacea Ácido Azelaico 15%', brand:'Galderma · anti-melasma activo',
+      how:'Aplica una capa muy fina sobre cara y cuello. Evitar contorno inmediato de ojos y labios. Espera 1-2 minutos antes del SPF.',
+      why:'Inhibe la tirosinasa — la enzima que fabrica melanina. Bloquea la cascada interna de pigmentación mientras el SPF bloquea el detonante externo. Usar diario para ver resultados en 3-4 meses.' },
+    { n:8, e:'🌞', name:'SPF Facial', brand:'SPF 50+ · cara y cuello', picker:'spf-face',
+      warn:'ABSOLUTAMENTE NO NEGOCIABLE para melasma. El UV es el detonante principal — sin SPF diario todos los serums trabajan a fracción de su potencia.' },
+    { n:9, e:'☀️', name:'SPF Corporal', brand:'SPF 50+ · cuerpo y brazos', picker:'spf-body',
+      warn:'Las manchas en brazos son UV-triggered — mismo mecanismo que el melasma facial. Sin SPF no van a mejorar sin importar lo que apliques.' },
+  ];
+}
+
+// PM shared step data
+const CLEANSER_PM_DATA = {
+  e:'🫧', name:'Limpieza Doble', brand:'Neutrogena — quitar SPF + polución',
+  how:'Aplica el limpiador en piel SECA primero (disuelve el SPF), agrega agua, masajea 90 segundos. Enjuaga con agua tibia. Seca bien.',
+  why:'Remover SPF y polución completamente es esencial antes de cualquier tratamiento nocturno.'
+};
+const BARRIER_STEP_DATA = {
+  e:'🛡️', name:'Barrier Support Serum', brand:'The Ordinary',
+  how:'2-3 gotas, presiona suavemente. 45 segundos para absorber.',
+  why:'Repara la barrera después de activos. Prepara la piel para la hidratación nocturna.'
+};
+const EYE_PM_DATA = {
+  e:'👁️', name:'Contorno de Ojos PM', brand:'Ceramide Stick o Tocobo Collagen', picker:'eye'
+};
+const HYDRO_PM_DATA = {
+  e:'💧', name:'Hydro Boost Gel Cream', brand:'Neutrogena — generoso en PM',
+  how:'Más generoso que en la mañana. Cara, cuello y escote con movimientos hacia arriba. Deja actuar toda la noche.',
+  why:'La hidratación nocturna intensiva es el anti-manchas más subestimado. Piel bien hidratada renueva más rápido.'
+};
+
+function buildPM() {
+  const type = pmNightType();
+
+  if (type === 'tret') return [
+    { n:1, ...CLEANSER_PM_DATA },
+    { n:2, e:'💧', name:'Hydro Boost (buffer ligero)', brand:'Neutrogena — esperar 30 min piel seca',
+      how:'Capa muy fina como buffer. Luego ESPERA 30 minutos completos antes de la tretinoína — la piel debe estar totalmente seca. Esta espera reduce irritación sin reducir efectividad.',
+      why:'Tretinoína en piel húmeda aumenta irritación significativamente. El buffer de humectante primero (técnica sandwich) es clave para principiantes.' },
+    { n:3, e:'🔬', name:'Retin-A Tretinoína 0.025%', brand:'Solo cara y cuello — evitar contorno de ojos',
+      how:'Cantidad del tamaño de un chícharo para toda la cara. Extiende en piel seca. Evita cejas, labios y 5mm del contorno del ojo. No frotar. Puede causar leve calor los primeros usos — es normal.',
+      warn:'NUNCA misma noche que AHA/BHA. Al día siguiente el SPF es más importante que nunca.' },
+    { n:4, ...EYE_PM_DATA },
+    { n:5, e:'💧', name:'Hydro Boost Gel Cream', brand:'Neutrogena — sella la tretinoína',
+      how:'5 minutos después de la tretinoína, aplica capa generosa encima. Este "sandwich" final reduce peeling sin reducir efectividad del retinol.',
+      why:'La hidratación sobre tretinoína potencia resultados y reduce el riesgo de irritación.' },
+  ];
+
+  if (type === 'aha') return [
+    { n:1, ...CLEANSER_PM_DATA },
+    { n:2, e:'🫧', name:'Toner AHA BHA PHA + Niacinamide', brand:'Exfoliante químico — algodón o manos',
+      how:'Aplica con algodón o manos limpias en cara y cuello. Evitar contorno inmediato de ojos y labios. No enjuagar. Espera 5 minutos antes del siguiente paso.',
+      warn:'Solo PM. Máx 2-3 noches/semana. NUNCA misma noche que tretinoína.' },
+    { n:3, ...BARRIER_STEP_DATA },
+    { n:4, ...EYE_PM_DATA },
+    { n:5, ...HYDRO_PM_DATA },
+  ];
+
+  // rest night
+  return [
+    { n:1, ...CLEANSER_PM_DATA },
+    { n:2, ...BARRIER_STEP_DATA },
+    { n:3, e:'💊', name:'Rice Ampoule (Niacinamide)', brand:'Opcional — iluminador suave',
+      how:'Aplica antes de la hidratante. Presiona suavemente. Compatible con el resto de la rutina.',
+      why:'Niacinamide inhibe transferencia de melanosomas. Noche de descanso perfecta para mantener luminosidad sin activos fuertes.' },
+    { n:4, ...EYE_PM_DATA },
+    { n:5, ...HYDRO_PM_DATA },
+  ];
+}
+
+const BODY_STEPS = [
+  { n:1, e:'🛁', name:'Aceite de Ducha Eucerin pH5', brand:'Eucerin — piel sensible o seca',
+    how:'Aplica sobre piel húmeda. Masajea suavemente todo el cuerpo, incluyendo brazos y escote. Enjuaga. También puede añadirse directamente al agua del baño.',
+    why:'Fórmula pH5 que preserva el manto ácido natural de la piel. Limpia sin destruir la barrera cutánea — fundamental cuando se usan activos como tretinoína o ácidos que ya sensibilizan la piel.' },
+  { n:2, e:'💆', name:'Shampoo Lambdapil Anticaída', brand:'ISDIN — estimula crecimiento capilar',
+    how:'Aplica sobre cabello mojado. Masajea el cuero cabelludo con la yema de los dedos durante 2–3 minutos. Deja actuar 2 minutos antes de enjuagar.',
+    why:'Biotina, zinc y extracto Trichogen fortalecen el folículo y reducen la caída. El tiempo de contacto en el cuero cabelludo es clave para la eficacia — no enjuagar inmediatamente.' },
+  { n:3, e:'🚿', name:'Agua tibia — no caliente', brand:'Temperatura del agua',
+    how:'Temperatura confortablemente tibia, nunca caliente. Ducha de menos de 10 minutos.',
+    why:'El agua caliente destruye los aceites naturales y daña la barrera cutánea. El agua tibia limpia igual de bien sin depletar las defensas de la piel.' },
+  { n:4, e:'🧴', name:'Dove Ceramidas Body Lotion', brand:'Dove — todo el cuerpo',
+    how:'Aplica INMEDIATAMENTE después de secarte — dentro de 2–3 minutos, con la piel todavía ligeramente húmeda. Masajea los brazos en movimientos circulares lentos.',
+    why:'Las ceramidas reconstruyen la barrera. Aplicar sobre piel húmeda aumenta la absorción hasta un 70%. El uso consistente desvanece las manchas en brazos con el tiempo.' },
+  { n:5, e:'☀️', name:'SPF Corporal', brand:'SPF 50+ · cuerpo y brazos', picker:'spf-body',
+    warn:'Las manchas en brazos son UV-triggered — mismo mecanismo que el melasma facial. Sin SPF no van a mejorar sin importar lo que apliques.' },
+];
+
+const FEET_STEPS = [
+  { n:1, e:'🪣', name:'Warm Foot Soak', brand:'10 minutes — do not skip',
+    how:'Fill basin with warm (not hot) water. Optional: 1 tablespoon Epsom salt. Soak both feet for a full 10 minutes.',
+    why:'Softens hardened skin dramatically, multiplying effectiveness of everything that follows. Salicylic acid and urea penetrate 3–4x deeper into pre-soaked skin.' },
+  { n:2, e:'🪨', name:'Pumice Stone or Electric Foot File', brand:'Talón y callosidades',
+    how:'While feet are still damp, gently file cracked heels and callused areas — about 30–45 seconds per area. Rinse and pat dry.',
+    why:'Removes dead hardened skin so active ingredients can reach live tissue below. Without this step, even high-concentration urea works only at the surface.' },
+  { n:3, e:'⚗️', name:'Salicylic Acid Gel 2%', brand:'Targeted areas only',
+    how:'Apply only to cracked and callused areas. Avoid broken or irritated skin. Wait 5–8 minutes before next step.',
+    why:'Dissolves bonds between dead skin cells, breaking up calluses from within. The wait allows it to penetrate before being sealed in by urea.' },
+  { n:4, e:'🦶', name:'Tratamiento de Urea', brand:'Elige la concentración según la dureza', picker:'feet',
+    warn:'Aplica generosamente sobre talones y grietas. Cuanto más dura la piel, mayor concentración necesitás.' },
+  { n:5, e:'🧦', name:'Cotton Socks — Wear overnight', brand:'Seal in the treatment',
+    how:'Put on clean cotton socks immediately after urea, while still fresh on skin. Sleep with them on. 4–5 nights/week first month, then 2–3/week to maintain.',
+    why:'Occlusion under fabric increases urea absorption dramatically. Most of the heel repair happens overnight under the socks.' },
+];
+
+const SECTIONS = [
+  { bodyId:'am-body',   key:'am',   total:9 },
+  { bodyId:'pm-body',   key:'pm',   total:5 },
+  { bodyId:'body-body', key:'body', total:5 },
+  { bodyId:'feet-body', key:'feet', total:5 },
+];
+
+function stepHTML(s) {
+  const id   = 'sd_' + Math.random().toString(36).slice(2,9);
+  const altB = s.isAlt ? ' <span class="badge badge-today">Today\'s Pick</span>' : '';
+  const warn = s.warn  ? `<div class="det-warn">${s.warn}</div>` : '';
+  const why  = s.why   ? `<div class="det-why">💡 ${s.why}</div>` : '';
+
+  if (s.picker) {
+    let pickerFn;
+    if (s.picker === 'spf-face') {
+      pickerFn = `openSPFPicker('step_${id}')`;
+    } else if (s.picker === 'spf-body') {
+      pickerFn = `openBodySPFPicker('step_${id}')`;
+    } else {
+      pickerFn = `openGenericPicker('step_${id}','${s.picker}')`;
+    }
+    return `<div class="step" id="step_${id}">
+  <div class="sn" onclick="checkStep('step_${id}',event)">
+    <span class="sn-num">${s.n}</span>
+    <span class="sn-check">✓</span>
+  </div>
+  <div class="sc" onclick="${pickerFn}">
+    <div class="sc-top"><span class="sc-name">${s.e} ${s.name}</span>${altB}</div>
+    <div class="sc-brand">${s.brand}</div>
+    <div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>
+  </div>
+  <div class="step-chevron" onclick="${pickerFn}">›</div>
+</div>`;
+  }
+
+  return `<div class="step" id="step_${id}">
+  <div class="sn" onclick="checkStep('step_${id}',event)">
+    <span class="sn-num">${s.n}</span>
+    <span class="sn-check">✓</span>
+  </div>
+  <div class="sc" onclick="toggleStep('step_${id}','${id}')">
+    <div class="sc-top"><span class="sc-name">${s.e} ${s.name}</span>${altB}</div>
+    <div class="sc-brand">${s.brand}</div>
+    <div class="sc-detail" id="${id}">
+      <div class="det-title">How to apply</div>${s.how}${why}${warn}
+    </div>
+  </div>
+  <div class="step-chevron" onclick="toggleStep('step_${id}','${id}')">›</div>
+</div>`;
+}
+
+function renderSteps(bodyId, arr, nightType) {
+  const c = document.getElementById(bodyId);
+  const hint = c.querySelector('.tap-hint');
+  let nightBadge = '';
+  if (nightType) {
+    const info = PM_NIGHT_INFO[nightType];
+    nightBadge = `<div style="padding:8px 16px 4px">
+      <span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;background:${info.bg};color:${info.color}">${info.label}</span>
+    </div>`;
+  }
+  c.innerHTML = (hint ? hint.outerHTML : '') + nightBadge + arr.map(stepHTML).join('');
+}
+
+// ── CHECKBOX LOGIC ────────────────────────────────────────────────────────────
+async function checkStep(stepId, event) {
+  event.stopPropagation();
+  const step = document.getElementById(stepId);
+  const wasDone = step.classList.contains('done');
+  step.classList.toggle('done');
+  const sb = step.closest('.sec-body');
+  if (sb) updateProgress(sb.id);
+  // Log only when marking as done (not when un-marking)
+  if (!wasDone && step.classList.contains('done')) {
+    const nameEl = step.querySelector('.sc-name');
+    if (nameEl) {
+      selectedProduct = nameEl.textContent.trim();
+      await logApplication('rutina');
+    }
+  }
+}
+
+function updateProgress(bodyId) {
+  const body = document.getElementById(bodyId);
+  if (!body) return;
+  const total = body.querySelectorAll('.step').length;
+  const count = body.querySelectorAll('.step.done').length;
+  const prog  = document.getElementById('prog-' + bodyId);
+  if (!prog) return;
+  if (count === 0) {
+    prog.textContent = ''; prog.className = 'sec-progress';
+  } else if (count === total) {
+    prog.textContent = '✓ All done!'; prog.className = 'sec-progress visible all-done';
+  } else {
+    prog.textContent = `${count}/${total}`; prog.className = 'sec-progress visible';
+  }
+}
+
+function resetAll() {
+  document.querySelectorAll('.step.done').forEach(s => s.classList.remove('done'));
+  SECTIONS.forEach(s => updateProgress(s.bodyId));
+}
+
+// ── SAVE & RESET ──────────────────────────────────────────────────────────────
+async function saveAndReset() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = '⏳ Saving...';
+
+  const { data: existing } = await db.from('daily_logs').select('*').eq('log_date', TODAY_STR).maybeSingle();
+
+  const payload = { log_date: TODAY_STR };
+  for (const s of SECTIONS) {
+    const body = document.getElementById(s.bodyId);
+    const currentDone  = body.querySelectorAll('.step.done').length;
+    const previousDone = existing ? (existing[s.key + '_done'] || 0) : 0;
+    payload[s.key + '_done']  = Math.max(currentDone, previousDone);
+    payload[s.key + '_total'] = s.total;
+  }
+
+  const newNotes      = document.getElementById('daily-notes').value.trim();
+  const existingNotes = existing ? (existing.notes || '') : '';
+  payload.notes = existingNotes && newNotes
+    ? existingNotes + '\n' + newNotes
+    : (newNotes || existingNotes);
+
+  const { error } = await db.from('daily_logs').upsert(payload, { onConflict: 'log_date' });
+
+  btn.disabled = false; btn.textContent = '💾 Save & Reset Day';
+
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+
+  showToast('✅ Day guardado y acumulado!', 'success');
+  resetAll();
+  document.getElementById('daily-notes').value = '';
+  historyLoaded = false;
+}
+
+// ── PHOTO TYPES ───────────────────────────────────────────────────────────────
+const PHOTO_TYPES = [
+  { key:'cara-derecha',   label:'👤 Cara derecha' },
+  { key:'cara-izquierda', label:'👤 Cara izquierda' },
+  { key:'cara-frente',    label:'👤 Cara frente' },
+  { key:'pecho',          label:'💜 Pecho' },
+  { key:'brazo',          label:'💪 Brazo' },
+  { key:'mano',           label:'✋ Mano' },
+  { key:'pie',            label:'🦶 Pie' },
+  { key:'pierna',         label:'🦵 Pierna' },
+];
+
+let selectedPhotoType = null;
+
+function renderPhotoTypeGrid() {
+  document.getElementById('photo-type-grid').innerHTML = PHOTO_TYPES.map(t =>
+    `<button class="photo-type-btn" onclick="selectPhotoType(this,'${t.key}')">${t.label}</button>`
+  ).join('');
+}
+
+function selectPhotoType(btn, key) {
+  document.querySelectorAll('.photo-type-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedPhotoType = key;
+  updateUploadBtn();
+}
+
+function updateUploadBtn() {
+  const hasPhoto = document.getElementById('photo-input').files.length > 0;
+  document.getElementById('upload-btn').disabled = !hasPhoto || !selectedPhotoType;
+}
+
+// ── PHOTO HANDLING ────────────────────────────────────────────────────────────
+function previewPhoto(input) {
+  if (!input.files[0]) return;
+  const img = document.getElementById('photo-preview');
+  img.src = URL.createObjectURL(input.files[0]);
+  document.getElementById('photo-preview-wrap').style.display = 'block';
+  updateUploadBtn();
+}
+
+function compressImage(file, maxW = 900) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale  = Math.min(1, maxW / img.naturalWidth);
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.naturalWidth  * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(resolve, 'image/jpeg', 0.75);
+    };
+    img.src = url;
+  });
+}
+
+// Bucket "progress-photos" es privado: photo_url en la DB guarda solo el nombre
+// del archivo (o una URL vieja de cuando el bucket era público). Esto resuelve
+// cualquiera de los dos casos a una signed URL temporal para poder mostrarla.
+function extractStoragePath(stored) {
+  if (!stored) return stored;
+  const marker = '/progress-photos/';
+  const idx = stored.indexOf(marker);
+  return idx === -1 ? stored : stored.slice(idx + marker.length).split('?')[0];
+}
+async function resolveSignedUrl(stored) {
+  const path = extractStoragePath(stored);
+  if (!path) return stored;
+  const { data, error } = await db.storage.from('progress-photos').createSignedUrl(path, 3600);
+  return (!error && data) ? data.signedUrl : stored;
+}
+
+async function uploadPhoto() {
+  const input = document.getElementById('photo-input');
+  if (!input.files[0] || !selectedPhotoType) return;
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = true; btn.textContent = '⏳ Subiendo...';
+
+  showToast('Comprimiendo...', '');
+  let blob;
+  try { blob = await compressImage(input.files[0]); }
+  catch (e) { showToast('❌ Error al comprimir', 'error'); btn.disabled = false; btn.textContent = 'Subir foto'; return; }
+
+  const filename = `${TODAY_STR}-${Date.now()}.jpg`;
+  const { error: upErr } = await db.storage.from('progress-photos').upload(filename, blob, { contentType: 'image/jpeg' });
+  if (upErr) { showToast('❌ ' + upErr.message, 'error'); btn.disabled = false; btn.textContent = 'Subir foto'; return; }
+
+  // Bucket is private now — store just the storage path, not a public URL.
+  // Display time resolves a short-lived signed URL instead (see resolveSignedUrl).
+  const caption = document.getElementById('photo-caption').value.trim();
+
+  const { error: dbErr } = await db.from('progress_photos').insert({
+    photo_date: TODAY_STR, photo_url: filename, caption, photo_type: selectedPhotoType
+  });
+  if (dbErr) { showToast('❌ ' + dbErr.message, 'error'); btn.disabled = false; btn.textContent = 'Subir foto'; return; }
+
+  btn.disabled = false; btn.textContent = 'Subir foto';
+  showToast('📸 ¡Foto guardada!', 'success');
+  input.value = '';
+  document.getElementById('photo-preview').src = '';
+  document.getElementById('photo-preview-wrap').style.display = 'none';
+  document.getElementById('photo-caption').value = '';
+  selectedPhotoType = null;
+  document.querySelectorAll('.photo-type-btn').forEach(b => b.classList.remove('selected'));
+  updateUploadBtn();
+  historyLoaded = false;
+  renderWeekCalendar();
+}
+
+// ── WEEK CALENDAR ──────────────────────────────────────────────────────────────
+async function renderWeekCalendar() {
+  const dow = TODAY.getDay();
+  const mon = new Date(TODAY);
+  mon.setDate(TODAY.getDate() - ((dow + 6) % 7));
+  const weekDates = Array.from({length:7}, (_, i) => {
+    const d = new Date(mon); d.setDate(mon.getDate() + i); return toDateStr(d);
+  });
+
+  const { data } = await db.from('progress_photos').select('photo_date').in('photo_date', weekDates);
+  const photoDates = new Set((data || []).map(r => r.photo_date));
+
+  document.getElementById('week-grid').innerHTML = weekDates.map((ds, i) => {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    const cls = [ds === TODAY_STR && 'wk-today', photoDates.has(ds) && 'wk-photo'].filter(Boolean).join(' ');
+    return `<div class="wk-cell ${cls}">
+  <div class="wk-cell-day">${DAYS_S[d.getDay()]}</div>
+  <div class="wk-cell-num">${d.getDate()}</div>
+  <div class="wk-cell-dot">${photoDates.has(ds) ? '📸' : '·'}</div>
+</div>`;
+  }).join('');
+}
+
+// ── PHOTO GALLERY (comparativa + galería, vive en la pestaña Photos) ──────────
+let galleryLoaded = false;
+
+async function loadPhotoGallery() {
+  const el = document.getElementById('photo-gallery-content');
+  const { data } = await db.from('progress_photos').select('*').order('created_at', { ascending: true });
+  const photos = data || [];
+  await Promise.all(photos.map(async p => { p.photo_url = await resolveSignedUrl(p.photo_url); }));
+
+  const byType = {};
+  for (const p of photos) {
+    const t = p.photo_type || 'general';
+    if (!byType[t]) byType[t] = [];
+    byType[t].push(p);
+  }
+
+  const typesWithPhotos = PHOTO_TYPES.filter(t => byType[t.key]?.length > 0);
+  const compareHTML = typesWithPhotos.length === 0
+    ? '<div class="empty-state">No hay fotos aún.<br>Sube la primera arriba.</div>'
+    : typesWithPhotos.map(t => {
+        const arr    = byType[t.key];
+        const oldest = arr[0];
+        const newest = arr[arr.length - 1];
+        const canCmp = arr.length >= 2;
+        return `<div style="margin-bottom:18px">
+  <div style="font-size:12px;font-weight:700;color:#7A5A5A;margin-bottom:10px">${t.label} <span style="font-weight:400;color:#A09090">(${arr.length} foto${arr.length>1?'s':''})</span></div>
+  <div class="compare-grid">
+    <div class="compare-slot">
+      <img class="compare-img" src="${oldest.photo_url}" onclick="window.open('${oldest.photo_url}','_blank')" loading="lazy">
+      <div class="compare-lbl">ANTES</div>
+      <div class="compare-dt">${fmtDate(oldest.photo_date)}</div>
+    </div>
+    <div class="compare-slot">
+      ${canCmp
+        ? `<img class="compare-img" src="${newest.photo_url}" onclick="window.open('${newest.photo_url}','_blank')" loading="lazy">
+           <div class="compare-lbl">AHORA</div>
+           <div class="compare-dt">${fmtDate(newest.photo_date)}</div>`
+        : `<div class="compare-empty">
+             <div class="compare-empty-icon">📷</div>
+             <div class="compare-empty-txt">Agrega más fotos para comparar</div>
+           </div>
+           <div class="compare-lbl">AHORA</div>`
+      }
+    </div>
+  </div>
+</div>`;
+      }).join('');
+
+  const galleryHTML = photos.length === 0
+    ? '<div class="empty-state">No hay fotos aún.</div>'
+    : typesWithPhotos.map(t => {
+        const arr = [...byType[t.key]].reverse();
+        return `<div style="margin-bottom:16px">
+  <div style="font-size:11px;font-weight:700;color:#9A8888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">${t.label}</div>
+  <div class="gallery-grid">${arr.map(p =>
+    `<img class="gallery-thumb" src="${p.photo_url}" title="${p.caption||fmtDate(p.photo_date)}"
+     onclick="window.open('${p.photo_url}','_blank')" loading="lazy">`
+  ).join('')}</div>
+</div>`;
+      }).join('');
+
+  el.innerHTML = `
+<div class="compare-card"><h3>📷 Comparativa por área</h3>${compareHTML}</div>
+<div class="gallery-card"><h3>🖼️ Galería</h3>${galleryHTML}</div>`;
+
+  galleryLoaded = true;
+}
+
+// ── HISTORY ────────────────────────────────────────────────────────────────────
+let historyLoaded = false;
+
+async function loadHistory() {
+  const el = document.getElementById('history-content');
+  el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span><br><br>Loading...</div>';
+
+  const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
+  const [appsRes, tretRoutineRes] = await Promise.all([
+    db.from('product_applications').select('product_name, product_id, applied_at, source')
+      .gte('applied_at', toDateStr(since90) + 'T00:00:00')
+      .order('applied_at', { ascending: false }),
+    db.from('routines').select('schedule_days').ilike('name', '%tretino%').eq('active', true).limit(1).maybeSingle()
+  ]);
+
+  const apps   = appsRes.data   || [];
+  // Real tretinoína schedule from the routine itself — no more hardcoded Mar/Vie.
+  const tretDays = new Set(tretRoutineRes?.data?.schedule_days || []);
+  const tretDaysLabel = tretRoutineRes?.data
+    ? fmtDays([...tretDays].sort((a, b) => a - b))
+    : 'sin rutina de tretinoína configurada';
+
+  // ── MÉTRICAS DE CONSTANCIA — corte SIEMPRE al cierre de AYER ───────────────
+  // Resolución por product_id (robusta a renombres); fallback a product_name.
+  const _prodById = {};
+  allProducts.forEach(p => { _prodById[p.id] = p; });
+  const appProd = r => (r.product_id && _prodById[r.product_id]) || { name: r.product_name || '', emoji: '', category: '' };
+  // Matches by category when available (via product_id); falls back to name
+  // keywords so manually bulk-loaded rows (no product_id) still count.
+  const isSPFfacial = x => x.category === '🌞 SPF Facial' || (!x.category && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || ''));
+  const isFinacea   = x => /finacea|azela/i.test(x.name || '');
+  const isTret      = x => /tretino|retin-a/i.test(x.name || '');
+  const isBarrera   = x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '');
+  const isMelasmaAct = x => isFinacea(x) || isTret(x);
+
+  const _yst = new Date(TODAY); _yst.setDate(TODAY.getDate() - 1);
+  const ENDS = toDateStr(_yst);
+  const _ws = new Date(TODAY); _ws.setDate(TODAY.getDate() - 90);
+  const WSTART = toDateStr(_ws);
+
+  const eachDateStr = (a, b, cb) => {
+    if (a > b) return;
+    let d = new Date(a + 'T12:00:00Z');
+    const end = new Date(b + 'T12:00:00Z');
+    while (d <= end) { cb(toDateStr(d), d.getUTCDay()); d.setUTCDate(d.getUTCDate() + 1); }
+  };
+  const matchDates = mfn => {
+    const s = new Set();
+    apps.forEach(r => { if (mfn(appProd(r))) s.add(r.applied_at.slice(0, 10)); });
+    return s;
+  };
+  const adherence = mfn => {
+    const done = matchDates(mfn);
+    if (!done.size) return null;
+    const first = [...done].sort()[0];
+    const start = first > WSTART ? first : WSTART;
+    if (start > ENDS) return null;
+    let elig = 0, hit = 0;
+    eachDateStr(start, ENDS, ds => { elig++; if (done.has(ds)) hit++; });
+    if (elig <= 0) return null;
+    return { pct: Math.min(100, Math.round(hit / elig * 100)), hit, elig, start };
+  };
+  const tretAdherence = (schedDays) => {
+    const done = matchDates(isTret);
+    if (!done.size) return null;
+    const first = [...done].sort()[0];
+    const start = first > WSTART ? first : WSTART;
+    if (start > ENDS) return null;
+    let sched = 0, act = 0;
+    eachDateStr(start, ENDS, (ds, dow) => {
+      if (schedDays.has(dow)) sched++;
+      if (done.has(ds)) act++;
+    });
+    if (sched <= 0) return { pct: null, sched: 0, act, start };
+    return { pct: Math.min(100, Math.round(act / sched * 100)), sched, act, over: act > sched, start };
+  };
+
+  const prot   = adherence(isSPFfacial);
+  const despig = adherence(isFinacea);
+  const barr   = adherence(isBarrera);
+  const tret   = tretAdherence(tretDays);
+
+  const melDates = matchDates(isMelasmaAct);
+  const melStart = melDates.size ? [...melDates].sort()[0] : null;
+  let weekNum = 1;
+  if (melStart && melStart <= ENDS) { let n = 0; eachDateStr(melStart, ENDS, () => n++); weekNum = Math.floor(n / 7) + 1; }
+  const journeyPct = Math.min(100, Math.round(weekNum / 16 * 100));
+  const constVals = [prot, despig, barr, tret].map(x => (x && x.pct != null) ? x.pct : null).filter(x => x != null);
+  const constancia = constVals.length ? Math.round(constVals.reduce((a, b) => a + b, 0) / constVals.length) : null;
+
+  const adhRow = (o, color, icon, label, sub) => {
+    if (!o) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
+    return `<div class="adh-row">
+  <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${o.pct}%</span></div>
+  <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${color}"></div></div>
+  <div class="adh-sub">${sub}</div>
+</div>`;
+  };
+  const tretRow = (() => {
+    const color = '#7E6BB0', icon = '🔬', label = 'Renovación · tretinoína';
+    const sep = 'border-top:1px solid #EDE8E2;padding-top:12px;margin-top:1px';
+    if (!tret) return `<div class="adh-row" style="${sep}"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
+    if (tret.pct == null) return `<div class="adh-row" style="${sep}"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin noches programadas (${tretDaysLabel})</div></div>`;
+    const flag = tret.over ? ` · <span style="color:#C47A00">⚠ ${tret.act} de ${tret.sched}, vas por encima</span>` : ` · ${tret.act} de ${tret.sched} noches`;
+    return `<div class="adh-row" style="${sep}">
+  <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${tret.pct}%</span></div>
+  <div class="adh-track"><div class="adh-fill" style="width:${tret.pct}%;background:${color}"></div></div>
+  <div class="adh-sub">Calendario ${tretDaysLabel}${flag}</div>
+</div>`;
+  })();
+
+  const mileDots = [25, 50, 75, 100].map(p => `<span class="pj-dot${journeyPct >= p ? ' on' : ''}" style="left:${p}%"></span>`).join('');
+
+  el.innerHTML = `
+<div class="pj-card">
+  <div class="pj-top">
+    <span class="pj-title">🗺️ Tu camino · melasma</span>
+    ${constancia != null ? `<span class="pj-const">constancia ${constancia}%</span>` : ''}
+  </div>
+  <div class="pj-week">Semana ${weekNum > 16 ? '16+' : weekNum} de 16${melStart ? ` · desde ${fmtDate(melStart)}` : ''}</div>
+  <div class="pj-track"><div class="pj-fill" style="width:${journeyPct}%"></div>${mileDots}</div>
+  <div class="pj-miles"><span>Barrera</span><span>Brillo</span><span>Aclaran</span><span>Visible</span></div>
+  <div class="pj-note">${melStart ? `Cuenta desde tu primer registro de Finacea o Tretinoína (${fmtDate(melStart)}), no desde que abriste la app. ` : ''}Calculado al cierre de ayer. Los hitos son una guía, no una promesa médica.</div>
+</div>
+<div class="adh-label">Adherencia · últimos 90 días</div>
+<div class="adh-card">
+  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma', 'SPF facial diario · tu escudo #1')}
+  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'Finacea diaria AM')}
+  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'Hidratación + recuperación PM')}
+  ${tretRow}
+</div>
+<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>${buildHistorialByDay(apps)}</div>`;
+
+  historyLoaded = true;
+}
+
+// Groups product_applications by day and by source (rutina / reaplicación),
+// showing the real product names instead of abstract completion bars.
+function buildHistorialByDay(appsData) {
+  if (!appsData.length) return '<div class="empty-state">Aún no hay aplicaciones registradas.<br>Ve a ☀️ Today para empezar.</div>';
+
+  const byDate = {};
+  appsData.forEach(r => {
+    const ds = r.applied_at.slice(0, 10);
+    if (!byDate[ds]) byDate[ds] = [];
+    byDate[ds].push(r);
+  });
+
+  const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+  const fmtTime = iso => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const entryHTML = r => `<div class="reapp-entry">
+  <span class="reapp-entry-product">${r.product_name}</span>
+  <span class="reapp-entry-time">${fmtTime(r.applied_at)}</span>
+</div>`;
+  const groupHTML = (label, arr) => arr.length ? `<div class="reapp-history-title">${label}</div>${arr.map(entryHTML).join('')}` : '';
+
+  // Los últimos 3 días vienen abiertos; el resto colapsado (toca la fecha para
+  // desplegar) — evita que el historial se sienta interminable al hacer scroll.
+  return dates.map((ds, i) => {
+    const dayApps = byDate[ds].slice().sort((a, b) => a.applied_at.localeCompare(b.applied_at));
+    const rutina = dayApps.filter(r => r.source === 'rutina');
+    const reapp  = dayApps.filter(r => r.source === 'reaplicacion');
+    const sinClasificar = dayApps.filter(r => r.source !== 'rutina' && r.source !== 'reaplicacion');
+    return `<details class="hist-day"${i < 3 ? ' open' : ''}>
+  <summary class="hist-day-date">${fmtDate(ds)} <span class="hist-day-count">${dayApps.length}</span></summary>
+  ${groupHTML('☀️🌙 Rutina', rutina)}
+  ${groupHTML('🔄 Reaplicaciones', reapp)}
+  ${groupHTML('Sin clasificar (antes del cambio)', sinClasificar)}
+</details>`;
+  }).join('');
+}
+
+function logRow(l) {
+  const done  = l.am_done  + l.pm_done  + l.body_done  + l.feet_done;
+  const total = l.am_total + l.pm_total + l.body_total + l.feet_total;
+  const pct   = total > 0 ? Math.round(done/total*100) : 0;
+  return `<div class="log-item">
+  <div class="log-date-col">${fmtDate(l.log_date)}</div>
+  <div class="log-bars">
+    ${bar('AM', l.am_done,   l.am_total)}
+    ${bar('PM', l.pm_done,   l.pm_total)}
+    ${bar('Bd', l.body_done, l.body_total)}
+    ${bar('Ft', l.feet_done, l.feet_total)}
+    ${l.notes ? `<div class="log-notes-txt">"${l.notes}"</div>` : ''}
+  </div>
+  <div class="log-pct">${pct}%</div>
+</div>`;
+}
+
+function bar(label, done, total) {
+  const pct = total > 0 ? Math.round(done/total*100) : 0;
+  return `<div class="log-bar-row">
+  <span class="log-bar-label">${label}</span>
+  <div class="log-bar-track"><div class="log-bar-fill" style="width:${pct}%"></div></div>
+</div>`;
+}
+
+function calcProductStreak(appsData, matchFn) {
+  const byDate = {};
+  appsData.forEach(r => {
+    const date = r.applied_at.slice(0, 10);
+    if (!byDate[date]) byDate[date] = [];
+    byDate[date].push(r.product_name);
+  });
+  let streak = 0;
+  const d = new Date(TODAY);
+  // Don't penalize for incomplete day — if today has no match yet, start from yesterday
+  if (!(byDate[toDateStr(d)] || []).some(matchFn)) d.setDate(d.getDate() - 1);
+  for (let i = 0; i < 91; i++) {
+    const ds = toDateStr(d);
+    if ((byDate[ds] || []).some(matchFn)) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+
+function calcStreak(logs) {
+  const dates = new Set(logs.map(l => l.log_date));
+  let streak = 0;
+  const d = new Date(TODAY); d.setHours(0,0,0,0);
+  while (dates.has(toDateStr(d))) { streak++; d.setDate(d.getDate() - 1); }
+  return streak;
+}
+
+function calcAvgPct(logs) {
+  if (!logs.length) return 0;
+  const sum = logs.reduce((acc, l) => {
+    const total = l.am_total + l.pm_total + l.body_total + l.feet_total;
+    const done  = l.am_done  + l.pm_done  + l.body_done  + l.feet_done;
+    return acc + (total > 0 ? done/total : 0);
+  }, 0);
+  return Math.round(sum / logs.length * 100);
+}
+
+function fmtDate(ds) {
+  const d = new Date(ds + 'T12:00:00');
+  return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+}
+
+// ── REAPPLICATIONS ─────────────────────────────────────────────────────────────
+let selectedProduct = null;
+
+async function quickLog(name) {
+  selectedProduct = name;
+  await logApplication('reaplicacion');
+}
+
+function stepProductOf(s) {
+  return (s && s.product_id) ? allProducts.find(p => p.id === s.product_id) : null;
+}
+
+function productIdForLoggedName(name) {
+  if (!name) return null;
+  const p = allProducts.find(p =>
+    (p.logged_as && p.logged_as === name) ||
+    (`${p.emoji} ${p.name}` === name) ||
+    (p.name === name)
+  );
+  return p ? p.id : null;
+}
+
+// ── BACKDATE (log applications for a previous day/time) ─────────────────────
+function getBackdateOverrideISO() {
+  const input = document.getElementById('backdate-input');
+  if (!input || !input.value) return null;
+  const d = new Date(input.value); // "YYYY-MM-DDTHH:mm" is parsed as local time
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function onBackdateChange() {
+  const input = document.getElementById('backdate-input');
+  const resetBtn = document.getElementById('backdate-reset-btn');
+  const note = document.getElementById('backdate-active-note');
+  const iso = getBackdateOverrideISO();
+  if (iso) {
+    resetBtn.style.display = 'inline-block';
+    note.style.display = 'block';
+    const label = new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+    note.textContent = `📅 Estás registrando para: ${label} — no para ahora mismo.`;
+  } else {
+    resetBtn.style.display = 'none';
+    note.style.display = 'none';
+  }
+}
+
+function resetBackdate() {
+  const input = document.getElementById('backdate-input');
+  input.value = '';
+  document.getElementById('backdate-reset-btn').style.display = 'none';
+  document.getElementById('backdate-active-note').style.display = 'none';
+  showToast('✅ Volviste a registrar en tiempo real', 'success');
+}
+
+async function logApplication(source) {
+  if (!selectedProduct) return;
+  const name = selectedProduct;
+  selectedProduct = null;
+  const appliedAt = getBackdateOverrideISO() || new Date().toISOString();
+
+  const { error } = await db.from('product_applications').insert({
+    product_name: name,
+    product_id: productIdForLoggedName(name),
+    applied_at: appliedAt,
+    source: source || null
+  });
+
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  showToast('✅ ' + name.split(' ').slice(0,3).join(' ') + ' registrado', 'success');
+  loadTodayApplications();
+}
+
+async function loadTodayApplications() {
+  // Only isolated reapplications here — routine steps already show as checked
+  // in their own AM/PM/Body/Feet cards, no need to repeat them in this list.
+  const { data } = await db.from('product_applications')
+    .select('*')
+    .eq('source', 'reaplicacion')
+    .gte('applied_at', TODAY_STR + 'T00:00:00')
+    .lte('applied_at', TODAY_STR + 'T23:59:59')
+    .order('applied_at', { ascending: false });
+
+  const el = document.getElementById('reapp-history');
+  if (!data || data.length === 0) { el.innerHTML = ''; return; }
+
+  el.innerHTML = '<div class="reapp-history-title">Reaplicaciones de hoy</div>' +
+    data.map(r => {
+      const t = new Date(r.applied_at);
+      const time = t.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+      return `<div class="reapp-entry">
+  <span class="reapp-entry-product">${r.product_name}</span>
+  <span class="reapp-entry-time">${time}</span>
+</div>`;
+    }).join('');
+}
+
+// ── MODALS ─────────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+let currentPickerStepId = null;
+
+function markPickerStepDone(productName) {
+  if (!currentPickerStepId) return;
+  const step = document.getElementById(currentPickerStepId);
+  if (step) {
+    if (!step.classList.contains('done')) {
+      step.classList.add('done');
+      const sb = step.closest('.sec-body');
+      if (sb) updateProgress(sb.id);
+    }
+    if (productName) showStepProduct(step, productName);
+  }
+  currentPickerStepId = null;
+}
+
+function showStepProduct(step, productName) {
+  const sc = step.querySelector('.sc');
+  if (!sc) return;
+  const prod = allProducts.find(p => (p.logged_as || `${p.emoji} ${p.name}`) === productName);
+  const why = (prod && prod.why_it_works)
+    ? `<div class="sc-picked-why">💡 ${prod.why_it_works}</div>` : '';
+  const html = `<div class="sc-picked">
+  <div class="sc-picked-name">✓ ${productName}</div>
+  ${why}
+  <div class="sc-picked-change">Toca para cambiar →</div>
+</div>`;
+  const hint = sc.querySelector('.sc-pick-hint');
+  if (hint) hint.remove();
+  const existing = sc.querySelector('.sc-picked');
+  if (existing) existing.outerHTML = html;
+  else sc.insertAdjacentHTML('beforeend', html);
+}
+
+// SPF Face picker
+
+// ── PICKERS ──────────────────────────────────────────────────────────────────
+function openSPFPicker(stepId = null) {
+  currentPickerStepId = stepId;
+  const body = document.getElementById('spf-picker-body');
+  const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
+  <strong>⚠️ NO NEGOCIABLE para melasma.</strong> El UV es el detonante principal — sin SPF diario todos los serums trabajan a fracción de su potencia.
+</div>`;
+  const products = allProducts.filter(p => p.category === '🌞 SPF Facial');
+  body.innerHTML = warnBox + products.map(p => {
+    const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
+    return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectSPF(this.dataset.name)">
+  <div class="spf-item-name">${p.emoji} ${p.name}</div>
+  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-note">${p.note||''}</div>
+</div>`;
+  }).join('') +
+`<button class="spf-guide-btn" onclick="event.stopPropagation(); closeModal('spf-modal'); openCompare()">📊 Ver comparativa técnica →</button>`;
+  openModal('spf-modal');
+}
+
+async function selectSPF(name) {
+  const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  closeModal('spf-modal');
+  markPickerStepDone(name);
+  selectedProduct = name;
+  await logApplication(source);
+}
+
+function openBodySPFPicker(stepId = null) {
+  currentPickerStepId = stepId;
+  const body = document.getElementById('body-spf-picker-body');
+  const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
+  <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — mismo mecanismo que el melasma facial. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
+</div>`;
+  const products = allProducts.filter(p => p.category === '☀️ SPF Corporal');
+  body.innerHTML = warnBox + products.map(p => {
+    const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
+    return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectBodySPF(this.dataset.name)">
+  <div class="spf-item-name">${p.emoji} ${p.name}</div>
+  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-note">${p.note||''}</div>
+</div>`;
+  }).join('');
+  openModal('body-spf-modal');
+}
+
+async function selectBodySPF(name) {
+  const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  closeModal('body-spf-modal');
+  markPickerStepDone(name);
+  selectedProduct = name;
+  await logApplication(source);
+}
+
+function openGenericPicker(stepId, registryKey) {
+  currentPickerStepId = stepId;
+  const products = getRegistry(registryKey);
+  const title = PICKER_TITLES[registryKey] || registryKey;
+  document.getElementById('product-picker-title').textContent = title;
+  const body = document.getElementById('product-picker-body');
+  body.innerHTML = products.map(p => {
+    const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
+    return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectFromGenericPicker(this.dataset.name)">
+  <div class="spf-item-name">${p.emoji} ${p.name}</div>
+  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-note">${p.note||''}</div>
+</div>`;
+  }).join('');
+  openModal('product-picker-modal');
+}
+
+async function selectFromGenericPicker(name) {
+  const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  closeModal('product-picker-modal');
+  markPickerStepDone(name);
+  selectedProduct = name;
+  await logApplication(source);
+}
+// ── SPF COMPARE TABLE ────────────────────────────────────────────────────────
+const COMPARE_COLS = [
+  { id:'uvb',
+    label:'UVB',
+    title:'UVB — Rayos que queman (290–320 nm)',
+    desc:'El número SPF mide exclusivamente la protección contra UVB. SPF 50 bloquea el 98% de estos rayos. Son los responsables de las quemaduras solares.',
+    melasma:'Detonante directo: los UVB activan los melanocitos y disparan la producción de melanina. Sin protección UVB diaria las manchas no pueden mejorar.' },
+  { id:'uva',
+    label:'UVA',
+    title:'UVA Básico — Rayos de envejecimiento (320–370 nm)',
+    desc:'Penetran nubes, vidrio y se mantienen presentes todo el año, incluso en días nublados o en interiores cerca de ventanas. Causan manchas y envejecimiento prematuro.',
+    melasma:'Detonante principal del melasma. Penetran más profundo que UVB y activan el melanocito de forma persistente y acumulativa. No protegerse de UVA mientras se usa tretinoína o Finacea anula el efecto de ambos.' },
+  { id:'uvalong',
+    label:'UVA Largos',
+    title:'UVA de Onda Larga (370–400 nm)',
+    desc:'La fracción más profunda del espectro UVA. La mayoría de los filtros solares tradicionales no cubren este rango. Filtros como Tinosorb M, Mexoryl XL o Bemotrizinol lo alcanzan.',
+    melasma:'Muy relevante: esta franja está especialmente asociada a la melanogénesis persistente. L\'Oréal UV Defender y Eucerin Pigment Control cubren este rango.' },
+  { id:'uva400',
+    label:'UVA 400nm',
+    title:'UVA 400nm — Cobertura UV completa hasta el límite con la luz visible',
+    desc:'El filtro Mexoryl 400 (patente exclusiva de L\'Oréal / LRP UVMune 400) extiende la cobertura UV hasta exactamente 400nm — el límite exacto donde termina el UV y empieza la luz visible. Ningún otro filtro llega tan lejos.',
+    melasma:'La protección más importante disponible para melasma. Elimina el "gap" de 380–400nm que existe en casi todos los SPF del mercado. Este rango es altamente pigmentogénico y raramente está cubierto.' },
+  { id:'pa4',
+    label:'PA++++',
+    title:'PA++++ — Sistema asiático de clasificación UVA',
+    desc:'Sistema de clasificación japonés/coreano basado en el índice PPD (Persistent Pigment Darkening). PA++++ es la categoría máxima y equivale a PPD ≥ 16. Los SPF europeos a veces usan el sello de círculo UVA en lugar del sistema PA.',
+    melasma:'Imprescindible: indica que el producto tiene protección UVA robusta y estandarizada. Sin PA++++ o sello UVA no hay garantía del nivel de protección contra los rayos que más activan el melasma.' },
+  { id:'vis',
+    label:'Luz Visible',
+    title:'Luz Visible — Óxidos de hierro (400–700 nm)',
+    desc:'Solo las fórmulas tintadas (con óxidos de hierro o pigmentos minerales) bloquean la luz visible. Las fórmulas transparentes —sin importar cuán alto sea el SPF— no ofrecen protección en este rango.',
+    melasma:'Crítico en pieles tipos III–VI. La luz azul-violeta (400–500nm) activa la melanogénesis de forma independiente al UV, incluso bajo luz artificial, pantallas o luz fluorescente en interiores. Para melasma resistente, agregar tintado puede marcar una diferencia significativa.' },
+  { id:'ira',
+    label:'IR-A',
+    title:'Infrarrojo A — Calor profundo (700–1400 nm)',
+    desc:'Radiación infrarroja que penetra hasta la dermis profunda y genera calor en los tejidos. Solo algunos filtros avanzados como el Heliocare 360 (con tecnología Fernblock) ofrecen protección en este rango.',
+    melasma:'Evidencia emergente: el calor generado por IR-A puede estimular la melanogénesis por vía térmica, independientemente del UV. Relevante especialmente en climas cálidos, cocinas o exposición directa al sol por períodos largos.' },
+  { id:'act',
+    label:'Activo ✦',
+    title:'Activo Despigmentante — Thiamidol (Eucerin)',
+    desc:'El único SPF de este arsenal que no solo protege sino que trata activamente las manchas existentes. El Thiamidol inhibe la tirosinasa (enzima que produce melanina) con eficacia clínicamente comparable a la hidroquinona al 2%, sin sus efectos adversos.',
+    melasma:'Convierte el SPF en doble función: protección + tratamiento simultáneo. Si solo pudieras usar un SPF para melasma, el Eucerin Pigment Control es el que trabaja mientras protege.' },
+];
+
+const COMPARE_ROWS = [
+  // ── CARA ─ de más a menos cobertura para melasma ──────────────────────────
+  { name:'LRP UVMune 400 Tintado SPF50',         area:'Cara',   tier:'best', uvb:1, uva:1, uvalong:1, uva400:1, pa4:1, vis:1, ira:0, act:0 },
+  { name:'Eucerin Pigment Control Tintado SPF50',area:'Cara',   tier:'best', uvb:1, uva:1, uvalong:1, uva400:0, pa4:1, vis:1, ira:0, act:1 },
+  { name:'LRP UVMune 400 SPF50',                 area:'Cara',   tier:'best', uvb:1, uva:1, uvalong:1, uva400:1, pa4:1, vis:0, ira:0, act:0 },
+  { name:"L'Oréal UV Defender SPF50 PA++++",     area:'Cara',   tier:'good', uvb:1, uva:1, uvalong:1, uva400:0, pa4:1, vis:0, ira:0, act:0 },
+  { name:'Isdin Fusion Water Color SPF50',       area:'Cara',   tier:'good', uvb:1, uva:1, uvalong:0, uva400:0, pa4:1, vis:1, ira:0, act:0 },
+  { name:'Tocobo Cotton Soft Sun Stick SPF50',   area:'Cara',   tier:'good', uvb:1, uva:1, uvalong:0, uva400:0, pa4:1, vis:0, ira:0, act:0 },
+  { name:'Isdin Fusion Water SPF50',             area:'Cara',   tier:'ok',   uvb:1, uva:1, uvalong:0, uva400:0, pa4:1, vis:0, ira:0, act:0 },
+  { name:'Canmake Mermaid Skin Gel SPF50',       area:'Cara',   tier:'ok',   uvb:1, uva:1, uvalong:0, uva400:0, pa4:1, vis:0, ira:0, act:0 },
+  { name:'Nivea Silky UV Stick SPF50',           area:'Cara',   tier:'ok',   uvb:1, uva:1, uvalong:0, uva400:0, pa4:0, vis:0, ira:0, act:0 },
+  { name:'Ollie Lip Balm SPF50',                 area:'Labios', tier:'ok',   uvb:1, uva:0, uvalong:0, uva400:0, pa4:0, vis:1, ira:0, act:0 },
+  // ── CUERPO ────────────────────────────────────────────────────────────────
+  { name:'Heliocare 360 Opti D SPF50',           area:'Cuerpo', tier:'best', uvb:1, uva:1, uvalong:1, uva400:1, pa4:1, vis:1, ira:1, act:0 },
+  { name:'Isdin Wet Skin SPF50+',                area:'Cuerpo', tier:'ok',   uvb:1, uva:1, uvalong:0, uva400:0, pa4:0, vis:0, ira:0, act:0 },
+];
+
+let activeCompareCol = null;
+
+function openCompare() {
+  activeCompareCol = null;
+  const body = document.getElementById('compare-body');
+
+  const tierColor = { best:'#3A8A3A', good:'#C4818A', ok:'#9A9090' };
+  const tierDot   = r => `<span style="color:${tierColor[r.tier]};font-size:10px;margin-right:4px">●</span>`;
+  const areaTag   = a => `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;background:#F0EBE8;color:#9A8888;margin-left:4px">${a}</span>`;
+  const chk = v => v
+    ? `<td style="text-align:center;padding:7px 4px"><span style="color:#3A8A3A;font-size:15px;font-weight:800">✓</span></td>`
+    : `<td style="text-align:center;padding:7px 4px"><span style="color:#E0D8D8;font-size:12px">—</span></td>`;
+
+  const thead = `<tr style="border-bottom:2px solid #F0EBE8">
+  <th style="text-align:left;padding:8px 10px 8px 4px;font-size:11px;color:#7A6E6A;font-weight:700;white-space:nowrap;min-width:130px">Producto</th>
+  ${COMPARE_COLS.map(c => `<th onclick="showColInfo('${c.id}')" style="text-align:center;padding:6px 3px;font-size:10px;font-weight:700;color:#7A5A5A;cursor:pointer;white-space:pre-line;min-width:36px;user-select:none" title="${c.title}">${c.label}<br><span style="color:#C4818A;font-size:9px">ⓘ</span></th>`).join('')}
+</tr>`;
+
+  const tbody = COMPARE_ROWS.map(r => `<tr style="border-bottom:1px solid #F8F4F0">
+  <td style="padding:7px 8px 7px 4px;font-size:11px;font-weight:600;color:#2A2420;white-space:nowrap">${tierDot(r)}${r.name}${areaTag(r.area)}</td>
+  ${COMPARE_COLS.map(c => chk(r[c.id])).join('')}
+</tr>`).join('');
+
+  body.innerHTML = `
+<p style="font-size:11px;color:#9A8888;margin-bottom:12px;line-height:1.5">Toca el encabezado de cada columna para ver qué es y por qué importa para melasma.</p>
+<div id="col-info-box" style="display:none;background:#F5F0FA;border-left:3px solid #7A5A9A;border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
+<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+  <table style="width:100%;border-collapse:collapse;font-family:inherit">
+    <thead>${thead}</thead>
+    <tbody>${tbody}</tbody>
+  </table>
+</div>
+<div style="margin-top:12px;display:flex;gap:12px;font-size:10px;color:#9A8888">
+  <span><span style="color:#3A8A3A">●</span> Mejor opción</span>
+  <span><span style="color:#C4818A">●</span> Buena opción</span>
+  <span><span style="color:#9A9090">●</span> Aceptable</span>
+</div>`;
+
+  openModal('compare-modal');
+}
+
+function showColInfo(colId) {
+  const box = document.getElementById('col-info-box');
+  if (!box) return;
+  const col = COMPARE_COLS.find(c => c.id === colId);
+  if (!col) return;
+  if (activeCompareCol === colId) {
+    box.style.display = 'none';
+    activeCompareCol = null;
+    return;
+  }
+  activeCompareCol = colId;
+  box.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#2A2420;margin-bottom:6px">${col.title}</div>
+    <div style="font-size:11px;color:#4A3E3A;line-height:1.65;margin-bottom:8px">${col.desc}</div>
+    <div style="background:#EDE8F5;border-radius:7px;padding:7px 10px;font-size:11px;color:#5A3A8A;font-weight:600;line-height:1.5">
+      💜 Para melasma: ${col.melasma}
+    </div>`;
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ── UI ──────────────────────────────────────────────────────────────────────────
+function toggleSec(id) { document.getElementById(id).classList.toggle('open'); }
+function toggleStep(stepId, detId) {
+  document.getElementById(stepId).classList.toggle('open');
+  document.getElementById(detId).classList.toggle('open');
+}
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'photos')  { renderWeekCalendar(); if (!galleryLoaded) loadPhotoGallery(); }
+  if (name === 'history' && !historyLoaded) loadHistory();
+  if (name === 'stock'   && !inventoryLoaded) loadInventory();
+  if (name === 'routines' && !routinesLoaded) loadRoutines();
+}
+
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+function txCapsule(tx) {
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${tx.bg};color:${tx.color};margin-left:3px;vertical-align:middle">${tx.emoji} ${tx.name}</span>`;
+}
+function nightCapsule(info) {
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${info.bg};color:${info.color};margin-left:3px;vertical-align:middle">${info.label}</span>`;
+}
+
+// ── INVENTORY ─────────────────────────────────────────────────────────────────
+
+// ── INVENTORY ─────────────────────────────────────────────────────────────────
+let inventoryLoaded = false;
+
+async function loadInventory() {
+  if (!allProducts.length) await loadProducts();
+  inventoryLoaded = true;
+  renderInventory();
+}
+
+function renderInventory() {
+  const el = document.getElementById('inventory-content');
+  if (!el) return;
+  const lowCount = allProducts.filter(p => p.status === 'low').length;
+  const outCount = allProducts.filter(p => p.status === 'out').length;
+  const okCount  = allProducts.length - lowCount - outCount;
+  const summaryHTML = `<div class="inv-summary">
+  <div class="inv-sum-card"><div class="inv-sum-val">${okCount}</div><div class="inv-sum-lbl">✅ Tengo</div></div>
+  <div class="inv-sum-card"><div class="inv-sum-val amber">${lowCount}</div><div class="inv-sum-lbl">⚠️ Reponer</div></div>
+  <div class="inv-sum-card"><div class="inv-sum-val red">${outCount}</div><div class="inv-sum-lbl">❌ Sin stock</div></div>
+</div>`;
+  const addBtn = `<button class="add-prod-btn" onclick="openAddProductModal()">＋ Agregar producto</button>`;
+  const groups = {};
+  for (const item of allProducts) {
+    if (!groups[item.category]) groups[item.category] = [];
+    groups[item.category].push(item);
+  }
+  const groupsHTML = Object.entries(groups).map(([cat, items]) =>
+    `<div class="inv-group">
+  <div class="inv-group-hdr">${cat}</div>
+  ${items.map(invItemHTML).join('')}
+</div>`).join('');
+  el.innerHTML = summaryHTML + addBtn + groupsHTML;
+}
+
+function invItemDetailHTML(item) {
+  let html = item.note ? `<div>${item.note}</div>` : '';
+  if (item.how_to_apply) html += `<div class="inv-detail-section"><div class="inv-detail-section-title">Cómo aplicar</div>${item.how_to_apply}</div>`;
+  if (item.why_it_works) html += `<div class="inv-detail-section"><div class="inv-detail-section-title">Por qué funciona</div><div style="color:#7A6E6A;font-style:italic">💡 ${item.why_it_works}</div></div>`;
+  html += `<button class="inv-edit-btn" onclick="openEditProductModal('${item.id}')" style="display:block;width:100%;margin-top:12px;padding:9px;background:#FBEAF0;color:#C4818A;border:1.5px solid #C4818A;border-radius:10px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">✏️ Editar producto</button>`;
+  html += `<button class="inv-custom-del" onclick="deleteCustomProduct('${item.id}')">🗑️ Eliminar producto</button>`;
+  return html || '<div style="color:#B0A8A8;font-style:italic">Sin descripción.</div>';
+}
+
+function invItemHTML(item) {
+  const domId = item.id;
+  const status = item.status || 'ok';
+  const statusCls = status !== 'ok' ? ` status-${status}` : '';
+  return `<div class="inv-item${statusCls}" id="inv-${domId}">
+  <div class="inv-row" onclick="toggleInvDetail('${domId}')">
+    <div class="inv-emoji">${item.emoji}</div>
+    <div class="inv-info">
+      <div class="inv-name">${item.name}</div>
+      <div class="inv-brand">${item.brand||''}</div>
+    </div>
+    <div class="inv-chips" onclick="event.stopPropagation()">
+      <span class="inv-chip ${status==='ok'?'active-ok':''}"  onclick="setInvStatus('${domId}','ok')">✅</span>
+      <span class="inv-chip ${status==='low'?'active-low':''}" onclick="setInvStatus('${domId}','low')">⚠️</span>
+      <span class="inv-chip ${status==='out'?'active-out':''}" onclick="setInvStatus('${domId}','out')">❌</span>
+    </div>
+    <div class="inv-arrow">›</div>
+  </div>
+  <div class="inv-detail">
+    <div class="inv-detail-inner">${invItemDetailHTML(item)}</div>
+  </div>
+</div>`;
+}
+
+function toggleInvDetail(domId) {
+  document.getElementById('inv-' + domId)?.classList.toggle('open');
+}
+
+let editingProductId = null;
+
+function openAddProductModal() {
+  editingProductId = null;
+  ['pf-emoji','pf-name','pf-brand','pf-note','pf-how','pf-why','pf-cat-custom'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; if (id === 'pf-cat-custom') el.style.display = 'none'; }
+  });
+  document.getElementById('pf-cat').value = '';
+  document.getElementById('emoji-preview').textContent = '🧴';
+  document.querySelector('#add-product-modal .modal-title').textContent = '＋ Nuevo producto';
+  const btn = document.getElementById('save-prod-btn');
+  btn.disabled = false; btn.textContent = 'Guardar producto';
+  openModal('add-product-modal');
+}
+
+function openEditProductModal(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+  editingProductId = id;
+  document.getElementById('pf-emoji').value = p.emoji || '';
+  document.getElementById('pf-name').value  = p.name || '';
+  document.getElementById('pf-brand').value = p.brand || '';
+  document.getElementById('pf-note').value  = p.note || '';
+  document.getElementById('pf-how').value   = p.how_to_apply || '';
+  document.getElementById('pf-why').value   = p.why_it_works || '';
+  document.getElementById('emoji-preview').textContent = p.emoji || '🧴';
+  const catSel = document.getElementById('pf-cat');
+  const custom = document.getElementById('pf-cat-custom');
+  catSel.value = p.category || '';
+  if (catSel.value !== (p.category || '')) {
+    catSel.value = '__new__'; custom.style.display = 'block'; custom.value = p.category || '';
+  } else {
+    custom.style.display = 'none'; custom.value = '';
+  }
+  document.querySelector('#add-product-modal .modal-title').textContent = '✏️ Editar producto';
+  const btn = document.getElementById('save-prod-btn');
+  btn.disabled = false; btn.textContent = 'Guardar cambios';
+  openModal('add-product-modal');
+}
+
+function toggleCustomCat(sel) {
+  document.getElementById('pf-cat-custom').style.display = sel.value === '__new__' ? 'block' : 'none';
+}
+
+async function saveCustomProduct() {
+  const emoji  = document.getElementById('pf-emoji').value.trim() || '🧴';
+  const name   = document.getElementById('pf-name').value.trim();
+  const brand  = document.getElementById('pf-brand').value.trim();
+  const catSel = document.getElementById('pf-cat').value;
+  const cat    = catSel === '__new__' ? document.getElementById('pf-cat-custom').value.trim() : catSel;
+  const note   = document.getElementById('pf-note').value.trim();
+  const how    = document.getElementById('pf-how').value.trim();
+  const why    = document.getElementById('pf-why').value.trim();
+  if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
+  if (!cat)  { showToast('⚠️ Elige una categoría', 'error'); return; }
+  const btn = document.getElementById('save-prod-btn');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  if (editingProductId) {
+    const { data, error } = await db.from('products').update({
+      emoji, name, brand: brand || null, category: cat,
+      note: note || null, how_to_apply: how || null, why_it_works: why || null
+    }).eq('id', editingProductId).select().single();
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+    if (error) { showToast('❌ ' + error.message, 'error'); return; }
+    const idx = allProducts.findIndex(p => p.id === editingProductId);
+    if (idx >= 0) allProducts[idx] = data;
+    editingProductId = null;
+    closeModal('add-product-modal');
+    showToast('✅ Producto actualizado', 'success');
+    renderInventory();
+    return;
+  }
+  const { data, error } = await db.from('products').insert({
+    emoji, name, brand: brand || null, category: cat,
+    note: note || null, how_to_apply: how || null, why_it_works: why || null,
+    tier: 'ok', tags: [], status: 'ok'
+  }).select().single();
+  btn.disabled = false; btn.textContent = 'Guardar producto';
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  allProducts.push(data);
+  closeModal('add-product-modal');
+  showToast('✅ Producto agregado', 'success');
+  renderInventory();
+}
+
+async function deleteCustomProduct(id) {
+  if (!confirm('¿Eliminar este producto?')) return;
+  const { error } = await db.from('products').delete().eq('id', id);
+  if (error) { showToast('❌ Error al eliminar', 'error'); return; }
+  allProducts = allProducts.filter(p => p.id !== id);
+  showToast('🗑️ Producto eliminado', '');
+  renderInventory();
+}
+
+async function setInvStatus(productId, newStatus) {
+  const prod = allProducts.find(p => p.id === productId);
+  const current = prod ? prod.status || 'ok' : 'ok';
+  const status = (current === newStatus && newStatus !== 'ok') ? 'ok' : newStatus;
+  if (prod) prod.status = status;
+  const el = document.getElementById('inv-' + productId);
+  if (el) {
+    el.classList.remove('status-low','status-out');
+    if (status !== 'ok') el.classList.add('status-' + status);
+    const chips = el.querySelectorAll('.inv-chip');
+    const map   = ['ok','low','out'];
+    const cls   = ['active-ok','active-low','active-out'];
+    chips.forEach((c, i) => { c.className = 'inv-chip' + (status === map[i] ? ' ' + cls[i] : ''); });
+  }
+  const lowCount = allProducts.filter(p => p.status === 'low').length;
+  const outCount = allProducts.filter(p => p.status === 'out').length;
+  const okCount  = allProducts.length - lowCount - outCount;
+  const vals = document.querySelectorAll('.inv-sum-val');
+  if (vals[0]) vals[0].textContent = okCount;
+  if (vals[1]) vals[1].textContent = lowCount;
+  if (vals[2]) vals[2].textContent = outCount;
+  const { error } = await db.from('products').update({ status }).eq('id', productId);
+  if (error) showToast('❌ Error al guardar', 'error');
+}
+
+// ── ROUTINE EDITOR ────────────────────────────────────────────────────────────
+let routinesLoaded = false;
+let allRoutines = [];
+let currentRoutineId = null;
+
+async function loadRoutines() {
+  const { data, error } = await db.from('routines').select('*').order('sort_order');
+  if (!error && data) allRoutines = data;
+  routinesLoaded = true;
+  renderRoutineList();
+}
+
+function renderRoutineList() {
+  currentRoutineId = null;
+  const el = document.getElementById('routines-content');
+  if (!el) return;
+  el.innerHTML = `
+<div class="rout-hdr">
+  <div class="rout-hdr-title">✏️ Rutinas</div>
+  <button class="rout-add-btn" onclick="openAddRoutineModal()">＋ Nueva</button>
+</div>
+${allRoutines.map(r => `
+<div class="rout-card" onclick="openRoutineDetail('${r.id}')">
+  <div class="rout-card-emoji">${r.emoji}</div>
+  <div class="rout-card-info">
+    <div class="rout-card-name">${r.name}</div>
+    <div class="rout-card-sched">${fmtSection(r.section_key)} · ${fmtDays(r.schedule_days)}</div>
+    <div class="rout-card-sub" id="rout-sub-${r.id}">cargando...</div>
+  </div>
+  <button class="rout-card-del" onclick="event.stopPropagation(); deleteRoutine('${r.id}')">🗑️</button>
+  <div class="rout-card-arrow">›</div>
+</div>`).join('')}`;
+  loadStepCounts();
+}
+
+async function loadStepCounts() {
+  const { data } = await db.from('routine_steps').select('routine_id');
+  if (!data) return;
+  const counts = {};
+  data.forEach(r => { counts[r.routine_id] = (counts[r.routine_id] || 0) + 1; });
+  allRoutines.forEach(r => {
+    const el = document.getElementById('rout-sub-' + r.id);
+    if (el) el.textContent = `${counts[r.id] || 0} pasos`;
+  });
+}
+
+async function openRoutineDetail(routineId) {
+  currentRoutineId = routineId;
+  const routine = allRoutines.find(r => r.id === routineId);
+  const el = document.getElementById('routines-content');
+  el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span></div>';
+  const { data: steps } = await db.from('routine_steps')
+    .select('*').eq('routine_id', routineId).order('sort_order');
+  renderRoutineDetail(routine, steps || []);
+}
+
+function renderRoutineDetail(routine, steps) {
+  const el = document.getElementById('routines-content');
+  el.innerHTML = `
+<button class="rout-back-btn" onclick="renderRoutineList()">← Rutinas</button>
+<div class="rout-hdr">
+  <div class="rout-hdr-title">${routine.emoji} ${routine.name}</div>
+  <button class="rout-add-btn" onclick="openEditRoutineModal('${routine.id}')">✏️ Editar</button>
+</div>
+<div class="rout-card-sched" style="margin:-4px 0 10px 2px">${fmtSection(routine.section_key)} · ${fmtDays(routine.schedule_days)}</div>
+${steps.map((s, i) => `
+<div class="rout-step-item" id="rstep-${s.id}">
+  <div class="rout-step-num">${i + 1}</div>
+  <div class="rout-step-info">
+    <div class="rout-step-name">${s.emoji || ''} ${s.name}</div>
+    ${s.brand ? `<div class="rout-step-brand">${s.brand}</div>` : ''}
+    ${s.picker_category ? `<div class="rout-step-picker">→ picker: ${s.picker_category}</div>` : ''}
+  </div>
+  <div class="rout-step-actions">
+    <button class="rout-move-btn" onclick="moveStep('${s.id}',-1,'${routine.id}')" ${i === 0 ? 'disabled' : ''}>↑</button>
+    <button class="rout-move-btn" onclick="moveStep('${s.id}',1,'${routine.id}')" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
+    <button class="rout-step-del" onclick="deleteStep('${s.id}','${routine.id}')">🗑️</button>
+  </div>
+</div>`).join('')}
+<button class="rout-add-step-btn" onclick="openAddStepModal('${routine.id}')">＋ Agregar paso</button>`;
+}
+
+async function moveStep(stepId, direction, routineId) {
+  const { data: steps } = await db.from('routine_steps')
+    .select('id,sort_order').eq('routine_id', routineId).order('sort_order');
+  const idx = steps.findIndex(s => s.id === stepId);
+  const swapIdx = idx + direction;
+  if (swapIdx < 0 || swapIdx >= steps.length) return;
+  const a = steps[idx], b = steps[swapIdx];
+  await Promise.all([
+    db.from('routine_steps').update({ sort_order: b.sort_order }).eq('id', a.id),
+    db.from('routine_steps').update({ sort_order: a.sort_order }).eq('id', b.id),
+  ]);
+  openRoutineDetail(routineId);
+}
+
+async function deleteStep(stepId, routineId) {
+  if (!confirm('¿Eliminar este paso?')) return;
+  await db.from('routine_steps').delete().eq('id', stepId);
+  openRoutineDetail(routineId);
+}
+
+async function deleteRoutine(routineId) {
+  if (!confirm('¿Eliminar esta rutina y todos sus pasos?')) return;
+  await db.from('routines').delete().eq('id', routineId);
+  allRoutines = allRoutines.filter(r => r.id !== routineId);
+  renderRoutineList();
+}
+
+let rfSection = 'am';
+let rfDays = new Set();
+let editingRoutineId = null;
+
+const SECTION_LABELS = { am: '☀️ Mañana', pm: '🌙 Noche', body: '🧴 Cuerpo', feet: '🦶 Pies' };
+function fmtSection(k) { return SECTION_LABELS[k] || '⚠️ Sin sección'; }
+function fmtDays(arr) {
+  if (!arr || !arr.length) return 'Todos los días';
+  const L = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  return arr.slice().sort((a,b)=>a-b).map(d => L[d]).join('·');
+}
+
+function selectRoutineSection(sec) {
+  rfSection = sec;
+  document.querySelectorAll('#rf-section-row .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
+}
+function toggleRoutineDay(dow) {
+  dow = Number(dow);
+  if (rfDays.has(dow)) rfDays.delete(dow); else rfDays.add(dow);
+  const chip = document.querySelector(`#rf-day-row .day-chip[data-dow="${dow}"]`);
+  if (chip) chip.classList.toggle('on', rfDays.has(dow));
+}
+
+function openAddRoutineModal() {
+  editingRoutineId = null;
+  document.getElementById('rf-emoji').value = '';
+  document.getElementById('rf-name').value = '';
+  document.getElementById('rf-emoji-preview').textContent = '✨';
+  rfSection = 'am'; rfDays = new Set();
+  selectRoutineSection('am');
+  document.querySelectorAll('#rf-day-row .day-chip').forEach(c => c.classList.remove('on'));
+  document.querySelector('#add-routine-modal .modal-title').textContent = '＋ Nueva rutina';
+  const btn = document.getElementById('save-routine-btn');
+  btn.disabled = false; btn.textContent = 'Guardar rutina';
+  openModal('add-routine-modal');
+}
+
+function openEditRoutineModal(routineId) {
+  const r = allRoutines.find(x => x.id === routineId);
+  if (!r) return;
+  editingRoutineId = routineId;
+  document.getElementById('rf-emoji').value = r.emoji || '';
+  document.getElementById('rf-name').value = r.name || '';
+  document.getElementById('rf-emoji-preview').textContent = r.emoji || '✨';
+  rfSection = r.section_key || 'am';
+  rfDays = new Set((r.schedule_days || []).map(Number));
+  selectRoutineSection(rfSection);
+  document.querySelectorAll('#rf-day-row .day-chip').forEach(c => c.classList.toggle('on', rfDays.has(Number(c.dataset.dow))));
+  document.querySelector('#add-routine-modal .modal-title').textContent = '✏️ Editar rutina';
+  const btn = document.getElementById('save-routine-btn');
+  btn.disabled = false; btn.textContent = 'Guardar cambios';
+  openModal('add-routine-modal');
+}
+
+async function saveNewRoutine() {
+  const emoji = document.getElementById('rf-emoji').value.trim() || '✨';
+  const name  = document.getElementById('rf-name').value.trim();
+  if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
+  const btn = document.getElementById('save-routine-btn');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  const schedule_days = rfDays.size ? [...rfDays].sort((a,b)=>a-b) : null;
+  const fields = { emoji, name, section_key: rfSection, schedule_days, active: true };
+  if (editingRoutineId) {
+    const { data, error } = await db.from('routines').update(fields).eq('id', editingRoutineId).select().single();
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+    if (error) { showToast('❌ ' + error.message, 'error'); return; }
+    const idx = allRoutines.findIndex(r => r.id === editingRoutineId);
+    if (idx >= 0) allRoutines[idx] = data;
+    editingRoutineId = null;
+    closeModal('add-routine-modal');
+    showToast('✅ Rutina actualizada', 'success');
+    renderRoutineList();
+  } else {
+    const sort_order = allRoutines.length ? Math.max(...allRoutines.map(r => r.sort_order)) + 1 : 0;
+    const { data, error } = await db.from('routines').insert({ ...fields, sort_order }).select().single();
+    btn.disabled = false; btn.textContent = 'Guardar rutina';
+    if (error) { showToast('❌ ' + error.message, 'error'); return; }
+    allRoutines.push(data);
+    closeModal('add-routine-modal');
+    showToast('✅ Rutina agregada', 'success');
+    renderRoutineList();
+  }
+}
+
+function onStepCatChange() {
+  const cat = document.getElementById('sf-cat').value;
+  const pf = document.getElementById('sf-product-field');
+  const inf = document.getElementById('sf-info-field');
+  if (cat === '__info__') { pf.style.display = 'none'; inf.style.display = 'block'; return; }
+  inf.style.display = 'none';
+  if (!cat) { pf.style.display = 'none'; return; }
+  const sel = document.getElementById('sf-product');
+  const prods = allProducts.filter(p => p.category === cat);
+  sel.innerHTML = '<option value="">— Sin fijar · rotar cada día —</option>' +
+    prods.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+  pf.style.display = 'block';
+}
+
+function openAddStepModal(routineId) {
+  document.getElementById('sf-cat').value = '';
+  document.getElementById('sf-product').innerHTML = '<option value="">— Sin fijar · rotar cada día —</option>';
+  document.getElementById('sf-product-field').style.display = 'none';
+  document.getElementById('sf-info-field').style.display = 'none';
+  const infoName = document.getElementById('sf-info-name'); if (infoName) infoName.value = '';
+  document.getElementById('sf-how').value = '';
+  document.getElementById('sf-routine-id').value = routineId;
+  const btn = document.getElementById('save-step-btn');
+  btn.disabled = false; btn.textContent = 'Guardar paso';
+  openModal('add-step-modal');
+}
+
+async function saveNewStep() {
+  const routineId = document.getElementById('sf-routine-id').value;
+  const cat = document.getElementById('sf-cat').value;
+  const how = document.getElementById('sf-how').value.trim();
+  let emoji, name, brand = null, picker_category = null, product_id = null;
+  if (cat === '__info__') {
+    name = document.getElementById('sf-info-name').value.trim();
+    emoji = '📝';
+    if (!name) { showToast('⚠️ Escribe el nombre del paso', 'error'); return; }
+  } else if (!cat) {
+    showToast('⚠️ Elige un tipo de producto', 'error'); return;
+  } else {
+    const pid = document.getElementById('sf-product').value;
+    if (pid) {
+      const prod = allProducts.find(p => p.id === pid);
+      if (!prod) { showToast('⚠️ Elige un producto', 'error'); return; }
+      emoji = prod.emoji || '💧';
+      name  = prod.name;
+      brand = prod.brand || null;
+      product_id = prod.id;
+    } else {
+      emoji = cat.split(' ')[0];
+      name  = cat.split(' ').slice(1).join(' ') || cat;
+      picker_category = cat;
+    }
+  }
+  const btn = document.getElementById('save-step-btn');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  const { data: existing } = await db.from('routine_steps')
+    .select('sort_order').eq('routine_id', routineId)
+    .order('sort_order', { ascending: false }).limit(1);
+  const sort_order = existing?.length ? existing[0].sort_order + 1 : 0;
+  const { error } = await db.from('routine_steps').insert({
+    routine_id: routineId, emoji, name,
+    brand, how_to_apply: how || null,
+    why_it_works: null, warn: null,
+    picker_category, product_id, sort_order
+  });
+  btn.disabled = false; btn.textContent = 'Guardar paso';
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  closeModal('add-step-modal');
+  showToast('✅ Paso agregado', 'success');
+  openRoutineDetail(routineId);
+}
+
+// ── DYNAMIC ROUTINE RENDERING ─────────────────────────────────────────────────
+function pickerFnForCat(cat, stepId) {
+  if (cat === '🌞 SPF Facial')   return `openSPFPicker('${stepId}')`;
+  if (cat === '☀️ SPF Corporal') return `openBodySPFPicker('${stepId}')`;
+  const escaped = cat.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `openGenericPickerByCat('${stepId}','${escaped}')`;
+}
+
+function openGenericPickerByCat(stepId, cat) {
+  currentPickerStepId = stepId;
+  document.getElementById('product-picker-title').textContent = cat;
+  const body = document.getElementById('product-picker-body');
+  body.innerHTML = allProducts.filter(p => p.category === cat && !p.no_reapp).map(p => {
+    const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
+    return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectFromGenericPicker(this.dataset.name)">
+  <div class="spf-item-name">${p.emoji} ${p.name}</div>
+  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-note">${p.note||''}</div>
+</div>`;
+  }).join('');
+  openModal('product-picker-modal');
+}
+
+function dbStepHTML(s, index, todayHydration) {
+  const n  = index + 1;
+  const id = 'sd_' + Math.random().toString(36).slice(2, 9);
+  const _prod = stepProductOf(s) || allProducts.find(p => p.name === s.name);
+  const dEmoji = _prod ? (_prod.emoji || '') : (s.emoji || '');
+  const dName  = _prod ? _prod.name : s.name;
+  const dBrand = _prod ? (_prod.brand || '') : (s.brand || '');
+  const _whyTxt = (_prod && _prod.why_it_works) ? _prod.why_it_works : s.why_it_works;
+  const why  = _whyTxt ? `<div class="det-why">💡 ${_whyTxt}</div>` : '';
+  const warn = s.warn ? `<div class="det-warn">${s.warn}</div>` : '';
+
+  // Was this exact step already applied today? Check by fixed product, then by
+  // picker category, then by literal name (for info-only steps with neither).
+  let appliedName = null;
+  if (todayHydration) {
+    if (s.product_id && todayHydration.byProductId.has(s.product_id)) {
+      appliedName = todayHydration.byProductId.get(s.product_id);
+    } else if (s.picker_category && todayHydration.byCategory.has(s.picker_category)) {
+      appliedName = todayHydration.byCategory.get(s.picker_category);
+    } else if (!s.picker_category && !s.product_id) {
+      const expected = `${dEmoji} ${dName}`.trim();
+      if (todayHydration.byName.has(expected)) appliedName = todayHydration.byName.get(expected);
+    }
+  }
+  const doneCls = appliedName ? ' done' : '';
+
+  if (s.picker_category) {
+    const pickerFn = pickerFnForCat(s.picker_category, `step_${id}`);
+    const pickedBlock = appliedName
+      ? `<div class="sc-picked">
+  <div class="sc-picked-name">✓ ${appliedName}</div>
+  <div class="sc-picked-change">Toca para cambiar →</div>
+</div>`
+      : `<div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>`;
+    return `<div class="step${doneCls}" id="step_${id}">
+  <div class="sn" onclick="checkStep('step_${id}',event)">
+    <span class="sn-num">${n}</span><span class="sn-check">✓</span>
+  </div>
+  <div class="sc" onclick="${pickerFn}">
+    <div class="sc-top"><span class="sc-name">${s.emoji||''} ${s.name}</span></div>
+    <div class="sc-brand">${s.brand||''}</div>
+    ${pickedBlock}
+  </div>
+  <div class="step-chevron" onclick="${pickerFn}">›</div>
+</div>`;
+  }
+
+  return `<div class="step${doneCls}" id="step_${id}">
+  <div class="sn" onclick="checkStep('step_${id}',event)">
+    <span class="sn-num">${n}</span><span class="sn-check">✓</span>
+  </div>
+  <div class="sc" onclick="toggleStep('step_${id}','${id}')">
+    <div class="sc-top"><span class="sc-name">${dEmoji} ${dName}</span></div>
+    <div class="sc-brand">${dBrand}</div>
+    <div class="sc-detail" id="${id}">
+      <div class="det-title">How to apply</div>${s.how_to_apply||''}${why}${warn}
+    </div>
+  </div>
+  <div class="step-chevron" onclick="toggleStep('step_${id}','${id}')">›</div>
+</div>`;
+}
+
+function renderDbSteps(bodyId, steps, nightType, todayHydration) {
+  const c = document.getElementById(bodyId);
+  const hint = c.querySelector('.tap-hint');
+  let badge = '';
+  if (nightType) {
+    const info = PM_NIGHT_INFO[nightType];
+    badge = `<div style="padding:8px 16px 4px">
+      <span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;background:${info.bg};color:${info.color}">${info.label}</span>
+    </div>`;
+  }
+  c.innerHTML = (hint ? hint.outerHTML : '') + badge + steps.map((s, i) => dbStepHTML(s, i, todayHydration)).join('');
+  updateProgress(bodyId);
+}
+
+// ── INIT ────────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadProducts();
+
+  document.getElementById('hdr-date').textContent =
+    `${DAYS[TODAY.getDay()]}, ${MONTHS[TODAY.getMonth()]} ${TODAY.getDate()}, ${TODAY.getFullYear()}`;
+
+  // Load routines active today from Supabase
+  const { data: routines } = await db.from('routines')
+    .select('*').eq('active', true).order('sort_order');
+
+  const todayDow = TODAY.getDay();
+  const todayRoutines = (routines || []).filter(r =>
+    !r.schedule_days || r.schedule_days.includes(todayDow)
+  );
+
+  // One routine per section_key (first match wins) — used for am/pm only
+  const bySection = {};
+  todayRoutines.forEach(r => { if (!bySection[r.section_key]) bySection[r.section_key] = r; });
+
+  // Body and Feet are special: several routines can apply the same day (e.g. Ducha +
+  // Cuerpo-Noche, or more than one foot routine), so we stack ALL of them instead of
+  // keeping only the first match.
+  const bodyRoutines = todayRoutines
+    .filter(r => r.section_key === 'body')
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const feetRoutines = todayRoutines
+    .filter(r => r.section_key === 'feet')
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  // Load all steps for today's routines in one query
+  const ids = [...new Set([...Object.values(bySection).map(r => r.id), ...bodyRoutines.map(r => r.id), ...feetRoutines.map(r => r.id)])];
+  const { data: allSteps } = ids.length
+    ? await db.from('routine_steps').select('*').in('routine_id', ids).order('sort_order')
+    : { data: [] };
+
+  const stepsByRoutine = {};
+  (allSteps || []).forEach(s => {
+    if (!stepsByRoutine[s.routine_id]) stepsByRoutine[s.routine_id] = [];
+    stepsByRoutine[s.routine_id].push(s);
+  });
+
+  // Hydrate checkmarks: find everything already applied today so steps don't
+  // look "unchecked" just because the page was reloaded.
+  const { data: todayAppsForHydration } = await db.from('product_applications')
+    .select('*')
+    .gte('applied_at', TODAY_STR + 'T00:00:00')
+    .lte('applied_at', TODAY_STR + 'T23:59:59')
+    .order('applied_at', { ascending: true });
+
+  const _prodByIdForHydration = {};
+  allProducts.forEach(p => { _prodByIdForHydration[p.id] = p; });
+  const todayHydration = { byProductId: new Map(), byCategory: new Map(), byName: new Map() };
+  (todayAppsForHydration || []).forEach(r => {
+    const label = r.product_name;
+    if (r.product_id) todayHydration.byProductId.set(r.product_id, label);
+    const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
+    if (prod && prod.category) todayHydration.byCategory.set(prod.category, label);
+    todayHydration.byName.set(label, label);
+  });
+
+  // AM
+  const amR = bySection['am'];
+  if (amR) {
+    const steps = stepsByRoutine[amR.id] || [];
+    SECTIONS.find(s => s.key === 'am').total = steps.length;
+    document.getElementById('am-sec-sub').innerHTML =
+      `Face &amp; Neck · ${steps.length} steps ${txCapsule(TX[TX_KEY])} <span class="sec-progress" id="prog-am-body"></span>`;
+    renderDbSteps('am-body', steps, null, todayHydration);
+  }
+
+  // PM
+  const pmR = bySection['pm'];
+  if (pmR) {
+    const steps = stepsByRoutine[pmR.id] || [];
+    const nightType = pmNightType();
+    const nightInfo = PM_NIGHT_INFO[nightType];
+    SECTIONS.find(s => s.key === 'pm').total = steps.length;
+    document.getElementById('pm-sec-sub').innerHTML =
+      `Face &amp; Neck · ${steps.length} pasos ${nightCapsule(nightInfo)} <span class="sec-progress" id="prog-pm-body"></span>`;
+    renderDbSteps('pm-body', steps, nightType, todayHydration);
+  }
+
+  // Body — concatenate steps from every body routine scheduled today, in
+  // routine sort_order (e.g. Ducha, then Cuerpo-Noche, then Glicólico Cuerpo).
+  if (bodyRoutines.length) {
+    const steps = bodyRoutines.flatMap(r => stepsByRoutine[r.id] || []);
+    SECTIONS.find(s => s.key === 'body').total = steps.length;
+    renderDbSteps('body-body', steps, null, todayHydration);
+  }
+
+  // Feet — concatenate steps from every foot routine scheduled today.
+  if (feetRoutines.length) {
+    const steps = feetRoutines.flatMap(r => stepsByRoutine[r.id] || []);
+    SECTIONS.find(s => s.key === 'feet').total = steps.length;
+    renderDbSteps('feet-body', steps, null, todayHydration);
+  }
+
+  renderPhotoTypeGrid();
+  renderCategorySelects();
+  loadTodayApplications();
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+let appStarted = false;
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-root').style.display = 'block';
+  if (!appStarted) { appStarted = true; init(); }
+}
+
+function showLogin(message) {
+  document.getElementById('app-root').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  const err = document.getElementById('login-error');
+  if (message) { err.textContent = message; err.style.display = 'block'; }
+  else { err.style.display = 'none'; }
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  if (!email || !password) { showLogin('Escribe tu email y contraseña.'); return; }
+  btn.disabled = true; btn.textContent = '⏳ Entrando...';
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Entrar';
+  if (error) { showLogin('❌ ' + error.message); return; }
+  showApp();
+}
+
+async function doLogout() {
+  await db.auth.signOut();
+  appStarted = false;
+  location.reload();
+}
+
+(async function bootAuth() {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) showApp(); else showLogin();
+
+  db.auth.onAuthStateChange((event, session) => {
+    if (session) showApp(); else showLogin();
+  });
+
+  // Allow pressing Enter in the password field to submit.
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+})();
+</script>
+</body>
+</html>
