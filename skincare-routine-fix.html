@@ -621,20 +621,8 @@ body {
       </div>
       <div class="prod-field">
         <label class="prod-label">Categoría</label>
-        <select class="prod-input prod-select" id="pf-cat" onchange="toggleCustomCat(this)">
-          <option value="">— Elige categoría —</option>
-          <option>🧼 Limpieza</option>
-          <option>✨ Serums AM</option>
-          <option>💧 Hidratantes</option>
-          <option>💊 Activos</option>
-          <option>🫧 Exfoliantes</option>
-          <option>👁️ Contorno Ojos</option>
-          <option>🌞 SPF Facial</option>
-          <option>☀️ SPF Corporal</option>
-          <option>🧴 Cuerpo</option>
-          <option>🦶 Pies</option>
-          <option value="__new__">✏️ Nueva categoría...</option>
-        </select>
+        <!-- Opciones generadas desde PRODUCT_CATEGORIES por renderCategorySelects() -->
+        <select class="prod-input prod-select" id="pf-cat" onchange="toggleCustomCat(this)"></select>
         <input class="prod-input" id="pf-cat-custom" type="text" placeholder="Nombre de la nueva categoría" style="display:none;margin-top:8px">
       </div>
       <div class="prod-field">
@@ -714,21 +702,8 @@ body {
       <input type="hidden" id="sf-routine-id">
       <div class="prod-field">
         <label class="prod-label">Tipo de producto</label>
-        <select class="prod-input prod-select" id="sf-cat" onchange="onStepCatChange()">
-          <option value="">— Elige un tipo —</option>
-          <option>🧼 Limpieza</option>
-          <option>✨ Serums AM</option>
-          <option>💊 Activos</option>
-          <option>🫧 Exfoliantes</option>
-          <option>💧 Hidratantes</option>
-          <option>🌞 SPF Facial</option>
-          <option>☀️ SPF Corporal</option>
-          <option>👁️ Contorno Ojos</option>
-          <option>💋 Labios</option>
-          <option>🧴 Cuerpo</option>
-          <option>🦶 Pies</option>
-          <option value="__info__">📝 Sin producto (paso informativo)</option>
-        </select>
+        <!-- Opciones generadas desde PRODUCT_CATEGORIES por renderCategorySelects() -->
+        <select class="prod-input prod-select" id="sf-cat" onchange="onStepCatChange()"></select>
       </div>
       <div class="prod-field" id="sf-product-field" style="display:none">
         <label class="prod-label">Producto</label>
@@ -789,6 +764,35 @@ async function loadProducts() {
     .select('*')
     .order('sort_order', { ascending: true });
   if (!error && data) allProducts = data;
+}
+
+// ── PRODUCT CATEGORIES (lista maestra — única fuente de verdad) ──────────────
+// Antes esta lista vivía escrita a mano en dos <select> distintos (Agregar
+// producto y Agregar paso de rutina), y a "Labios" se le olvidó agregar en el
+// primero. Ahora ambos selects se generan desde aquí — agregar/renombrar una
+// categoría solo requiere tocar este arreglo.
+const PRODUCT_CATEGORIES = [
+  '🧼 Limpieza',
+  '✨ Serums AM',
+  '💧 Hidratantes',
+  '💊 Activos',
+  '🫧 Exfoliantes',
+  '👁️ Contorno Ojos',
+  '🌞 SPF Facial',
+  '☀️ SPF Corporal',
+  '🧴 Cuerpo',
+  '🦶 Pies',
+  '💋 Labios',
+];
+
+function renderCategorySelects() {
+  const catOptions = PRODUCT_CATEGORIES.map(c => `<option>${c}</option>`).join('');
+  document.getElementById('pf-cat').innerHTML =
+    '<option value="">— Elige categoría —</option>' + catOptions +
+    '<option value="__new__">✏️ Nueva categoría...</option>';
+  document.getElementById('sf-cat').innerHTML =
+    '<option value="">— Elige un tipo —</option>' + catOptions +
+    '<option value="__info__">📝 Sin producto (paso informativo)</option>';
 }
 
 const CATEGORY_MAP = {
@@ -2551,6 +2555,7 @@ async function init() {
   }
 
   renderPhotoTypeGrid();
+  renderCategorySelects();
   loadTodayApplications();
 }
 
