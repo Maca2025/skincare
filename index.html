@@ -93,9 +93,6 @@ body {
 .notes-ta { width: 100%; min-height: 80px; border: 1.5px solid #EAE4E0; border-radius: 12px; padding: 12px; font-family: inherit; font-size: 13px; color: #2A2420; resize: none; outline: none; transition: border-color 0.2s; background: #FDFAF8; }
 .notes-ta:focus { border-color: #C4818A; }
 .notes-ta::placeholder { color: #C0B8B0; }
-.reset-row { text-align: right; padding: 2px 2px 10px; }
-.reset-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: #C4A0A5; font-family: inherit; padding: 4px 8px; border-radius: 8px; }
-.reset-btn:hover { color: #C4818A; background: rgba(196,129,138,0.08); }
 .save-btn { width: 100%; padding: 15px; background: linear-gradient(135deg, #C4818A, #A86B75); color: white; border: none; border-radius: 16px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(168,107,117,0.4); transition: transform 0.15s, box-shadow 0.15s; }
 .save-btn:hover { transform: translateY(-1px); }
 .save-btn:active { transform: translateY(0); }
@@ -155,16 +152,6 @@ body {
 .gallery-thumb:hover { transform: scale(1.03); }
 .logs-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .logs-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
-.log-item { padding: 12px 0; border-bottom: 1px solid #F4EFE8; display: flex; align-items: center; gap: 12px; }
-.log-item:last-child { border-bottom: none; }
-.log-date-col { font-size: 12px; font-weight: 700; color: #2A2420; min-width: 52px; }
-.log-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.log-bar-row { display: flex; align-items: center; gap: 6px; }
-.log-bar-label { font-size: 10px; color: #9A8888; width: 20px; text-align: right; }
-.log-bar-track { flex: 1; height: 5px; background: #F0EBE8; border-radius: 3px; overflow: hidden; }
-.log-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(to right, #C4818A, #A86B75); }
-.log-pct { font-size: 12px; font-weight: 700; color: #C4818A; min-width: 32px; text-align: right; }
-.log-notes-txt { font-size: 11px; color: #7A6E6A; margin-top: 5px; font-style: italic; }
 .hist-day { padding: 14px 0; border-bottom: 1px solid #F4EFE8; }
 .hist-day:last-child { border-bottom: none; }
 .hist-day-date { font-size: 14px; font-weight: 800; color: #2A2420; margin-bottom: 4px; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
@@ -398,10 +385,6 @@ body {
 
   <!-- TODAY -->
   <div id="tab-today" class="tab-content active">
-    <div class="reset-row">
-      <button class="reset-btn" onclick="resetAll()">↺ Reset day</button>
-    </div>
-
     <div class="section" id="sec-am">
       <div class="sec-hdr am-hdr" onclick="toggleSec('sec-am')">
         <span class="sec-icon">☀️</span>
@@ -481,7 +464,7 @@ body {
       <textarea class="notes-ta" id="daily-notes" placeholder="How did your skin feel? Any reactions, observations..."></textarea>
     </div>
 
-    <button class="save-btn" id="save-btn" onclick="saveAndReset()">💾 Save &amp; Reset Day</button>
+    <button class="save-btn" id="save-btn" onclick="saveNote()">💾 Guardar nota</button>
   </div>
 
   <!-- PHOTOS -->
@@ -736,13 +719,10 @@ const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Sat
 const DAYS_S = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-function dayOfYear(d) { return Math.floor((d - new Date(d.getFullYear(),0,0)) / 86400000); }
-function treatmentKey(d) { return dayOfYear(d) % 2 === 1 ? 'G' : 'M'; }
 function toDateStr(d) { return d.toISOString().split('T')[0]; }
 
 const TODAY = new Date();
 const TODAY_STR = toDateStr(TODAY);
-const TX_KEY = treatmentKey(TODAY);
 
 // ── PM NIGHT ROTATION ────────────────────────────────────────────────────────
 // 0=Sun=rest, 1=Mon=aha, 2=Tue=tret, 3=Wed=aha, 4=Thu=tret, 5=Fri=rest, 6=Sat=tret
@@ -817,201 +797,12 @@ const PICKER_TITLES = {
   lips:        '💋 Labios',
   hidratante:  '💧 Hidratante',
 };
-// ── ROUTINE DATA ─────────────────────────────────────────────────────────────
-const TX = {
-  G: { name:'GlycoIsdin Serum', brand:'Isdin', emoji:'✨',
-    bg:'#FFE590', color:'#5A3A00',
-    how:'Dispense 3–4 drops onto clean, completely dry skin. Press gently into face and neck — do not rub. Allow to absorb fully (60 seconds).',
-    why:'Vitamin C + glycolic acid — brightens dark spots, boosts collagen, provides antioxidant protection against UV-triggered pigmentation.' },
-  M: { name:'Melascreen Serum', brand:'Ducray', emoji:'🌟',
-    bg:'#EFD0F8', color:'#5A1870',
-    how:'Apply 2–3 drops to clean skin. Press into areas of hyperpigmentation — cheeks, forehead, upper lip, neck. Do not rub. Allow 60 seconds to absorb.',
-    why:'Targets melanin overproduction at the source. Most effective layered directly under SPF to block the UV that would re-trigger pigmentation.' }
-};
-
-function buildAM(tx) {
-  return [
-    { n:1, e:'🫧', name:'Glycolic Bright Gel Cleanser', brand:'Neutrogena — Anti-Manchas',
-      how:'Wet face and neck with lukewarm water. Massage in gentle circular motions for 60 seconds — include the neck. Rinse and pat dry.',
-      why:'Glycolic acid gently exfoliates surface dead skin and fades dark spots. Morning cleansing activates skin to absorb serums more effectively.' },
-    { n:2, e:TX[tx].emoji, name:TX[tx].name, brand:TX[tx].brand, isAlt:true, how:TX[tx].how, why:TX[tx].why },
-    { n:3, e:'🛡️', name:'Barrier Support Serum', brand:'The Ordinary',
-      how:'Apply 2–3 drops after treatment serum. Press gently — no rubbing. Allow 30 seconds to absorb before next step.',
-      why:'Repairs and reinforces the skin barrier. Prevents redness and sensitivity from actives without reducing their effectiveness.' },
-    { n:4, e:'👁️', name:'Contorno de Ojos AM', brand:'Caffeine Stick · desinflamante mañanero', picker:'eye' },
-    { n:5, e:'💧', name:'Hydro Boost Gel Cream', brand:'Neutrogena',
-      how:'Apply pea-sized amount to face, neck, and décolleté using upward strokes. For neck: start at collarbone and smooth toward jaw.',
-      why:'Hyaluronic acid hydrates and plumps. Well-hydrated skin responds dramatically better to all treatment serums.' },
-    { n:6, e:'☀️', name:'Revitalift Laser Day Cream', brand:"L'Oréal Paris",
-      how:'Apply generous layer over moisturized face and neck. Smooth in upward strokes. Let settle 1–2 minutes before Finacea.',
-      why:'Pro-retinol + vitamin C daytime formula for brightening and anti-aging. Apply before Finacea and SPF.' },
-    { n:7, e:'💊', name:'Finacea Ácido Azelaico 15%', brand:'Galderma · anti-melasma activo',
-      how:'Aplica una capa muy fina sobre cara y cuello. Evitar contorno inmediato de ojos y labios. Espera 1-2 minutos antes del SPF.',
-      why:'Inhibe la tirosinasa — la enzima que fabrica melanina. Bloquea la cascada interna de pigmentación mientras el SPF bloquea el detonante externo. Usar diario para ver resultados en 3-4 meses.' },
-    { n:8, e:'🌞', name:'SPF Facial', brand:'SPF 50+ · cara y cuello', picker:'spf-face',
-      warn:'ABSOLUTAMENTE NO NEGOCIABLE para melasma. El UV es el detonante principal — sin SPF diario todos los serums trabajan a fracción de su potencia.' },
-    { n:9, e:'☀️', name:'SPF Corporal', brand:'SPF 50+ · cuerpo y brazos', picker:'spf-body',
-      warn:'Las manchas en brazos son UV-triggered — mismo mecanismo que el melasma facial. Sin SPF no van a mejorar sin importar lo que apliques.' },
-  ];
-}
-
-// PM shared step data
-const CLEANSER_PM_DATA = {
-  e:'🫧', name:'Limpieza Doble', brand:'Neutrogena — quitar SPF + polución',
-  how:'Aplica el limpiador en piel SECA primero (disuelve el SPF), agrega agua, masajea 90 segundos. Enjuaga con agua tibia. Seca bien.',
-  why:'Remover SPF y polución completamente es esencial antes de cualquier tratamiento nocturno.'
-};
-const BARRIER_STEP_DATA = {
-  e:'🛡️', name:'Barrier Support Serum', brand:'The Ordinary',
-  how:'2-3 gotas, presiona suavemente. 45 segundos para absorber.',
-  why:'Repara la barrera después de activos. Prepara la piel para la hidratación nocturna.'
-};
-const EYE_PM_DATA = {
-  e:'👁️', name:'Contorno de Ojos PM', brand:'Ceramide Stick o Tocobo Collagen', picker:'eye'
-};
-const HYDRO_PM_DATA = {
-  e:'💧', name:'Hydro Boost Gel Cream', brand:'Neutrogena — generoso en PM',
-  how:'Más generoso que en la mañana. Cara, cuello y escote con movimientos hacia arriba. Deja actuar toda la noche.',
-  why:'La hidratación nocturna intensiva es el anti-manchas más subestimado. Piel bien hidratada renueva más rápido.'
-};
-
-function buildPM() {
-  const type = pmNightType();
-
-  if (type === 'tret') return [
-    { n:1, ...CLEANSER_PM_DATA },
-    { n:2, e:'💧', name:'Hydro Boost (buffer ligero)', brand:'Neutrogena — esperar 30 min piel seca',
-      how:'Capa muy fina como buffer. Luego ESPERA 30 minutos completos antes de la tretinoína — la piel debe estar totalmente seca. Esta espera reduce irritación sin reducir efectividad.',
-      why:'Tretinoína en piel húmeda aumenta irritación significativamente. El buffer de humectante primero (técnica sandwich) es clave para principiantes.' },
-    { n:3, e:'🔬', name:'Retin-A Tretinoína 0.025%', brand:'Solo cara y cuello — evitar contorno de ojos',
-      how:'Cantidad del tamaño de un chícharo para toda la cara. Extiende en piel seca. Evita cejas, labios y 5mm del contorno del ojo. No frotar. Puede causar leve calor los primeros usos — es normal.',
-      warn:'NUNCA misma noche que AHA/BHA. Al día siguiente el SPF es más importante que nunca.' },
-    { n:4, ...EYE_PM_DATA },
-    { n:5, e:'💧', name:'Hydro Boost Gel Cream', brand:'Neutrogena — sella la tretinoína',
-      how:'5 minutos después de la tretinoína, aplica capa generosa encima. Este "sandwich" final reduce peeling sin reducir efectividad del retinol.',
-      why:'La hidratación sobre tretinoína potencia resultados y reduce el riesgo de irritación.' },
-  ];
-
-  if (type === 'aha') return [
-    { n:1, ...CLEANSER_PM_DATA },
-    { n:2, e:'🫧', name:'Toner AHA BHA PHA + Niacinamide', brand:'Exfoliante químico — algodón o manos',
-      how:'Aplica con algodón o manos limpias en cara y cuello. Evitar contorno inmediato de ojos y labios. No enjuagar. Espera 5 minutos antes del siguiente paso.',
-      warn:'Solo PM. Máx 2-3 noches/semana. NUNCA misma noche que tretinoína.' },
-    { n:3, ...BARRIER_STEP_DATA },
-    { n:4, ...EYE_PM_DATA },
-    { n:5, ...HYDRO_PM_DATA },
-  ];
-
-  // rest night
-  return [
-    { n:1, ...CLEANSER_PM_DATA },
-    { n:2, ...BARRIER_STEP_DATA },
-    { n:3, e:'💊', name:'Rice Ampoule (Niacinamide)', brand:'Opcional — iluminador suave',
-      how:'Aplica antes de la hidratante. Presiona suavemente. Compatible con el resto de la rutina.',
-      why:'Niacinamide inhibe transferencia de melanosomas. Noche de descanso perfecta para mantener luminosidad sin activos fuertes.' },
-    { n:4, ...EYE_PM_DATA },
-    { n:5, ...HYDRO_PM_DATA },
-  ];
-}
-
-const BODY_STEPS = [
-  { n:1, e:'🛁', name:'Aceite de Ducha Eucerin pH5', brand:'Eucerin — piel sensible o seca',
-    how:'Aplica sobre piel húmeda. Masajea suavemente todo el cuerpo, incluyendo brazos y escote. Enjuaga. También puede añadirse directamente al agua del baño.',
-    why:'Fórmula pH5 que preserva el manto ácido natural de la piel. Limpia sin destruir la barrera cutánea — fundamental cuando se usan activos como tretinoína o ácidos que ya sensibilizan la piel.' },
-  { n:2, e:'💆', name:'Shampoo Lambdapil Anticaída', brand:'ISDIN — estimula crecimiento capilar',
-    how:'Aplica sobre cabello mojado. Masajea el cuero cabelludo con la yema de los dedos durante 2–3 minutos. Deja actuar 2 minutos antes de enjuagar.',
-    why:'Biotina, zinc y extracto Trichogen fortalecen el folículo y reducen la caída. El tiempo de contacto en el cuero cabelludo es clave para la eficacia — no enjuagar inmediatamente.' },
-  { n:3, e:'🚿', name:'Agua tibia — no caliente', brand:'Temperatura del agua',
-    how:'Temperatura confortablemente tibia, nunca caliente. Ducha de menos de 10 minutos.',
-    why:'El agua caliente destruye los aceites naturales y daña la barrera cutánea. El agua tibia limpia igual de bien sin depletar las defensas de la piel.' },
-  { n:4, e:'🧴', name:'Dove Ceramidas Body Lotion', brand:'Dove — todo el cuerpo',
-    how:'Aplica INMEDIATAMENTE después de secarte — dentro de 2–3 minutos, con la piel todavía ligeramente húmeda. Masajea los brazos en movimientos circulares lentos.',
-    why:'Las ceramidas reconstruyen la barrera. Aplicar sobre piel húmeda aumenta la absorción hasta un 70%. El uso consistente desvanece las manchas en brazos con el tiempo.' },
-  { n:5, e:'☀️', name:'SPF Corporal', brand:'SPF 50+ · cuerpo y brazos', picker:'spf-body',
-    warn:'Las manchas en brazos son UV-triggered — mismo mecanismo que el melasma facial. Sin SPF no van a mejorar sin importar lo que apliques.' },
-];
-
-const FEET_STEPS = [
-  { n:1, e:'🪣', name:'Warm Foot Soak', brand:'10 minutes — do not skip',
-    how:'Fill basin with warm (not hot) water. Optional: 1 tablespoon Epsom salt. Soak both feet for a full 10 minutes.',
-    why:'Softens hardened skin dramatically, multiplying effectiveness of everything that follows. Salicylic acid and urea penetrate 3–4x deeper into pre-soaked skin.' },
-  { n:2, e:'🪨', name:'Pumice Stone or Electric Foot File', brand:'Talón y callosidades',
-    how:'While feet are still damp, gently file cracked heels and callused areas — about 30–45 seconds per area. Rinse and pat dry.',
-    why:'Removes dead hardened skin so active ingredients can reach live tissue below. Without this step, even high-concentration urea works only at the surface.' },
-  { n:3, e:'⚗️', name:'Salicylic Acid Gel 2%', brand:'Targeted areas only',
-    how:'Apply only to cracked and callused areas. Avoid broken or irritated skin. Wait 5–8 minutes before next step.',
-    why:'Dissolves bonds between dead skin cells, breaking up calluses from within. The wait allows it to penetrate before being sealed in by urea.' },
-  { n:4, e:'🦶', name:'Tratamiento de Urea', brand:'Elige la concentración según la dureza', picker:'feet',
-    warn:'Aplica generosamente sobre talones y grietas. Cuanto más dura la piel, mayor concentración necesitás.' },
-  { n:5, e:'🧦', name:'Cotton Socks — Wear overnight', brand:'Seal in the treatment',
-    how:'Put on clean cotton socks immediately after urea, while still fresh on skin. Sleep with them on. 4–5 nights/week first month, then 2–3/week to maintain.',
-    why:'Occlusion under fabric increases urea absorption dramatically. Most of the heel repair happens overnight under the socks.' },
-];
-
 const SECTIONS = [
   { bodyId:'am-body',   key:'am',   total:9 },
   { bodyId:'pm-body',   key:'pm',   total:5 },
   { bodyId:'body-body', key:'body', total:5 },
   { bodyId:'feet-body', key:'feet', total:5 },
 ];
-
-function stepHTML(s) {
-  const id   = 'sd_' + Math.random().toString(36).slice(2,9);
-  const altB = s.isAlt ? ' <span class="badge badge-today">Today\'s Pick</span>' : '';
-  const warn = s.warn  ? `<div class="det-warn">${s.warn}</div>` : '';
-  const why  = s.why   ? `<div class="det-why">💡 ${s.why}</div>` : '';
-
-  if (s.picker) {
-    let pickerFn;
-    if (s.picker === 'spf-face') {
-      pickerFn = `openSPFPicker('step_${id}')`;
-    } else if (s.picker === 'spf-body') {
-      pickerFn = `openBodySPFPicker('step_${id}')`;
-    } else {
-      pickerFn = `openGenericPicker('step_${id}','${s.picker}')`;
-    }
-    return `<div class="step" id="step_${id}">
-  <div class="sn" onclick="checkStep('step_${id}',event)">
-    <span class="sn-num">${s.n}</span>
-    <span class="sn-check">✓</span>
-  </div>
-  <div class="sc" onclick="${pickerFn}">
-    <div class="sc-top"><span class="sc-name">${s.e} ${s.name}</span>${altB}</div>
-    <div class="sc-brand">${s.brand}</div>
-    <div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>
-  </div>
-  <div class="step-chevron" onclick="${pickerFn}">›</div>
-</div>`;
-  }
-
-  return `<div class="step" id="step_${id}">
-  <div class="sn" onclick="checkStep('step_${id}',event)">
-    <span class="sn-num">${s.n}</span>
-    <span class="sn-check">✓</span>
-  </div>
-  <div class="sc" onclick="toggleStep('step_${id}','${id}')">
-    <div class="sc-top"><span class="sc-name">${s.e} ${s.name}</span>${altB}</div>
-    <div class="sc-brand">${s.brand}</div>
-    <div class="sc-detail" id="${id}">
-      <div class="det-title">How to apply</div>${s.how}${why}${warn}
-    </div>
-  </div>
-  <div class="step-chevron" onclick="toggleStep('step_${id}','${id}')">›</div>
-</div>`;
-}
-
-function renderSteps(bodyId, arr, nightType) {
-  const c = document.getElementById(bodyId);
-  const hint = c.querySelector('.tap-hint');
-  let nightBadge = '';
-  if (nightType) {
-    const info = PM_NIGHT_INFO[nightType];
-    nightBadge = `<div style="padding:8px 16px 4px">
-      <span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;background:${info.bg};color:${info.color}">${info.label}</span>
-    </div>`;
-  }
-  c.innerHTML = (hint ? hint.outerHTML : '') + nightBadge + arr.map(stepHTML).join('');
-}
 
 // ── CHECKBOX LOGIC ────────────────────────────────────────────────────────────
 async function checkStep(stepId, event) {
@@ -1047,43 +838,31 @@ function updateProgress(bodyId) {
   }
 }
 
-function resetAll() {
-  document.querySelectorAll('.step.done').forEach(s => s.classList.remove('done'));
-  SECTIONS.forEach(s => updateProgress(s.bodyId));
+// ── DAILY NOTES ───────────────────────────────────────────────────────────────
+// Reemplaza al viejo "Save & Reset Day" (escribía en daily_logs, tabla que ya
+// nadie leía desde que el Historial se calcula de product_applications). Ahora
+// la nota del día vive en daily_notes y se precarga al abrir la app, así puedes
+// seguir editándola en vez de que se pierda de vista tras guardarla.
+async function loadTodayNote() {
+  const { data } = await db.from('daily_notes').select('notes').eq('note_date', TODAY_STR).maybeSingle();
+  if (data?.notes) document.getElementById('daily-notes').value = data.notes;
 }
 
-// ── SAVE & RESET ──────────────────────────────────────────────────────────────
-async function saveAndReset() {
+async function saveNote() {
   const btn = document.getElementById('save-btn');
-  btn.disabled = true; btn.textContent = '⏳ Saving...';
+  const notes = document.getElementById('daily-notes').value.trim();
+  if (!notes) { showToast('⚠️ Escribe algo antes de guardar', 'error'); return; }
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
 
-  const { data: existing } = await db.from('daily_logs').select('*').eq('log_date', TODAY_STR).maybeSingle();
+  const { error } = await db.from('daily_notes').upsert(
+    { note_date: TODAY_STR, notes, updated_at: new Date().toISOString() },
+    { onConflict: 'note_date' }
+  );
 
-  const payload = { log_date: TODAY_STR };
-  for (const s of SECTIONS) {
-    const body = document.getElementById(s.bodyId);
-    const currentDone  = body.querySelectorAll('.step.done').length;
-    const previousDone = existing ? (existing[s.key + '_done'] || 0) : 0;
-    payload[s.key + '_done']  = Math.max(currentDone, previousDone);
-    payload[s.key + '_total'] = s.total;
-  }
-
-  const newNotes      = document.getElementById('daily-notes').value.trim();
-  const existingNotes = existing ? (existing.notes || '') : '';
-  payload.notes = existingNotes && newNotes
-    ? existingNotes + '\n' + newNotes
-    : (newNotes || existingNotes);
-
-  const { error } = await db.from('daily_logs').upsert(payload, { onConflict: 'log_date' });
-
-  btn.disabled = false; btn.textContent = '💾 Save & Reset Day';
+  btn.disabled = false; btn.textContent = '💾 Guardar nota';
 
   if (error) { showToast('❌ ' + error.message, 'error'); return; }
-
-  showToast('✅ Day guardado y acumulado!', 'success');
-  resetAll();
-  document.getElementById('daily-notes').value = '';
-  historyLoaded = false;
+  showToast('✅ Nota guardada', 'success');
 }
 
 // ── PHOTO TYPES ───────────────────────────────────────────────────────────────
@@ -1460,68 +1239,6 @@ function buildHistorialByDay(appsData) {
   }).join('');
 }
 
-function logRow(l) {
-  const done  = l.am_done  + l.pm_done  + l.body_done  + l.feet_done;
-  const total = l.am_total + l.pm_total + l.body_total + l.feet_total;
-  const pct   = total > 0 ? Math.round(done/total*100) : 0;
-  return `<div class="log-item">
-  <div class="log-date-col">${fmtDate(l.log_date)}</div>
-  <div class="log-bars">
-    ${bar('AM', l.am_done,   l.am_total)}
-    ${bar('PM', l.pm_done,   l.pm_total)}
-    ${bar('Bd', l.body_done, l.body_total)}
-    ${bar('Ft', l.feet_done, l.feet_total)}
-    ${l.notes ? `<div class="log-notes-txt">"${l.notes}"</div>` : ''}
-  </div>
-  <div class="log-pct">${pct}%</div>
-</div>`;
-}
-
-function bar(label, done, total) {
-  const pct = total > 0 ? Math.round(done/total*100) : 0;
-  return `<div class="log-bar-row">
-  <span class="log-bar-label">${label}</span>
-  <div class="log-bar-track"><div class="log-bar-fill" style="width:${pct}%"></div></div>
-</div>`;
-}
-
-function calcProductStreak(appsData, matchFn) {
-  const byDate = {};
-  appsData.forEach(r => {
-    const date = r.applied_at.slice(0, 10);
-    if (!byDate[date]) byDate[date] = [];
-    byDate[date].push(r.product_name);
-  });
-  let streak = 0;
-  const d = new Date(TODAY);
-  // Don't penalize for incomplete day — if today has no match yet, start from yesterday
-  if (!(byDate[toDateStr(d)] || []).some(matchFn)) d.setDate(d.getDate() - 1);
-  for (let i = 0; i < 91; i++) {
-    const ds = toDateStr(d);
-    if ((byDate[ds] || []).some(matchFn)) { streak++; d.setDate(d.getDate() - 1); }
-    else break;
-  }
-  return streak;
-}
-
-function calcStreak(logs) {
-  const dates = new Set(logs.map(l => l.log_date));
-  let streak = 0;
-  const d = new Date(TODAY); d.setHours(0,0,0,0);
-  while (dates.has(toDateStr(d))) { streak++; d.setDate(d.getDate() - 1); }
-  return streak;
-}
-
-function calcAvgPct(logs) {
-  if (!logs.length) return 0;
-  const sum = logs.reduce((acc, l) => {
-    const total = l.am_total + l.pm_total + l.body_total + l.feet_total;
-    const done  = l.am_done  + l.pm_done  + l.body_done  + l.feet_done;
-    return acc + (total > 0 ? done/total : 0);
-  }, 0);
-  return Math.round(sum / logs.length * 100);
-}
-
 function fmtDate(ds) {
   const d = new Date(ds + 'T12:00:00');
   return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`;
@@ -1892,9 +1609,6 @@ function showToast(msg, type) {
   toastTimer = setTimeout(() => { t.className = ''; }, 3000);
 }
 
-function txCapsule(tx) {
-  return `<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${tx.bg};color:${tx.color};margin-left:3px;vertical-align:middle">${tx.emoji} ${tx.name}</span>`;
-}
 function nightCapsule(info) {
   return `<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${info.bg};color:${info.color};margin-left:3px;vertical-align:middle">${info.label}</span>`;
 }
@@ -2523,7 +2237,7 @@ async function init() {
     const steps = stepsByRoutine[amR.id] || [];
     SECTIONS.find(s => s.key === 'am').total = steps.length;
     document.getElementById('am-sec-sub').innerHTML =
-      `Face &amp; Neck · ${steps.length} steps ${txCapsule(TX[TX_KEY])} <span class="sec-progress" id="prog-am-body"></span>`;
+      `Face &amp; Neck · ${steps.length} steps <span class="sec-progress" id="prog-am-body"></span>`;
     renderDbSteps('am-body', steps, null, todayHydration);
   }
 
@@ -2557,6 +2271,7 @@ async function init() {
   renderPhotoTypeGrid();
   renderCategorySelects();
   loadTodayApplications();
+  loadTodayNote();
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
