@@ -737,8 +737,10 @@ const TODAY_STR = toDateStr(TODAY);
 
 // ── PM NIGHT ROTATION ────────────────────────────────────────────────────────
 // 0=Sun=rest, 1=Mon=aha, 2=Tue=tret, 3=Wed=aha, 4=Thu=tret, 5=Fri=rest, 6=Sat=tret
-function pmNightType() {
-  return ['rest','aha','tret','aha','tret','rest','tret'][TODAY.getDay()];
+// dow opcional: al ver un día backdateado, la cápsula debe reflejar el día que
+// se está viendo, no siempre hoy.
+function pmNightType(dow) {
+  return ['rest','aha','tret','aha','tret','rest','tret'][dow != null ? dow : TODAY.getDay()];
 }
 
 const PM_NIGHT_INFO = {
@@ -1288,7 +1290,7 @@ function getBackdateOverrideISO() {
   return d.toISOString();
 }
 
-function onBackdateChange() {
+async function onBackdateChange() {
   const input = document.getElementById('backdate-input');
   const resetBtn = document.getElementById('backdate-reset-btn');
   const note = document.getElementById('backdate-active-note');
@@ -1298,17 +1300,21 @@ function onBackdateChange() {
     note.style.display = 'block';
     const label = new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
     note.textContent = `📅 Estás registrando para: ${label} — no para ahora mismo.`;
+    // Repinta Today con lo que YA se registró ese día, para que no se vea
+    // "bloqueado" por lo que marcaste hoy — puedes marcar libremente ese día.
+    await loadTodayRoutines(input.value.slice(0, 10));
   } else {
     resetBtn.style.display = 'none';
     note.style.display = 'none';
   }
 }
 
-function resetBackdate() {
+async function resetBackdate() {
   const input = document.getElementById('backdate-input');
   input.value = '';
   document.getElementById('backdate-reset-btn').style.display = 'none';
   document.getElementById('backdate-active-note').style.display = 'none';
+  await loadTodayRoutines(TODAY_STR);
   showToast('✅ Volviste a registrar en tiempo real', 'success');
 }
 
@@ -2205,36 +2211,35 @@ function renderDbSteps(bodyId, steps, nightType, todayHydration) {
 }
 
 // ── INIT ────────────────────────────────────────────────────────────────────────
-async function init() {
-  await loadProducts();
+// Carga y dibuja AM/PM/Body/Feet para un día específico (YYYY-MM-DD). Se usa
+// tanto al abrir la app (con TODAY_STR) como al activar "Registrar para" con
+// otra fecha — antes, backdatear no cambiaba lo que se veía en Today, así que
+// los pasos de un día ya marcado (hoy) bloqueaban registrar el otro día.
+async function loadTodayRoutines(dateStr) {
+  const dow = new Date(dateStr + 'T12:00:00').getDay();
 
-  document.getElementById('hdr-date').textContent =
-    `${DAYS[TODAY.getDay()]}, ${MONTHS[TODAY.getMonth()]} ${TODAY.getDate()}, ${TODAY.getFullYear()}`;
-
-  // Load routines active today from Supabase
   const { data: routines } = await db.from('routines')
     .select('*').eq('active', true).order('sort_order');
 
-  const todayDow = TODAY.getDay();
-  const todayRoutines = (routines || []).filter(r =>
-    !r.schedule_days || r.schedule_days.includes(todayDow)
+  const dayRoutines = (routines || []).filter(r =>
+    !r.schedule_days || r.schedule_days.includes(dow)
   );
 
   // One routine per section_key (first match wins) — used for am/pm only
   const bySection = {};
-  todayRoutines.forEach(r => { if (!bySection[r.section_key]) bySection[r.section_key] = r; });
+  dayRoutines.forEach(r => { if (!bySection[r.section_key]) bySection[r.section_key] = r; });
 
   // Body and Feet are special: several routines can apply the same day (e.g. Ducha +
   // Cuerpo-Noche, or more than one foot routine), so we stack ALL of them instead of
   // keeping only the first match.
-  const bodyRoutines = todayRoutines
+  const bodyRoutines = dayRoutines
     .filter(r => r.section_key === 'body')
     .sort((a, b) => a.sort_order - b.sort_order);
-  const feetRoutines = todayRoutines
+  const feetRoutines = dayRoutines
     .filter(r => r.section_key === 'feet')
     .sort((a, b) => a.sort_order - b.sort_order);
 
-  // Load all steps for today's routines in one query
+  // Load all steps for that day's routines in one query
   const ids = [...new Set([...Object.values(bySection).map(r => r.id), ...bodyRoutines.map(r => r.id), ...feetRoutines.map(r => r.id)])];
   const { data: allSteps } = ids.length
     ? await db.from('routine_steps').select('*').in('routine_id', ids).order('sort_order')
@@ -2246,12 +2251,13 @@ async function init() {
     stepsByRoutine[s.routine_id].push(s);
   });
 
-  // Hydrate checkmarks: find everything already applied today so steps don't
-  // look "unchecked" just because the page was reloaded.
-  const { data: todayAppsForHydration } = await db.from('product_applications')
+  // Hydrate checkmarks: find everything already applied ESE día so steps don't
+  // look "unchecked" just because la página se recargó, y para que un día ya
+  // marcado no bloquee ver/registrar otro día distinto.
+  const { data: appsForHydration } = await db.from('product_applications')
     .select('*')
-    .gte('applied_at', TODAY_STR + 'T00:00:00')
-    .lte('applied_at', TODAY_STR + 'T23:59:59')
+    .gte('applied_at', dateStr + 'T00:00:00')
+    .lte('applied_at', dateStr + 'T23:59:59')
     .order('applied_at', { ascending: true });
 
   const _prodByIdForHydration = {};
@@ -2259,14 +2265,14 @@ async function init() {
   // byStepId es el vínculo exacto (routine_step_id → esta aplicación específica).
   // Los demás mapas son el respaldo heurístico viejo, solo para historial previo
   // a este campo o casos sin routine_step_id.
-  const todayHydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
-  (todayAppsForHydration || []).forEach(r => {
+  const hydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
+  (appsForHydration || []).forEach(r => {
     const label = r.product_name;
-    if (r.routine_step_id) todayHydration.byStepId.set(r.routine_step_id, label);
-    if (r.product_id) todayHydration.byProductId.set(r.product_id, label);
+    if (r.routine_step_id) hydration.byStepId.set(r.routine_step_id, label);
+    if (r.product_id) hydration.byProductId.set(r.product_id, label);
     const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
-    if (prod && prod.category) todayHydration.byCategory.set(prod.category, label);
-    todayHydration.byName.set(label, label);
+    if (prod && prod.category) hydration.byCategory.set(prod.category, label);
+    hydration.byName.set(label, label);
   });
 
   // AM
@@ -2276,35 +2282,52 @@ async function init() {
     SECTIONS.find(s => s.key === 'am').total = steps.length;
     document.getElementById('am-sec-sub').innerHTML =
       `Face &amp; Neck · ${steps.length} steps <span class="sec-progress" id="prog-am-body"></span>`;
-    renderDbSteps('am-body', steps, null, todayHydration);
+    renderDbSteps('am-body', steps, null, hydration);
   }
 
   // PM
   const pmR = bySection['pm'];
   if (pmR) {
     const steps = stepsByRoutine[pmR.id] || [];
-    const nightType = pmNightType();
+    const nightType = pmNightType(dow);
     const nightInfo = PM_NIGHT_INFO[nightType];
     SECTIONS.find(s => s.key === 'pm').total = steps.length;
     document.getElementById('pm-sec-sub').innerHTML =
       `Face &amp; Neck · ${steps.length} pasos ${nightCapsule(nightInfo)} <span class="sec-progress" id="prog-pm-body"></span>`;
-    renderDbSteps('pm-body', steps, nightType, todayHydration);
+    renderDbSteps('pm-body', steps, nightType, hydration);
   }
 
-  // Body — concatenate steps from every body routine scheduled today, in
+  // Body — concatenate steps from every body routine scheduled ese día, en
   // routine sort_order (e.g. Ducha, then Cuerpo-Noche, then Glicólico Cuerpo).
   if (bodyRoutines.length) {
     const steps = bodyRoutines.flatMap(r => stepsByRoutine[r.id] || []);
     SECTIONS.find(s => s.key === 'body').total = steps.length;
-    renderDbSteps('body-body', steps, null, todayHydration);
+    renderDbSteps('body-body', steps, null, hydration);
+  } else {
+    const c = document.getElementById('body-body');
+    if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de cuerpo programada ese día.</div>';
+    SECTIONS.find(s => s.key === 'body').total = 0;
   }
 
-  // Feet — concatenate steps from every foot routine scheduled today.
+  // Feet — concatenate steps from every foot routine scheduled ese día.
   if (feetRoutines.length) {
     const steps = feetRoutines.flatMap(r => stepsByRoutine[r.id] || []);
     SECTIONS.find(s => s.key === 'feet').total = steps.length;
-    renderDbSteps('feet-body', steps, null, todayHydration);
+    renderDbSteps('feet-body', steps, null, hydration);
+  } else {
+    const c = document.getElementById('feet-body');
+    if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de pies programada ese día.</div>';
+    SECTIONS.find(s => s.key === 'feet').total = 0;
   }
+}
+
+async function init() {
+  await loadProducts();
+
+  document.getElementById('hdr-date').textContent =
+    `${DAYS[TODAY.getDay()]}, ${MONTHS[TODAY.getMonth()]} ${TODAY.getDate()}, ${TODAY.getFullYear()}`;
+
+  await loadTodayRoutines(TODAY_STR);
 
   renderPhotoTypeGrid();
   renderCategorySelects();
