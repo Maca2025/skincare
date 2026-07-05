@@ -609,6 +609,17 @@ body {
         <input class="prod-input" id="pf-cat-custom" type="text" placeholder="Nombre de la nueva categoría" style="display:none;margin-top:8px">
       </div>
       <div class="prod-field">
+        <label class="prod-label">Rol clínico (opcional)</label>
+        <select class="prod-input prod-select" id="pf-clinical-role">
+          <option value="">— Ninguno —</option>
+          <option value="finacea">Finacea / ácido azelaico (despigmentante)</option>
+          <option value="tretinoina">Tretinoína / retinol</option>
+          <option value="barrera">Barrera reparadora (ceramidas, hidratación)</option>
+          <option value="spf_facial">SPF Facial</option>
+        </select>
+        <div class="field-hint">Marca esto solo si el producto es el que usas para tu adherencia de melasma en Progreso. Evita que la app tenga que adivinar por el nombre.</div>
+      </div>
+      <div class="prod-field">
         <label class="prod-label">Descripción del producto</label>
         <textarea class="prod-input prod-ta" id="pf-note" placeholder="Para qué sirve, beneficios principales, ingredientes clave..."></textarea>
       </div>
@@ -817,7 +828,7 @@ async function checkStep(stepId, event) {
     const nameEl = step.querySelector('.sc-name');
     if (nameEl) {
       selectedProduct = nameEl.textContent.trim();
-      await logApplication('rutina');
+      await logApplication('rutina', step.dataset.routineStepId || null);
     }
   }
 }
@@ -1094,12 +1105,14 @@ async function loadHistory() {
   const _prodById = {};
   allProducts.forEach(p => { _prodById[p.id] = p; });
   const appProd = r => (r.product_id && _prodById[r.product_id]) || { name: r.product_name || '', emoji: '', category: '' };
-  // Matches by category when available (via product_id); falls back to name
-  // keywords so manually bulk-loaded rows (no product_id) still count.
-  const isSPFfacial = x => x.category === '🌞 SPF Facial' || (!x.category && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || ''));
-  const isFinacea   = x => /finacea|azela/i.test(x.name || '');
-  const isTret      = x => /tretino|retin-a/i.test(x.name || '');
-  const isBarrera   = x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '');
+  // Prioridad 1: campo explícito clinical_role (lo que se marca en Stock →
+  // Agregar/Editar producto). Prioridad 2: categoría. Prioridad 3: adivinar por
+  // palabras clave en el nombre — solo como último recurso para productos
+  // viejos sin clinical_role o filas cargadas manualmente sin product_id.
+  const isSPFfacial = x => x.clinical_role === 'spf_facial' || x.category === '🌞 SPF Facial' || (!x.category && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || ''));
+  const isFinacea   = x => x.clinical_role === 'finacea' || /finacea|azela/i.test(x.name || '');
+  const isTret      = x => x.clinical_role === 'tretinoina' || /tretino|retin-a/i.test(x.name || '');
+  const isBarrera   = x => x.clinical_role === 'barrera' || x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '');
   const isMelasmaAct = x => isFinacea(x) || isTret(x);
 
   const _yst = new Date(TODAY); _yst.setDate(TODAY.getDate() - 1);
@@ -1299,7 +1312,7 @@ function resetBackdate() {
   showToast('✅ Volviste a registrar en tiempo real', 'success');
 }
 
-async function logApplication(source) {
+async function logApplication(source, routineStepId) {
   if (!selectedProduct) return;
   const name = selectedProduct;
   selectedProduct = null;
@@ -1309,7 +1322,8 @@ async function logApplication(source) {
     product_name: name,
     product_id: productIdForLoggedName(name),
     applied_at: appliedAt,
-    source: source || null
+    source: source || null,
+    routine_step_id: routineStepId || null
   });
 
   if (error) { showToast('❌ ' + error.message, 'error'); return; }
@@ -1346,6 +1360,14 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 let currentPickerStepId = null;
+
+// El id de DOM ('step_xxxxx') no es el id real del paso en Supabase — lo
+// leemos del data-attribute que dbStepHTML ya deja en cada .step.
+function routineStepIdFromPickerStepId(pickerStepId) {
+  if (!pickerStepId) return null;
+  const el = document.getElementById(pickerStepId);
+  return el ? (el.dataset.routineStepId || null) : null;
+}
 
 function markPickerStepDone(productName) {
   if (!currentPickerStepId) return;
@@ -1403,10 +1425,11 @@ function openSPFPicker(stepId = null) {
 
 async function selectSPF(name) {
   const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
   closeModal('spf-modal');
   markPickerStepDone(name);
   selectedProduct = name;
-  await logApplication(source);
+  await logApplication(source, routineStepId);
 }
 
 function openBodySPFPicker(stepId = null) {
@@ -1429,10 +1452,11 @@ function openBodySPFPicker(stepId = null) {
 
 async function selectBodySPF(name) {
   const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
   closeModal('body-spf-modal');
   markPickerStepDone(name);
   selectedProduct = name;
-  await logApplication(source);
+  await logApplication(source, routineStepId);
 }
 
 function openGenericPicker(stepId, registryKey) {
@@ -1454,10 +1478,11 @@ function openGenericPicker(stepId, registryKey) {
 
 async function selectFromGenericPicker(name) {
   const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
   closeModal('product-picker-modal');
   markPickerStepDone(name);
   selectedProduct = name;
-  await logApplication(source);
+  await logApplication(source, routineStepId);
 }
 // ── SPF COMPARE TABLE ────────────────────────────────────────────────────────
 const COMPARE_COLS = [
@@ -1695,6 +1720,7 @@ function openAddProductModal() {
     if (el) { el.value = ''; if (id === 'pf-cat-custom') el.style.display = 'none'; }
   });
   document.getElementById('pf-cat').value = '';
+  document.getElementById('pf-clinical-role').value = '';
   document.getElementById('emoji-preview').textContent = '🧴';
   document.querySelector('#add-product-modal .modal-title').textContent = '＋ Nuevo producto';
   const btn = document.getElementById('save-prod-btn');
@@ -1712,6 +1738,7 @@ function openEditProductModal(id) {
   document.getElementById('pf-note').value  = p.note || '';
   document.getElementById('pf-how').value   = p.how_to_apply || '';
   document.getElementById('pf-why').value   = p.why_it_works || '';
+  document.getElementById('pf-clinical-role').value = p.clinical_role || '';
   document.getElementById('emoji-preview').textContent = p.emoji || '🧴';
   const catSel = document.getElementById('pf-cat');
   const custom = document.getElementById('pf-cat-custom');
@@ -1740,6 +1767,7 @@ async function saveCustomProduct() {
   const note   = document.getElementById('pf-note').value.trim();
   const how    = document.getElementById('pf-how').value.trim();
   const why    = document.getElementById('pf-why').value.trim();
+  const clinicalRole = document.getElementById('pf-clinical-role').value || null;
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (!cat)  { showToast('⚠️ Elige una categoría', 'error'); return; }
   const btn = document.getElementById('save-prod-btn');
@@ -1747,7 +1775,8 @@ async function saveCustomProduct() {
   if (editingProductId) {
     const { data, error } = await db.from('products').update({
       emoji, name, brand: brand || null, category: cat,
-      note: note || null, how_to_apply: how || null, why_it_works: why || null
+      note: note || null, how_to_apply: how || null, why_it_works: why || null,
+      clinical_role: clinicalRole
     }).eq('id', editingProductId).select().single();
     btn.disabled = false; btn.textContent = 'Guardar cambios';
     if (error) { showToast('❌ ' + error.message, 'error'); return; }
@@ -1762,6 +1791,7 @@ async function saveCustomProduct() {
   const { data, error } = await db.from('products').insert({
     emoji, name, brand: brand || null, category: cat,
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
+    clinical_role: clinicalRole,
     tier: 'ok', tags: [], status: 'ok'
   }).select().single();
   btn.disabled = false; btn.textContent = 'Guardar producto';
@@ -2105,11 +2135,15 @@ function dbStepHTML(s, index, todayHydration) {
   const why  = _whyTxt ? `<div class="det-why">💡 ${_whyTxt}</div>` : '';
   const warn = s.warn ? `<div class="det-warn">${s.warn}</div>` : '';
 
-  // Was this exact step already applied today? Check by fixed product, then by
-  // picker category, then by literal name (for info-only steps with neither).
+  // Was this exact step already applied today? Prioridad 1: routine_step_id
+  // exacto (step_completions vía product_applications.routine_step_id) — no
+  // puede confundir dos pasos de la misma categoría. Prioridad 2/3/4: los
+  // heurísticos viejos, solo como respaldo para historial previo a este campo.
   let appliedName = null;
   if (todayHydration) {
-    if (s.product_id && todayHydration.byProductId.has(s.product_id)) {
+    if (todayHydration.byStepId && todayHydration.byStepId.has(s.id)) {
+      appliedName = todayHydration.byStepId.get(s.id);
+    } else if (s.product_id && todayHydration.byProductId.has(s.product_id)) {
       appliedName = todayHydration.byProductId.get(s.product_id);
     } else if (s.picker_category && todayHydration.byCategory.has(s.picker_category)) {
       appliedName = todayHydration.byCategory.get(s.picker_category);
@@ -2128,7 +2162,7 @@ function dbStepHTML(s, index, todayHydration) {
   <div class="sc-picked-change">Toca para cambiar →</div>
 </div>`
       : `<div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>`;
-    return `<div class="step${doneCls}" id="step_${id}">
+    return `<div class="step${doneCls}" id="step_${id}" data-routine-step-id="${s.id}">
   <div class="sn" onclick="checkStep('step_${id}',event)">
     <span class="sn-num">${n}</span><span class="sn-check">✓</span>
   </div>
@@ -2141,7 +2175,7 @@ function dbStepHTML(s, index, todayHydration) {
 </div>`;
   }
 
-  return `<div class="step${doneCls}" id="step_${id}">
+  return `<div class="step${doneCls}" id="step_${id}" data-routine-step-id="${s.id}">
   <div class="sn" onclick="checkStep('step_${id}',event)">
     <span class="sn-num">${n}</span><span class="sn-check">✓</span>
   </div>
@@ -2222,9 +2256,13 @@ async function init() {
 
   const _prodByIdForHydration = {};
   allProducts.forEach(p => { _prodByIdForHydration[p.id] = p; });
-  const todayHydration = { byProductId: new Map(), byCategory: new Map(), byName: new Map() };
+  // byStepId es el vínculo exacto (routine_step_id → esta aplicación específica).
+  // Los demás mapas son el respaldo heurístico viejo, solo para historial previo
+  // a este campo o casos sin routine_step_id.
+  const todayHydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
   (todayAppsForHydration || []).forEach(r => {
     const label = r.product_name;
+    if (r.routine_step_id) todayHydration.byStepId.set(r.routine_step_id, label);
     if (r.product_id) todayHydration.byProductId.set(r.product_id, label);
     const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
     if (prod && prod.category) todayHydration.byCategory.set(prod.category, label);
