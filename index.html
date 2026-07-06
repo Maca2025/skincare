@@ -176,6 +176,7 @@ body {
 .reapp-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .reapp-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 12px; }
 .reapp-categories { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+.reapp-group-label { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 6px 2px; }
 .reapp-cat-btn { padding: 12px 10px; border: 2px solid #EAE4E0; border-radius: 12px; background: #FDFAF8; font-family: inherit; font-size: 13px; font-weight: 600; color: #7A6E6A; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; text-align: center; line-height: 1.3; }
 .reapp-cat-btn:hover { border-color: #C4818A; color: #C4818A; background: #FDF5F6; }
 .reapp-cat-btn:active { transform: scale(0.97); background: #F9ECF0; border-color: #C4818A; }
@@ -461,19 +462,11 @@ body {
       </div>
     </div>
 
-    <!-- REAPPLICATIONS - category grid -->
+    <!-- REAPPLICATIONS - category grid (generado desde tus categorías reales
+         de Stock, ver renderReappCategories() — así nunca falta una) -->
     <div class="reapp-card">
       <h3>🔄 Reaplicaciones</h3>
-      <div class="reapp-categories">
-        <button class="reapp-cat-btn" onclick="openSPFPicker()">🌞 SPF Cara</button>
-        <button class="reapp-cat-btn" onclick="openBodySPFPicker()">☀️ SPF Cuerpo</button>
-        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'lips')">💋 Labios</button>
-        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'eye')">👁️ Ojos</button>
-        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'activos')">💊 Activos</button>
-        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'exfoliantes')">🫧 Exfoliantes</button>
-        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'hidratante')">🧴 Hidratante</button>
-        <button class="reapp-cat-btn" onclick="openGenericPicker(null,'feet')">🦶 Pies</button>
-      </div>
+      <div id="reapp-categories-wrap"></div>
       <div id="reapp-history"></div>
     </div>
 
@@ -2195,6 +2188,7 @@ async function saveCustomProduct() {
     closeModal('add-product-modal');
     showToast('✅ Producto actualizado', 'success');
     renderInventory();
+    renderReappCategories();
     return;
   }
   const { data, error } = await db.from('products').insert({
@@ -2209,6 +2203,7 @@ async function saveCustomProduct() {
   closeModal('add-product-modal');
   showToast('✅ Producto agregado', 'success');
   renderInventory();
+  renderReappCategories();
 }
 
 async function deleteCustomProduct(id) {
@@ -2218,6 +2213,7 @@ async function deleteCustomProduct(id) {
   allProducts = allProducts.filter(p => p.id !== id);
   showToast('🗑️ Producto eliminado', '');
   renderInventory();
+  renderReappCategories();
 }
 
 async function setInvStatus(productId, newStatus) {
@@ -2533,6 +2529,48 @@ function openGenericPickerByCat(stepId, cat) {
   openModal('product-picker-modal');
 }
 
+// ── REAPLICACIONES: grid de categorías ───────────────────────────────────────
+// Antes esta lista vivía escrita a mano (8 botones fijos) y le faltaba
+// "Cuerpo" — cualquier categoría nueva que agregaras en Stock se quedaba sin
+// botón, sin avisar. Ahora se genera desde las categorías que REALMENTE
+// existen en tus productos (allProducts), así nunca vuelve a faltar una,
+// incluida cualquier categoría personalizada que crees a futuro.
+const REAPP_EXCLUDE_CATEGORIES = [];
+const REAPP_BODY_KEYWORDS = /cuerpo|corporal|pies/i;
+const REAPP_LABELS = {
+  '🌞 SPF Facial':      '🌞 SPF Cara',
+  '☀️ SPF Corporal':    '☀️ SPF Cuerpo',
+  '👁️ Contorno Ojos':  '👁️ Ojos',
+};
+
+function reappPickerFnForCat(cat) {
+  if (cat === '🌞 SPF Facial')   return `openSPFPicker()`;
+  if (cat === '☀️ SPF Corporal') return `openBodySPFPicker()`;
+  const escaped = cat.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `openGenericPickerByCat(null,'${escaped}')`;
+}
+
+function renderReappCategories() {
+  const el = document.getElementById('reapp-categories-wrap');
+  if (!el) return;
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))]
+    .filter(c => !REAPP_EXCLUDE_CATEGORIES.includes(c));
+
+  // Orden estable: sigue PRODUCT_CATEGORIES cuando la categoría está ahí;
+  // cualquier categoría personalizada que no esté en la lista maestra se
+  // agrega al final de su grupo (Cara/Cuerpo) en vez de perderse.
+  const order = c => { const i = PRODUCT_CATEGORIES.indexOf(c); return i === -1 ? 999 : i; };
+  const faceCats = cats.filter(c => !REAPP_BODY_KEYWORDS.test(c)).sort((a, b) => order(a) - order(b));
+  const bodyCats = cats.filter(c => REAPP_BODY_KEYWORDS.test(c)).sort((a, b) => order(a) - order(b));
+
+  const btn = c => `<button class="reapp-cat-btn" onclick="${reappPickerFnForCat(c)}">${REAPP_LABELS[c] || c}</button>`;
+  const group = (label, list) => list.length
+    ? `<div class="reapp-group-label">${label}</div><div class="reapp-categories">${list.map(btn).join('')}</div>`
+    : '';
+
+  el.innerHTML = group('Cara', faceCats) + group('Cuerpo', bodyCats);
+}
+
 function dbStepHTML(s, index, todayHydration) {
   const n  = index + 1;
   const id = 'sd_' + Math.random().toString(36).slice(2, 9);
@@ -2754,6 +2792,7 @@ async function init() {
 
   renderPhotoTypeGrid();
   renderCategorySelects();
+  renderReappCategories();
   loadTodayApplications();
   loadTodayNote();
 }
