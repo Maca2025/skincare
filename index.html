@@ -150,6 +150,8 @@ body {
 .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gallery-thumb { aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; transition: transform 0.15s; width: 100%; }
 .gallery-thumb:hover { transform: scale(1.03); }
+.gallery-thumb-wrap { position: relative; }
+.gallery-thumb-edit { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(255,255,255,0.9); font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.2); padding: 0; }
 .logs-card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .logs-card h3 { font-size: 14px; font-weight: 700; color: #7A5A5A; margin-bottom: 14px; }
 .hist-day { padding: 14px 0; border-bottom: 1px solid #F4EFE8; }
@@ -574,6 +576,18 @@ body {
       <button class="modal-close" onclick="closeModal('compare-modal')">✕</button>
     </div>
     <div class="modal-body" id="compare-body"></div>
+  </div>
+</div>
+
+<!-- Reclassify Photo -->
+<div class="modal-overlay" id="reclassify-modal" onclick="closeModal('reclassify-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">✏️ ¿Qué área es esta foto?</div>
+      <button class="modal-close" onclick="closeModal('reclassify-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="reclassify-body"></div>
   </div>
 </div>
 
@@ -1048,6 +1062,11 @@ async function uploadPhoto() {
   updateUploadBtn();
   historyLoaded = false;
   renderWeekCalendar();
+  // La comparativa/galería solo se cargaban la primera vez que se abría la
+  // pestaña Photos (galleryLoaded=true) y nunca se refrescaban después — por
+  // eso una foto nueva no aparecía como "AHORA" hasta recargar la página.
+  galleryLoaded = false;
+  loadPhotoGallery();
 }
 
 // ── WEEK CALENDAR ──────────────────────────────────────────────────────────────
@@ -1128,8 +1147,11 @@ async function loadPhotoGallery() {
         return `<div style="margin-bottom:16px">
   <div style="font-size:11px;font-weight:700;color:#9A8888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">${t.label}</div>
   <div class="gallery-grid">${arr.map(p =>
-    `<img class="gallery-thumb" src="${p.photo_url}" title="${p.caption||fmtDate(p.photo_date)}"
-     onclick="window.open('${p.photo_url}','_blank')" loading="lazy">`
+    `<div class="gallery-thumb-wrap">
+    <img class="gallery-thumb" src="${p.photo_url}" title="${p.caption||fmtDate(p.photo_date)}"
+     onclick="window.open('${p.photo_url}','_blank')" loading="lazy">
+    <button class="gallery-thumb-edit" onclick="event.stopPropagation(); openReclassifyModal('${p.id}','${p.photo_type||''}')" title="Reclasificar área">✏️</button>
+  </div>`
   ).join('')}</div>
 </div>`;
       }).join('');
@@ -1139,6 +1161,31 @@ async function loadPhotoGallery() {
 <div class="gallery-card"><h3>🖼️ Galería</h3>${galleryHTML}</div>`;
 
   galleryLoaded = true;
+}
+
+// ── RECLASSIFY PHOTO ──────────────────────────────────────────────────────────
+// Para corregir fotos viejas mal etiquetadas (ej. cara-derecha guardada como
+// cara-izquierda) sin tener que borrarlas y volver a subirlas.
+let reclassifyPhotoId = null;
+
+function openReclassifyModal(photoId, currentType) {
+  reclassifyPhotoId = photoId;
+  const body = document.getElementById('reclassify-body');
+  body.innerHTML = `<div class="photo-type-grid">${PHOTO_TYPES.map(t =>
+    `<button class="photo-type-btn${t.key === currentType ? ' selected' : ''}" onclick="reclassifyPhoto('${t.key}')">${t.label}</button>`
+  ).join('')}</div>`;
+  openModal('reclassify-modal');
+}
+
+async function reclassifyPhoto(newType) {
+  if (!reclassifyPhotoId) return;
+  const { error } = await db.from('progress_photos').update({ photo_type: newType }).eq('id', reclassifyPhotoId);
+  closeModal('reclassify-modal');
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  showToast('✅ Foto reclasificada', 'success');
+  reclassifyPhotoId = null;
+  galleryLoaded = false;
+  loadPhotoGallery();
 }
 
 // ── HISTORY ────────────────────────────────────────────────────────────────────
