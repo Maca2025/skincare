@@ -2433,12 +2433,15 @@ async function loadTodayRoutines(dateStr) {
   const _prodByIdForHydration = {};
   allProducts.forEach(p => { _prodByIdForHydration[p.id] = p; });
   // byStepId es el vínculo exacto (routine_step_id → esta aplicación específica).
-  // Los demás mapas son el respaldo heurístico viejo, solo para historial previo
-  // a este campo o casos sin routine_step_id.
+  // Los demás mapas son el respaldo heurístico viejo, SOLO para aplicaciones que
+  // no traen routine_step_id (historial previo a este campo). Si ya sabemos el
+  // paso exacto, no debe además "contaminar" por producto/categoría/nombre — si
+  // no, un mismo producto usado en dos pasos distintos el mismo día (ej. Hydro
+  // Boost en AM y en PM) marcaba ambos como aplicados con solo hacer uno.
   const hydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
   (appsForHydration || []).forEach(r => {
     const label = r.product_name;
-    if (r.routine_step_id) hydration.byStepId.set(r.routine_step_id, label);
+    if (r.routine_step_id) { hydration.byStepId.set(r.routine_step_id, label); return; }
     if (r.product_id) hydration.byProductId.set(r.product_id, label);
     const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
     if (prod && prod.category) hydration.byCategory.set(prod.category, label);
