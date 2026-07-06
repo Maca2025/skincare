@@ -2334,6 +2334,22 @@ function renderDbSteps(bodyId, steps, nightType, todayHydration) {
   updateProgress(bodyId);
 }
 
+// Igual que renderDbSteps, pero cuando varias rutinas aplican la misma sección
+// el mismo día (ej. dos rutinas de Cuerpo), cada una sale con su propio título
+// en vez de mezclar todos los pasos en una sola lista.
+function renderGroupedDbSteps(bodyId, routines, stepsByRoutine, todayHydration) {
+  const c = document.getElementById(bodyId);
+  const hint = c.querySelector('.tap-hint');
+  const groupsHTML = routines.map(r => {
+    const steps = stepsByRoutine[r.id] || [];
+    if (!steps.length) return '';
+    const title = `<div class="reapp-history-title">${r.emoji || ''} ${r.name}</div>`;
+    return title + steps.map((s, i) => dbStepHTML(s, i, todayHydration)).join('');
+  }).join('');
+  c.innerHTML = (hint ? hint.outerHTML : '') + groupsHTML;
+  updateProgress(bodyId);
+}
+
 // ── INIT ────────────────────────────────────────────────────────────────────────
 // Carga y dibuja AM/PM/Body/Feet para un día específico (YYYY-MM-DD). Se usa
 // tanto al abrir la app (con TODAY_STR) como al activar "Registrar para" con
@@ -2426,7 +2442,7 @@ async function loadTodayRoutines(dateStr) {
   if (bodyRoutines.length) {
     const steps = bodyRoutines.flatMap(r => stepsByRoutine[r.id] || []);
     SECTIONS.find(s => s.key === 'body').total = steps.length;
-    renderDbSteps('body-body', steps, null, hydration);
+    renderGroupedDbSteps('body-body', bodyRoutines, stepsByRoutine, hydration);
   } else {
     const c = document.getElementById('body-body');
     if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de cuerpo programada ese día.</div>';
