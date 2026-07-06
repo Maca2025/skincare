@@ -864,7 +864,7 @@ const CATEGORY_MAP = {
 
 function getRegistry(key) {
   const cat = CATEGORY_MAP[key];
-  return cat ? allProducts.filter(p => p.category === cat && !p.no_reapp) : [];
+  return cat ? allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out') : [];
 }
 
 const PICKER_TITLES = {
@@ -1757,7 +1757,7 @@ function openSPFPicker(stepId = null) {
   const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
   <strong>⚠️ NO NEGOCIABLE para melasma.</strong> El UV es el detonante principal — sin SPF diario todos los serums trabajan a fracción de su potencia.
 </div>`;
-  const products = allProducts.filter(p => p.category === '🌞 SPF Facial');
+  const products = allProducts.filter(p => p.category === '🌞 SPF Facial' && p.status !== 'out');
   body.innerHTML = warnBox + products.map(p => {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectSPF(this.dataset.name)">
@@ -1785,7 +1785,7 @@ function openBodySPFPicker(stepId = null) {
   const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
   <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — mismo mecanismo que el melasma facial. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
 </div>`;
-  const products = allProducts.filter(p => p.category === '☀️ SPF Corporal');
+  const products = allProducts.filter(p => p.category === '☀️ SPF Corporal' && p.status !== 'out');
   body.innerHTML = warnBox + products.map(p => {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectBodySPF(this.dataset.name)">
@@ -2497,7 +2497,7 @@ function openGenericPickerByCat(stepId, cat) {
   currentPickerStepId = stepId;
   document.getElementById('product-picker-title').textContent = cat;
   const body = document.getElementById('product-picker-body');
-  body.innerHTML = allProducts.filter(p => p.category === cat && !p.no_reapp).map(p => {
+  body.innerHTML = allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out').map(p => {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectFromGenericPicker(this.dataset.name)">
   <div class="spf-item-name">${p.emoji} ${p.name}</div>
