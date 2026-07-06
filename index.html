@@ -1181,7 +1181,7 @@ async function loadHistory() {
   // viejo, un solo rol). Prioridad 3: adivinar por nombre/categoría — solo
   // para productos que nunca se etiquetaron.
   const ROLE_CONFIG = {
-    spf_facial:           { label: 'Protección anti-melasma', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (/spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || '')) },
+    spf_facial:           { label: 'Protección anti-melasma', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (x.category !== '💋 Labios' && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body|labios|\blip\b/i.test(x.name || '')) },
     despigmentacion:      { label: 'Despigmentación',         icon: '🎯', color: '#C47A00', legacyRegex: x => /finacea|azela|melascreen|antipigment|despigmentante/i.test(x.name || '') },
     barrera:              { label: 'Barrera sana',            icon: '💧', color: '#3A8A7A', legacyRegex: x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '') },
     regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a|retinol/i.test(x.name || '') }
@@ -1276,7 +1276,61 @@ async function loadHistory() {
     return { pct: Math.min(100, pct), detail: results };
   };
 
-  const prot   = roleAdherence('spf_facial');
+  // ── PROTECCIÓN SPF: sistema de puntuación por calidad ───────────────────────
+  // No es realista pensar que te vas a poner TODOS tus protectores el mismo
+  // día — usas uno distinto cada vez, y eso está bien. Promediar el % de cada
+  // producto por separado (como en los otros roles) castigaba la rotación.
+  // Aquí cada aplicación suma puntos según qué tan completo es ESE protector
+  // (PA, profundidad UVA, si es tintado — bloquea también luz visible, otro
+  // detonante de melasma). 100% de un día = el ideal de 1 aplicación en la
+  // rutina AM + 4 reaplicaciones, todas con protectores de máxima puntuación.
+  // El protector de labios nunca cuenta.
+  const spfScoreOf = (p) => {
+    let score = 20; // base por estar registrado como SPF facial
+    tagsOf(p).forEach(t => {
+      if (t.cls === 'pa4') score += 25;
+      if (t.cls === 'uva400') score += 35;
+      else if (t.cls === 'uvalong') score += 20;
+      if (t.cls === 'tinted') score += 20;
+    });
+    return Math.min(100, score);
+  };
+  const IDEAL_SPF_APPS = 5; // 1 rutina AM + 4 reaplicaciones
+  const spfScoreById = {};
+  allProducts.filter(p => p.category !== '💋 Labios' && hasRole(p, 'spf_facial'))
+    .forEach(p => { spfScoreById[p.id] = spfScoreOf(p); });
+
+  const spfPointsByDate = {};
+  allAppsWithProd.forEach(({ r, rp }) => {
+    let score = null;
+    if (rp.id && spfScoreById[rp.id] != null) score = spfScoreById[rp.id];
+    else if (!rp.id && !claimedNames.has(rp.name) && ROLE_CONFIG.spf_facial.legacyRegex(rp)) score = 60;
+    if (score == null) return;
+    const ds = localDateOfISO(r.applied_at);
+    spfPointsByDate[ds] = (spfPointsByDate[ds] || 0) + score;
+  });
+
+  let prot = null;
+  const spfDates = Object.keys(spfPointsByDate).sort();
+  if (spfDates.length) {
+    const start = spfDates[0] > WSTART ? spfDates[0] : WSTART;
+    if (start <= ENDS) {
+      let elig = 0, sumPct = 0, daysWithSpf = 0;
+      eachDateStr(start, ENDS, (ds) => {
+        elig++;
+        const pts = spfPointsByDate[ds] || 0;
+        if (pts > 0) daysWithSpf++;
+        sumPct += Math.min(100, Math.round(pts / (IDEAL_SPF_APPS * 100) * 100));
+      });
+      if (elig > 0) {
+        prot = {
+          pct: Math.round(sumPct / elig),
+          sub: `${daysWithSpf} de ${elig} días con SPF registrado · ideal: rutina AM + 4 reaplicaciones de máxima calidad`
+        };
+      }
+    }
+  }
+
   const despig = roleAdherence('despigmentacion');
   const barr   = roleAdherence('barrera');
   const rege   = roleAdherence('regeneracion_celular');
@@ -1297,7 +1351,7 @@ async function loadHistory() {
 
   const adhRow = (o, color, icon, label) => {
     if (!o) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
-    const sub = o.detail.map(x => `${x.p.emoji || ''} ${x.p.name} ${x.adh.pct}%`.trim()).join(' · ');
+    const sub = o.sub || o.detail.map(x => `${x.p.emoji || ''} ${x.p.name} ${x.adh.pct}%`.trim()).join(' · ');
     return `<div class="adh-row">
   <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${o.pct}%</span></div>
   <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${color}"></div></div>
