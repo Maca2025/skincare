@@ -184,6 +184,9 @@ body {
 .reapp-entry:last-child { border-bottom: none; }
 .reapp-entry-product { font-size: 13px; font-weight: 600; color: #2A2420; }
 .reapp-entry-time { font-size: 12px; color: #9A8888; }
+.reapp-entry-right { display: flex; align-items: center; gap: 8px; }
+.reapp-entry-del { background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 4px; color: #C0B0B0; line-height: 1; }
+.reapp-entry-del:hover { color: #C43020; }
 .backdate-card { background: linear-gradient(135deg, #FBF7F4, #F7F0EC); border: 1.5px solid #F0E4DC; border-radius: 16px; padding: 13px 14px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(196,129,138,0.08); transition: background 0.2s, border-color 0.2s; }
 .backdate-card.active { background: linear-gradient(135deg, #FFF3E0, #FFEACB); border-color: #F0C888; }
 .backdate-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1154,7 +1157,7 @@ async function loadHistory() {
 
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
   const [appsRes, stepsRes, routinesRes, allStepsRes] = await Promise.all([
-    db.from('product_applications').select('product_name, product_id, applied_at, source, routine_step_id')
+    db.from('product_applications').select('id, product_name, product_id, applied_at, source, routine_step_id')
       .gte('applied_at', localDayBoundsUTC(toDateStr(since90)).startISO)
       .order('applied_at', { ascending: false }),
     db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null),
@@ -1568,7 +1571,10 @@ function buildHistorialByDay(appsData) {
   const fmtTime = iso => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const entryHTML = r => `<div class="reapp-entry">
   <span class="reapp-entry-product">${r.product_name}</span>
-  <span class="reapp-entry-time">${fmtTime(r.applied_at)}</span>
+  <span class="reapp-entry-right">
+    <span class="reapp-entry-time">${fmtTime(r.applied_at)}</span>
+    <button class="reapp-entry-del" onclick="deleteApplication('${r.id}')" title="Eliminar registro">🗑️</button>
+  </span>
 </div>`;
   const groupHTML = (label, arr) => arr.length ? `<div class="reapp-history-title">${label}</div>${arr.map(entryHTML).join('')}` : '';
 
@@ -1591,6 +1597,25 @@ function buildHistorialByDay(appsData) {
 function fmtDate(ds) {
   const d = new Date(ds + 'T12:00:00');
   return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+}
+
+// Borra un registro de product_applications hecho por error (ej. producto
+// equivocado, tap accidental). Refresca Historial/Progreso al toque, y
+// también Hoy por si el registro borrado era de hoy y estaba marcado ahí
+// (si no, el checkmark de ese paso se quedaría "hecho" hasta recargar).
+async function deleteApplication(id) {
+  if (!id || id === 'null' || id === 'undefined') {
+    showToast('⚠️ Este registro es muy viejo y no se puede borrar desde aquí', 'error');
+    return;
+  }
+  if (!confirm('¿Eliminar este registro? No se puede deshacer.')) return;
+  const { error } = await db.from('product_applications').delete().eq('id', id);
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  showToast('✅ Registro eliminado', 'success');
+  historyLoaded = false;
+  await loadHistory();
+  await loadTodayRoutines(TODAY_STR);
+  await loadTodayApplications();
 }
 
 // ── REAPPLICATIONS ─────────────────────────────────────────────────────────────
