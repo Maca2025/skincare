@@ -1153,11 +1153,13 @@ async function loadHistory() {
   el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span><br><br>Loading...</div>';
 
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
-  const [appsRes, stepsRes] = await Promise.all([
-    db.from('product_applications').select('product_name, product_id, applied_at, source')
+  const [appsRes, stepsRes, routinesRes, allStepsRes] = await Promise.all([
+    db.from('product_applications').select('product_name, product_id, applied_at, source, routine_step_id')
       .gte('applied_at', localDayBoundsUTC(toDateStr(since90)).startISO)
       .order('applied_at', { ascending: false }),
-    db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null)
+    db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null),
+    db.from('routines').select('id, section_key, schedule_days, sort_order').eq('active', true),
+    db.from('routine_steps').select('id, routine_id')
   ]);
 
   const apps = appsRes.data || [];
@@ -1370,6 +1372,71 @@ async function loadHistory() {
   const constVals = [prot, despig, barr, rege].map(x => x ? x.pct : null).filter(x => x != null);
   const constancia = constVals.length ? Math.round(constVals.reduce((a, b) => a + b, 0) / constVals.length) : null;
 
+  // ── RUTINA COMPLETA: qué tan completas están tus rutinas diarias, sin
+  // importar melasma — desglose AM/PM/Cuerpo/Pies. Un paso cuenta como hecho
+  // ese día si hay un product_applications con source='rutina' para ese
+  // routine_step_id (una vez basta, aunque se haya reaplicado). El total
+  // esperado por sección se recalcula día por día según qué rutinas (activas,
+  // con ese schedule_days) tocaban ese día — misma regla que en Hoy: AM/PM
+  // toman la primera rutina de esa sección que aplique; Cuerpo/Pies apilan
+  // todas las que apliquen ese día.
+  const stepsByRoutineId = {};
+  (allStepsRes?.data || []).forEach(s => {
+    if (!stepsByRoutineId[s.routine_id]) stepsByRoutineId[s.routine_id] = [];
+    stepsByRoutineId[s.routine_id].push(s.id);
+  });
+  const routinesForSection = key => (routinesRes?.data || [])
+    .filter(r => r.section_key === key)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const amRoutinesAll = routinesForSection('am');
+  const pmRoutinesAll = routinesForSection('pm');
+  const bodyRoutinesAll = routinesForSection('body');
+  const feetRoutinesAll = routinesForSection('feet');
+  const routineAppliesOnDow = (r, dow) => !r.schedule_days || !r.schedule_days.length || r.schedule_days.includes(dow);
+
+  const doneStepsByDate = {};
+  apps.forEach(r => {
+    if (r.source !== 'rutina' || !r.routine_step_id) return;
+    const ds = localDateOfISO(r.applied_at);
+    if (!doneStepsByDate[ds]) doneStepsByDate[ds] = new Set();
+    doneStepsByDate[ds].add(r.routine_step_id);
+  });
+
+  const bySectionSum = { am: { hit: 0, total: 0 }, pm: { hit: 0, total: 0 }, body: { hit: 0, total: 0 }, feet: { hit: 0, total: 0 } };
+  let routineSumPct = 0, routineElig = 0;
+  const haveAnyRoutineData = (routinesRes?.data || []).length > 0;
+  if (haveAnyRoutineData && WSTART <= ENDS) {
+    eachDateStr(WSTART, ENDS, (ds, dow) => {
+      const amR = amRoutinesAll.find(r => routineAppliesOnDow(r, dow));
+      const pmR = pmRoutinesAll.find(r => routineAppliesOnDow(r, dow));
+      const bodyRs = bodyRoutinesAll.filter(r => routineAppliesOnDow(r, dow));
+      const feetRs = feetRoutinesAll.filter(r => routineAppliesOnDow(r, dow));
+      const done = doneStepsByDate[ds] || new Set();
+
+      let dayTotal = 0, dayHit = 0;
+      const tally = (sectionKey, routinesForDay) => {
+        let total = 0, hit = 0;
+        routinesForDay.forEach(r => {
+          (stepsByRoutineId[r.id] || []).forEach(stepId => {
+            total++;
+            if (done.has(stepId)) hit++;
+          });
+        });
+        if (total > 0) { bySectionSum[sectionKey].total += total; bySectionSum[sectionKey].hit += hit; }
+        dayTotal += total; dayHit += hit;
+      };
+      tally('am', amR ? [amR] : []);
+      tally('pm', pmR ? [pmR] : []);
+      tally('body', bodyRs);
+      tally('feet', feetRs);
+
+      if (dayTotal > 0) { routineElig++; routineSumPct += Math.round(dayHit / dayTotal * 100); }
+    });
+  }
+  const routineCompletePct = routineElig > 0 ? Math.round(routineSumPct / routineElig) : null;
+  const sectionPct = key => bySectionSum[key].total > 0 ? Math.round(bySectionSum[key].hit / bySectionSum[key].total * 100) : null;
+  const routineBreakdown = { am: sectionPct('am'), pm: sectionPct('pm'), body: sectionPct('body'), feet: sectionPct('feet') };
+
   // Diagnóstico por rol: en vez de listar productos y sus %, dice en prosa
   // qué es lo que específicamente está fallando y qué reforzar — se usa tanto
   // en cada barra individual como en el mensaje de "Enfócate en" de arriba.
@@ -1432,6 +1499,28 @@ async function loadHistory() {
   };
   const focusHTML = buildFocusHTML();
 
+  // Fila simple para Rutina completa: mismo look que adhRow, pero con un
+  // subtítulo fijo en vez de diagnóstico (no aplica el mismo análisis de
+  // "producto más flojo" porque aquí se trata de pasos, no de productos).
+  const routineRow = (pct, color, icon, label, sub) => {
+    if (pct == null) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Sin rutinas programadas en la ventana o aún sin registros.</div></div>`;
+    return `<div class="adh-row">
+  <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${pct}%</span></div>
+  <div class="adh-track"><div class="adh-fill" style="width:${pct}%;background:${color}"></div></div>
+  <div class="adh-sub">${sub}</div>
+</div>`;
+  };
+  const ROUTINE_COLOR = '#6B7FA0';
+  const routineHTML = `
+<div class="adh-label">Rutina completa · últimos 90 días</div>
+<div class="adh-card">
+  ${routineRow(routineCompletePct, ROUTINE_COLOR, '📋', 'General', 'Promedio de pasos de rutina marcados como hechos cada día, en las 4 secciones. No es específico de melasma.')}
+  ${routineRow(routineBreakdown.am, ROUTINE_COLOR, '☀️', 'Mañana', 'Pasos de tu rutina AM completados.')}
+  ${routineRow(routineBreakdown.pm, ROUTINE_COLOR, '🌙', 'Noche', 'Pasos de tu rutina PM completados.')}
+  ${routineRow(routineBreakdown.body, ROUTINE_COLOR, '🧴', 'Cuerpo', 'Pasos de tu(s) rutina(s) de cuerpo completados.')}
+  ${routineRow(routineBreakdown.feet, ROUTINE_COLOR, '🦶', 'Pies', 'Pasos de tu rutina de pies completados.')}
+</div>`;
+
   el.innerHTML = `
 <div class="pj-card">
   <div class="pj-top">
@@ -1454,7 +1543,8 @@ ${focusHTML}
 <div class="adh-label">Textura de piel · últimos 90 días</div>
 <div class="adh-card">
   ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros')}
-</div>`;
+</div>
+${routineHTML}`;
 
   const logEl = document.getElementById('log-content');
   if (logEl) logEl.innerHTML = `<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>${buildHistorialByDay(apps)}</div>`;
