@@ -763,7 +763,28 @@ const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Sat
 const DAYS_S = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-function toDateStr(d) { return d.toISOString().split('T')[0]; }
+// OJO: usa la fecha LOCAL del navegador (getFullYear/getMonth/getDate), NO
+// toISOString().split('T')[0] — eso convierte a UTC, y en Guadalajara (UTC-6)
+// a partir de las ~6pm UTC ya es "mañana", así que todo lo aplicado en la
+// noche terminaba registrado/agrupado bajo el día siguiente.
+function toDateStr(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Convierte un timestamp guardado en UTC (ej. product_applications.applied_at)
+// a la fecha del calendario LOCAL a la que corresponde, para agrupar/comparar
+// "qué día pasó esto" desde el punto de vista de Maca, no de UTC.
+function localDateOfISO(iso) { return toDateStr(new Date(iso)); }
+
+// Rango [inicio, fin) en UTC que corresponde al día LOCAL "dateStr" completo
+// (00:00 a 24:00 hora de Guadalajara) — para consultar Supabase sin que la
+// comparación se corra por la diferencia de huso horario.
+function localDayBoundsUTC(dateStr) {
+  const start = new Date(dateStr + 'T00:00:00');
+  const end = new Date(dateStr + 'T00:00:00'); end.setDate(end.getDate() + 1);
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+}
 
 const TODAY = new Date();
 const TODAY_STR = toDateStr(TODAY);
@@ -1123,7 +1144,7 @@ async function loadHistory() {
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
   const [appsRes, stepsRes] = await Promise.all([
     db.from('product_applications').select('product_name, product_id, applied_at, source')
-      .gte('applied_at', toDateStr(since90) + 'T00:00:00')
+      .gte('applied_at', localDayBoundsUTC(toDateStr(since90)).startISO)
       .order('applied_at', { ascending: false }),
     db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null)
   ]);
@@ -1172,11 +1193,18 @@ async function loadHistory() {
   const _ws = new Date(TODAY); _ws.setDate(TODAY.getDate() - 90);
   const WSTART = toDateStr(_ws);
 
+  // Este iterador trabaja en "espacio UTC" a propósito (mediodía UTC evita
+  // problemas de DST) — usa los getters UTC del propio Date en vez de
+  // toDateStr() para no depender de la zona horaria del navegador aquí.
   const eachDateStr = (a, b, cb) => {
     if (a > b) return;
     let d = new Date(a + 'T12:00:00Z');
     const end = new Date(b + 'T12:00:00Z');
-    while (d <= end) { cb(toDateStr(d), d.getUTCDay()); d.setUTCDate(d.getUTCDate() + 1); }
+    while (d <= end) {
+      const ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      cb(ds, d.getUTCDay());
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
   };
 
   // Fechas en que se aplicó UN producto específico (por id, o por nombre
@@ -1185,7 +1213,7 @@ async function loadHistory() {
     const s = new Set();
     allAppsWithProd.forEach(({ r, rp }) => {
       const matches = (p.id && rp.id === p.id) || (!rp.id && rp.name === p.name);
-      if (matches) s.add(r.applied_at.slice(0, 10));
+      if (matches) s.add(localDateOfISO(r.applied_at));
     });
     return s;
   };
@@ -1231,7 +1259,7 @@ async function loadHistory() {
     const legacyDone = new Set();
     allAppsWithProd.forEach(({ r, rp }) => {
       if (rp.id || claimedNames.has(rp.name)) return;
-      if (ROLE_CONFIG[role].legacyRegex(rp)) legacyDone.add(r.applied_at.slice(0, 10));
+      if (ROLE_CONFIG[role].legacyRegex(rp)) legacyDone.add(localDateOfISO(r.applied_at));
     });
     if (legacyDone.size) {
       const adh = adherenceFromDoneDates(legacyDone, null);
@@ -1306,7 +1334,7 @@ function buildHistorialByDay(appsData) {
 
   const byDate = {};
   appsData.forEach(r => {
-    const ds = r.applied_at.slice(0, 10);
+    const ds = localDateOfISO(r.applied_at);
     if (!byDate[ds]) byDate[ds] = [];
     byDate[ds].push(r);
   });
@@ -1427,11 +1455,12 @@ async function logApplication(source, routineStepId) {
 async function loadTodayApplications() {
   // Only isolated reapplications here — routine steps already show as checked
   // in their own AM/PM/Body/Feet cards, no need to repeat them in this list.
+  const _todayBounds = localDayBoundsUTC(TODAY_STR);
   const { data } = await db.from('product_applications')
     .select('*')
     .eq('source', 'reaplicacion')
-    .gte('applied_at', TODAY_STR + 'T00:00:00')
-    .lte('applied_at', TODAY_STR + 'T23:59:59')
+    .gte('applied_at', _todayBounds.startISO)
+    .lt('applied_at', _todayBounds.endISO)
     .order('applied_at', { ascending: false });
 
   const el = document.getElementById('reapp-history');
@@ -2394,10 +2423,11 @@ async function loadTodayRoutines(dateStr) {
   // Hydrate checkmarks: find everything already applied ESE día so steps don't
   // look "unchecked" just because la página se recargó, y para que un día ya
   // marcado no bloquee ver/registrar otro día distinto.
+  const _dayBounds = localDayBoundsUTC(dateStr);
   const { data: appsForHydration } = await db.from('product_applications')
     .select('*')
-    .gte('applied_at', dateStr + 'T00:00:00')
-    .lte('applied_at', dateStr + 'T23:59:59')
+    .gte('applied_at', _dayBounds.startISO)
+    .lt('applied_at', _dayBounds.endISO)
     .order('applied_at', { ascending: true });
 
   const _prodByIdForHydration = {};
