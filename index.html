@@ -789,6 +789,19 @@ function pmNightType(dow) {
   return ['rest','aha','tret','aha','tret','rest','tret'][dow != null ? dow : TODAY.getDay()];
 }
 
+// products.tags debería ser jsonb (arreglo real), pero algunos productos
+// cargados por CSV/Excel quedaron con el texto crudo "[{...}]" guardado como
+// string en vez de arreglo — esto lo normaliza siempre a un arreglo real para
+// que los pickers (SPF, genérico, etc.) nunca truenen sin importar cómo haya
+// quedado guardado el dato.
+function tagsOf(p) {
+  let t = p && p.tags;
+  if (typeof t === 'string') {
+    try { t = JSON.parse(t); } catch (e) { t = []; }
+  }
+  return Array.isArray(t) ? t : [];
+}
+
 const PM_NIGHT_INFO = {
   tret: { label: '💊 Noche Tretinoína', color: '#F0EAFF', bg: '#6A40A8' },
   aha:  { label: '🫧 Noche Exfoliante', color: '#E8F4FF', bg: '#2060A0' },
@@ -1529,7 +1542,7 @@ function openSPFPicker(stepId = null) {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectSPF(this.dataset.name)">
   <div class="spf-item-name">${p.emoji} ${p.name}</div>
-  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
   <div class="spf-item-note">${p.note||''}</div>
 </div>`;
   }).join('') +
@@ -1557,7 +1570,7 @@ function openBodySPFPicker(stepId = null) {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectBodySPF(this.dataset.name)">
   <div class="spf-item-name">${p.emoji} ${p.name}</div>
-  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
   <div class="spf-item-note">${p.note||''}</div>
 </div>`;
   }).join('');
@@ -1583,7 +1596,7 @@ function openGenericPicker(stepId, registryKey) {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectFromGenericPicker(this.dataset.name)">
   <div class="spf-item-name">${p.emoji} ${p.name}</div>
-  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
   <div class="spf-item-note">${p.note||''}</div>
 </div>`;
   }).join('');
@@ -2268,7 +2281,7 @@ function openGenericPickerByCat(stepId, cat) {
     const logName = (p.logged_as || `${p.emoji} ${p.name}`).replace(/"/g, '&quot;');
     return `<div class="spf-item tier-${p.tier}" data-name="${logName}" onclick="selectFromGenericPicker(this.dataset.name)">
   <div class="spf-item-name">${p.emoji} ${p.name}</div>
-  <div class="spf-item-tags">${(p.tags||[]).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
+  <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${t.cls}">${t.label}</span>`).join('')}</div>
   <div class="spf-item-note">${p.note||''}</div>
 </div>`;
   }).join('');
