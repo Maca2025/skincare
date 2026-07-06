@@ -624,6 +624,7 @@ body {
           <label class="clinrole-chip"><input type="checkbox" value="regeneracion_celular" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🔬 Renovación celular (retinol/tretinoína)</label>
           <label class="clinrole-chip"><input type="checkbox" value="barrera" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 💧 Barrera reparadora</label>
           <label class="clinrole-chip"><input type="checkbox" value="spf_facial" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🛡️ SPF Facial</label>
+          <label class="clinrole-chip"><input type="checkbox" value="textura_poros" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🔍 Textura / Poros</label>
         </div>
         <div class="field-hint">Marca los que apliquen — se usan para tu adherencia de melasma en Progreso. Si no marcas ninguno, la app intenta adivinar por el nombre (menos preciso).</div>
       </div>
@@ -1184,7 +1185,10 @@ async function loadHistory() {
     spf_facial:           { label: 'Protección anti-melasma', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (x.category !== '💋 Labios' && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body|labios|\blip\b/i.test(x.name || '')) },
     despigmentacion:      { label: 'Despigmentación',         icon: '🎯', color: '#C47A00', legacyRegex: x => /finacea|azela|melascreen|antipigment|despigmentante/i.test(x.name || '') },
     barrera:              { label: 'Barrera sana',            icon: '💧', color: '#3A8A7A', legacyRegex: x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '') },
-    regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a|retinol/i.test(x.name || '') }
+    regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || '') },
+    // Sin adivinar por nombre: rol nuevo, sin datos viejos que respaldar, así
+    // que solo cuenta si se etiquetó explícitamente en Stock.
+    textura_poros:        { label: 'Textura / Poros',          icon: '🔍', color: '#5B8FA8', legacyRegex: () => false }
   };
   const LEGACY_ROLE_MAP = { finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' };
   const hasRole = (p, role) => {
@@ -1331,9 +1335,14 @@ async function loadHistory() {
     }
   }
 
-  const despig = roleAdherence('despigmentacion');
-  const barr   = roleAdherence('barrera');
-  const rege   = roleAdherence('regeneracion_celular');
+  const despig  = roleAdherence('despigmentacion');
+  const barr    = roleAdherence('barrera');
+  const rege    = roleAdherence('regeneracion_celular');
+  // Textura/poros es un objetivo de piel general, no específico de melasma —
+  // se calcula igual que Barrera/Despigmentación (cada producto contra su
+  // propio calendario) pero se muestra aparte, sin afectar "constancia" ni la
+  // cuenta de semanas del camino de melasma.
+  const textura = roleAdherence('textura_poros');
 
   // "Camino de melasma" cuenta desde el primer registro de CUALQUIER producto
   // de despigmentación o renovación celular — los dos frentes activos.
@@ -1378,6 +1387,10 @@ async function loadHistory() {
   ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación')}
   ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana')}
   ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular')}
+</div>
+<div class="adh-label">Textura de piel · últimos 90 días</div>
+<div class="adh-card">
+  ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros')}
 </div>`;
 
   const logEl = document.getElementById('log-content');
