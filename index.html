@@ -309,6 +309,10 @@ body {
 .day-chip { flex: 1; padding: 8px 0; text-align: center; border: 1.5px solid #EAE4E0; border-radius: 10px; background: #FDFAF8; font-size: 12px; font-weight: 700; color: #B0A4A4; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
 .day-chip.on { background: #FBEAF0; color: #C4818A; border-color: #C4818A; }
 .field-hint { font-size: 10.5px; color: #A09090; margin-top: 5px; }
+.clinrole-grid { display: flex; flex-direction: column; gap: 7px; }
+.clinrole-chip { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1.5px solid #EAE4E0; border-radius: 12px; background: #FDFAF8; font-size: 12.5px; font-weight: 600; color: #6A5A5A; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
+.clinrole-chip input { accent-color: #C4818A; width: 16px; height: 16px; flex-shrink: 0; }
+.clinrole-chip.on { background: #FBEAF0; border-color: #C4818A; color: #C4818A; }
 .rout-card-sched { font-size: 11px; color: #C4818A; font-weight: 600; margin: 1px 0; }
 .prod-ta { min-height: 72px; resize: none; }
 .prod-emoji-row { display: flex; gap: 8px; align-items: center; }
@@ -622,15 +626,31 @@ body {
         <input class="prod-input" id="pf-cat-custom" type="text" placeholder="Nombre de la nueva categoría" style="display:none;margin-top:8px">
       </div>
       <div class="prod-field">
-        <label class="prod-label">Rol clínico (opcional)</label>
-        <select class="prod-input prod-select" id="pf-clinical-role">
-          <option value="">— Ninguno —</option>
-          <option value="finacea">Finacea / ácido azelaico (despigmentante)</option>
-          <option value="tretinoina">Tretinoína / retinol</option>
-          <option value="barrera">Barrera reparadora (ceramidas, hidratación)</option>
-          <option value="spf_facial">SPF Facial</option>
-        </select>
-        <div class="field-hint">Marca esto solo si el producto es el que usas para tu adherencia de melasma en Progreso. Evita que la app tenga que adivinar por el nombre.</div>
+        <label class="prod-label">Roles clínicos (opcional, puedes marcar varios)</label>
+        <div class="clinrole-grid" id="pf-clinical-roles">
+          <label class="clinrole-chip"><input type="checkbox" value="despigmentacion" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🎯 Despigmentación</label>
+          <label class="clinrole-chip"><input type="checkbox" value="regeneracion_celular" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🔬 Renovación celular (retinol/tretinoína)</label>
+          <label class="clinrole-chip"><input type="checkbox" value="barrera" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 💧 Barrera reparadora</label>
+          <label class="clinrole-chip"><input type="checkbox" value="spf_facial" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🛡️ SPF Facial</label>
+        </div>
+        <div class="field-hint">Marca los que apliquen — se usan para tu adherencia de melasma en Progreso. Si no marcas ninguno, la app intenta adivinar por el nombre (menos preciso).</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">¿Cada cuánto se aplica?</label>
+        <div class="seg-row" id="pf-freq-row">
+          <button type="button" class="seg-btn" data-freq="daily" onclick="selectPfFreq('daily')">Todos los días</button>
+          <button type="button" class="seg-btn" data-freq="days" onclick="selectPfFreq('days')">Días específicos</button>
+        </div>
+        <div class="day-row" id="pf-day-row" style="display:none;margin-top:8px">
+          <button type="button" class="day-chip" data-dow="0" onclick="togglePfDay(0)">D</button>
+          <button type="button" class="day-chip" data-dow="1" onclick="togglePfDay(1)">L</button>
+          <button type="button" class="day-chip" data-dow="2" onclick="togglePfDay(2)">M</button>
+          <button type="button" class="day-chip" data-dow="3" onclick="togglePfDay(3)">X</button>
+          <button type="button" class="day-chip" data-dow="4" onclick="togglePfDay(4)">J</button>
+          <button type="button" class="day-chip" data-dow="5" onclick="togglePfDay(5)">V</button>
+          <button type="button" class="day-chip" data-dow="6" onclick="togglePfDay(6)">S</button>
+        </div>
+        <div class="field-hint">Solo afecta el cálculo de adherencia — ej. un producto "días pares" cuenta 100% si lo aplicas cada vez que toca, no cada día del calendario. Si no marcas nada aquí pero el producto ya es un paso fijo de alguna rutina, se usa el calendario de esa rutina automáticamente.</div>
       </div>
       <div class="prod-field">
         <label class="prod-label">Descripción del producto</label>
@@ -1101,34 +1121,51 @@ async function loadHistory() {
   el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span><br><br>Loading...</div>';
 
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
-  const [appsRes, tretRoutineRes] = await Promise.all([
+  const [appsRes, stepsRes] = await Promise.all([
     db.from('product_applications').select('product_name, product_id, applied_at, source')
       .gte('applied_at', toDateStr(since90) + 'T00:00:00')
       .order('applied_at', { ascending: false }),
-    db.from('routines').select('schedule_days').ilike('name', '%tretino%').eq('active', true).limit(1).maybeSingle()
+    db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null)
   ]);
 
-  const apps   = appsRes.data   || [];
-  // Real tretinoína schedule from the routine itself — no more hardcoded Mar/Vie.
-  const tretDays = new Set(tretRoutineRes?.data?.schedule_days || []);
-  const tretDaysLabel = tretRoutineRes?.data
-    ? fmtDays([...tretDays].sort((a, b) => a - b))
-    : 'sin rutina de tretinoína configurada';
+  const apps = appsRes.data || [];
+
+  // Si un producto está asignado como paso fijo de una rutina, esa rutina ya
+  // define cuándo "toca" aplicarlo (ej. una rutina de días pares) — se usa
+  // como calendario de elegibilidad salvo que el producto tenga su propio
+  // "¿Cada cuánto se aplica?" configurado a mano, que manda sobre esto.
+  const productRoutineInfo = {};
+  (stepsRes?.data || []).forEach(s => {
+    if (!s.product_id) return;
+    if (!productRoutineInfo[s.product_id]) productRoutineInfo[s.product_id] = { daily: false, days: new Set() };
+    const info = productRoutineInfo[s.product_id];
+    const days = s.routines?.schedule_days;
+    if (!days || !days.length) info.daily = true; else days.forEach(d => info.days.add(d));
+  });
 
   // ── MÉTRICAS DE CONSTANCIA — corte SIEMPRE al cierre de AYER ───────────────
   // Resolución por product_id (robusta a renombres); fallback a product_name.
   const _prodById = {};
   allProducts.forEach(p => { _prodById[p.id] = p; });
-  const appProd = r => (r.product_id && _prodById[r.product_id]) || { name: r.product_name || '', emoji: '', category: '' };
-  // Prioridad 1: campo explícito clinical_role (lo que se marca en Stock →
-  // Agregar/Editar producto). Prioridad 2: categoría. Prioridad 3: adivinar por
-  // palabras clave en el nombre — solo como último recurso para productos
-  // viejos sin clinical_role o filas cargadas manualmente sin product_id.
-  const isSPFfacial = x => x.clinical_role === 'spf_facial' || x.category === '🌞 SPF Facial' || (!x.category && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || ''));
-  const isFinacea   = x => x.clinical_role === 'finacea' || /finacea|azela/i.test(x.name || '');
-  const isTret      = x => x.clinical_role === 'tretinoina' || /tretino|retin-a/i.test(x.name || '');
-  const isBarrera   = x => x.clinical_role === 'barrera' || x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '');
-  const isMelasmaAct = x => isFinacea(x) || isTret(x);
+  const appProd = r => (r.product_id && _prodById[r.product_id]) || { id: null, name: r.product_name || '', emoji: '', category: '', clinical_roles: [], clinical_role: null, schedule_days: null };
+  const allAppsWithProd = apps.map(r => ({ r, rp: appProd(r) }));
+
+  // Un producto puede tener varios roles clínicos (clinical_roles). Prioridad
+  // 1: clinical_roles (nuevo, multi-rol). Prioridad 2: clinical_role (esquema
+  // viejo, un solo rol). Prioridad 3: adivinar por nombre/categoría — solo
+  // para productos que nunca se etiquetaron.
+  const ROLE_CONFIG = {
+    spf_facial:           { label: 'Protección anti-melasma', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (/spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || '')) },
+    despigmentacion:      { label: 'Despigmentación',         icon: '🎯', color: '#C47A00', legacyRegex: x => /finacea|azela|melascreen|antipigment|despigmentante/i.test(x.name || '') },
+    barrera:              { label: 'Barrera sana',            icon: '💧', color: '#3A8A7A', legacyRegex: x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '') },
+    regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a|retinol/i.test(x.name || '') }
+  };
+  const LEGACY_ROLE_MAP = { finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' };
+  const hasRole = (p, role) => {
+    if (p.clinical_roles && p.clinical_roles.length) return p.clinical_roles.includes(role);
+    if (p.clinical_role) return LEGACY_ROLE_MAP[p.clinical_role] === role;
+    return ROLE_CONFIG[role].legacyRegex(p);
+  };
 
   const _yst = new Date(TODAY); _yst.setDate(TODAY.getDate() - 1);
   const ENDS = toDateStr(_yst);
@@ -1141,70 +1178,99 @@ async function loadHistory() {
     const end = new Date(b + 'T12:00:00Z');
     while (d <= end) { cb(toDateStr(d), d.getUTCDay()); d.setUTCDate(d.getUTCDate() + 1); }
   };
-  const matchDates = mfn => {
+
+  // Fechas en que se aplicó UN producto específico (por id, o por nombre
+  // exacto si la fila es vieja y no trae product_id).
+  const productDoneDates = (p) => {
     const s = new Set();
-    apps.forEach(r => { if (mfn(appProd(r))) s.add(r.applied_at.slice(0, 10)); });
+    allAppsWithProd.forEach(({ r, rp }) => {
+      const matches = (p.id && rp.id === p.id) || (!rp.id && rp.name === p.name);
+      if (matches) s.add(r.applied_at.slice(0, 10));
+    });
     return s;
   };
-  const adherence = mfn => {
-    const done = matchDates(mfn);
+
+  // % de cumplimiento contra un calendario dado (null/vacío = todos los días).
+  const adherenceFromDoneDates = (done, scheduleDays) => {
     if (!done.size) return null;
     const first = [...done].sort()[0];
     const start = first > WSTART ? first : WSTART;
     if (start > ENDS) return null;
+    const days = (scheduleDays && scheduleDays.length) ? new Set(scheduleDays) : null;
     let elig = 0, hit = 0;
-    eachDateStr(start, ENDS, ds => { elig++; if (done.has(ds)) hit++; });
+    eachDateStr(start, ENDS, (ds, dow) => {
+      if (days && !days.has(dow)) return;
+      elig++; if (done.has(ds)) hit++;
+    });
     if (elig <= 0) return null;
     return { pct: Math.min(100, Math.round(hit / elig * 100)), hit, elig, start };
   };
-  const tretAdherence = (schedDays) => {
-    const done = matchDates(isTret);
-    if (!done.size) return null;
-    const first = [...done].sort()[0];
-    const start = first > WSTART ? first : WSTART;
-    if (start > ENDS) return null;
-    let sched = 0, act = 0;
-    eachDateStr(start, ENDS, (ds, dow) => {
-      if (schedDays.has(dow)) sched++;
-      if (done.has(ds)) act++;
+
+  // Adherencia de UN producto contra SU PROPIO calendario. Prioridad 1: el
+  // "¿Cada cuánto se aplica?" que se marcó a mano en Stock. Prioridad 2: si no
+  // se marcó nada, pero el producto es un paso fijo de alguna rutina, se usa
+  // el calendario de esa rutina (así uno de "días pares" no se ve "a medias"
+  // solo por no ser diario, sin tener que configurar el calendario dos veces).
+  const effectiveScheduleDays = (p) => {
+    if (p.schedule_days && p.schedule_days.length) return p.schedule_days;
+    const info = productRoutineInfo[p.id];
+    if (info) return info.daily ? null : [...info.days];
+    return null;
+  };
+  const productAdherence = (p) => adherenceFromDoneDates(productDoneDates(p), effectiveScheduleDays(p));
+
+  // Barra agregada por rol: promedio del % individual de cada producto de ese
+  // rol que ya tenga al menos un registro. Incluye un "bucket" de registros
+  // huérfanos (sin product_id y sin match de nombre con ningún producto
+  // actual) para no perder historial antiguo cargado antes de este cambio.
+  const claimedNames = new Set(allProducts.map(p => p.name));
+  const roleAdherence = (role) => {
+    const products = allProducts.filter(p => hasRole(p, role));
+    const results = products.map(p => ({ p, adh: productAdherence(p) })).filter(x => x.adh);
+
+    const legacyDone = new Set();
+    allAppsWithProd.forEach(({ r, rp }) => {
+      if (rp.id || claimedNames.has(rp.name)) return;
+      if (ROLE_CONFIG[role].legacyRegex(rp)) legacyDone.add(r.applied_at.slice(0, 10));
     });
-    if (sched <= 0) return { pct: null, sched: 0, act, start };
-    return { pct: Math.min(100, Math.round(act / sched * 100)), sched, act, over: act > sched, start };
+    if (legacyDone.size) {
+      const adh = adherenceFromDoneDates(legacyDone, null);
+      if (adh) results.push({ p: { name: 'Registros antiguos', emoji: '🗂️' }, adh });
+    }
+
+    if (!results.length) return null;
+    const pct = Math.round(results.reduce((a, x) => a + x.adh.pct, 0) / results.length);
+    return { pct: Math.min(100, pct), detail: results };
   };
 
-  const prot   = adherence(isSPFfacial);
-  const despig = adherence(isFinacea);
-  const barr   = adherence(isBarrera);
-  const tret   = tretAdherence(tretDays);
+  const prot   = roleAdherence('spf_facial');
+  const despig = roleAdherence('despigmentacion');
+  const barr   = roleAdherence('barrera');
+  const rege   = roleAdherence('regeneracion_celular');
 
-  const melDates = matchDates(isMelasmaAct);
-  const melStart = melDates.size ? [...melDates].sort()[0] : null;
+  // "Camino de melasma" cuenta desde el primer registro de CUALQUIER producto
+  // de despigmentación o renovación celular — los dos frentes activos.
+  const melasmaProducts = allProducts.filter(p => hasRole(p, 'despigmentacion') || hasRole(p, 'regeneracion_celular'));
+  let melStart = null;
+  melasmaProducts.forEach(p => {
+    const done = productDoneDates(p);
+    if (done.size) { const first = [...done].sort()[0]; if (!melStart || first < melStart) melStart = first; }
+  });
   let weekNum = 1;
   if (melStart && melStart <= ENDS) { let n = 0; eachDateStr(melStart, ENDS, () => n++); weekNum = Math.floor(n / 7) + 1; }
   const journeyPct = Math.min(100, Math.round(weekNum / 16 * 100));
-  const constVals = [prot, despig, barr, tret].map(x => (x && x.pct != null) ? x.pct : null).filter(x => x != null);
+  const constVals = [prot, despig, barr, rege].map(x => x ? x.pct : null).filter(x => x != null);
   const constancia = constVals.length ? Math.round(constVals.reduce((a, b) => a + b, 0) / constVals.length) : null;
 
-  const adhRow = (o, color, icon, label, sub) => {
+  const adhRow = (o, color, icon, label) => {
     if (!o) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
+    const sub = o.detail.map(x => `${x.p.emoji || ''} ${x.p.name} ${x.adh.pct}%`.trim()).join(' · ');
     return `<div class="adh-row">
   <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${o.pct}%</span></div>
   <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${color}"></div></div>
   <div class="adh-sub">${sub}</div>
 </div>`;
   };
-  const tretRow = (() => {
-    const color = '#7E6BB0', icon = '🔬', label = 'Renovación · tretinoína';
-    const sep = 'border-top:1px solid #EDE8E2;padding-top:12px;margin-top:1px';
-    if (!tret) return `<div class="adh-row" style="${sep}"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
-    if (tret.pct == null) return `<div class="adh-row" style="${sep}"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin noches programadas (${tretDaysLabel})</div></div>`;
-    const flag = tret.over ? ` · <span style="color:#C47A00">⚠ ${tret.act} de ${tret.sched}, vas por encima</span>` : ` · ${tret.act} de ${tret.sched} noches`;
-    return `<div class="adh-row" style="${sep}">
-  <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${tret.pct}%</span></div>
-  <div class="adh-track"><div class="adh-fill" style="width:${tret.pct}%;background:${color}"></div></div>
-  <div class="adh-sub">Calendario ${tretDaysLabel}${flag}</div>
-</div>`;
-  })();
 
   const mileDots = [25, 50, 75, 100].map(p => `<span class="pj-dot${journeyPct >= p ? ' on' : ''}" style="left:${p}%"></span>`).join('');
 
@@ -1217,14 +1283,14 @@ async function loadHistory() {
   <div class="pj-week">Semana ${weekNum > 16 ? '16+' : weekNum} de 16${melStart ? ` · desde ${fmtDate(melStart)}` : ''}</div>
   <div class="pj-track"><div class="pj-fill" style="width:${journeyPct}%"></div>${mileDots}</div>
   <div class="pj-miles"><span>Barrera</span><span>Brillo</span><span>Aclaran</span><span>Visible</span></div>
-  <div class="pj-note">${melStart ? `Cuenta desde tu primer registro de Finacea o Tretinoína (${fmtDate(melStart)}), no desde que abriste la app. ` : ''}Calculado al cierre de ayer. Los hitos son una guía, no una promesa médica.</div>
+  <div class="pj-note">${melStart ? `Cuenta desde tu primer registro de un producto de despigmentación o renovación celular (${fmtDate(melStart)}), no desde que abriste la app. ` : ''}Calculado al cierre de ayer. Los hitos son una guía, no una promesa médica.</div>
 </div>
 <div class="adh-label">Adherencia · últimos 90 días</div>
 <div class="adh-card">
-  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma', 'SPF facial diario · tu escudo #1')}
-  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'Finacea diaria AM')}
-  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'Hidratación + recuperación PM')}
-  ${tretRow}
+  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma')}
+  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación')}
+  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana')}
+  ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular')}
 </div>`;
 
   const logEl = document.getElementById('log-content');
@@ -1740,6 +1806,30 @@ function toggleInvDetail(domId) {
 
 let editingProductId = null;
 
+let pfFreq = 'daily';
+let pfDays = new Set();
+
+function selectPfFreq(freq) {
+  pfFreq = freq;
+  document.querySelectorAll('#pf-freq-row .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.freq === freq));
+  document.getElementById('pf-day-row').style.display = freq === 'days' ? 'flex' : 'none';
+}
+function togglePfDay(dow) {
+  dow = Number(dow);
+  if (pfDays.has(dow)) pfDays.delete(dow); else pfDays.add(dow);
+  const chip = document.querySelector(`#pf-day-row .day-chip[data-dow="${dow}"]`);
+  if (chip) chip.classList.toggle('on', pfDays.has(dow));
+}
+function resetPfClinicalFields() {
+  document.querySelectorAll('#pf-clinical-roles input[type="checkbox"]').forEach(cb => {
+    cb.checked = false; cb.closest('.clinrole-chip').classList.remove('on');
+  });
+  pfFreq = 'daily'; pfDays = new Set();
+  document.querySelectorAll('#pf-freq-row .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.freq === 'daily'));
+  document.getElementById('pf-day-row').style.display = 'none';
+  document.querySelectorAll('#pf-day-row .day-chip').forEach(c => c.classList.remove('on'));
+}
+
 function openAddProductModal() {
   editingProductId = null;
   ['pf-emoji','pf-name','pf-brand','pf-note','pf-how','pf-why','pf-cat-custom'].forEach(id => {
@@ -1747,7 +1837,7 @@ function openAddProductModal() {
     if (el) { el.value = ''; if (id === 'pf-cat-custom') el.style.display = 'none'; }
   });
   document.getElementById('pf-cat').value = '';
-  document.getElementById('pf-clinical-role').value = '';
+  resetPfClinicalFields();
   document.getElementById('emoji-preview').textContent = '🧴';
   document.querySelector('#add-product-modal .modal-title').textContent = '＋ Nuevo producto';
   const btn = document.getElementById('save-prod-btn');
@@ -1765,7 +1855,19 @@ function openEditProductModal(id) {
   document.getElementById('pf-note').value  = p.note || '';
   document.getElementById('pf-how').value   = p.how_to_apply || '';
   document.getElementById('pf-why').value   = p.why_it_works || '';
-  document.getElementById('pf-clinical-role').value = p.clinical_role || '';
+  resetPfClinicalFields();
+  const roles = (p.clinical_roles && p.clinical_roles.length) ? p.clinical_roles : (p.clinical_role ? [{ finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' }[p.clinical_role]] : []);
+  roles.filter(Boolean).forEach(role => {
+    const cb = document.querySelector(`#pf-clinical-roles input[value="${role}"]`);
+    if (cb) { cb.checked = true; cb.closest('.clinrole-chip').classList.add('on'); }
+  });
+  if (p.schedule_days && p.schedule_days.length) {
+    pfDays = new Set(p.schedule_days.map(Number));
+    selectPfFreq('days');
+    document.querySelectorAll('#pf-day-row .day-chip').forEach(c => c.classList.toggle('on', pfDays.has(Number(c.dataset.dow))));
+  } else {
+    selectPfFreq('daily');
+  }
   document.getElementById('emoji-preview').textContent = p.emoji || '🧴';
   const catSel = document.getElementById('pf-cat');
   const custom = document.getElementById('pf-cat-custom');
@@ -1794,7 +1896,8 @@ async function saveCustomProduct() {
   const note   = document.getElementById('pf-note').value.trim();
   const how    = document.getElementById('pf-how').value.trim();
   const why    = document.getElementById('pf-why').value.trim();
-  const clinicalRole = document.getElementById('pf-clinical-role').value || null;
+  const clinicalRoles = [...document.querySelectorAll('#pf-clinical-roles input[type="checkbox"]:checked')].map(cb => cb.value);
+  const scheduleDays = (pfFreq === 'days' && pfDays.size) ? [...pfDays].sort((a,b) => a-b) : null;
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (!cat)  { showToast('⚠️ Elige una categoría', 'error'); return; }
   const btn = document.getElementById('save-prod-btn');
@@ -1803,7 +1906,7 @@ async function saveCustomProduct() {
     const { data, error } = await db.from('products').update({
       emoji, name, brand: brand || null, category: cat,
       note: note || null, how_to_apply: how || null, why_it_works: why || null,
-      clinical_role: clinicalRole
+      clinical_roles: clinicalRoles, schedule_days: scheduleDays
     }).eq('id', editingProductId).select().single();
     btn.disabled = false; btn.textContent = 'Guardar cambios';
     if (error) { showToast('❌ ' + error.message, 'error'); return; }
@@ -1818,7 +1921,7 @@ async function saveCustomProduct() {
   const { data, error } = await db.from('products').insert({
     emoji, name, brand: brand || null, category: cat,
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
-    clinical_role: clinicalRole,
+    clinical_roles: clinicalRoles, schedule_days: scheduleDays,
     tier: 'ok', tags: [], status: 'ok'
   }).select().single();
   btn.disabled = false; btn.textContent = 'Guardar producto';
