@@ -253,6 +253,11 @@ body {
 .pj-dot.on { background: #C4818A; }
 .pj-miles { display: flex; justify-content: space-between; font-size: 10px; color: #A09090; padding: 0 2px; }
 .pj-note { font-size: 10.5px; color: #A09090; margin-top: 11px; border-top: 1px solid #EDE8E2; padding-top: 9px; line-height: 1.45; }
+.focus-card { background: linear-gradient(135deg, #FFF7ED, #FFF0DC); border: 1.5px solid #F0D4A8; border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(196,129,138,0.06); }
+.focus-card.good { background: linear-gradient(135deg, #EFFAF1, #E5F5E8); border-color: #B8DDBE; }
+.focus-card-title { font-size: 12.5px; font-weight: 700; color: #B0700A; margin-bottom: 6px; }
+.focus-card.good .focus-card-title { color: #2E7D4F; }
+.focus-card-text { font-size: 12.5px; color: #6A5A4A; line-height: 1.5; }
 .adh-label { font-size: 11px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 4px 8px; }
 .adh-card { background: white; border-radius: 16px; padding: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 14px; }
 .adh-row { margin-bottom: 13px; }
@@ -1305,6 +1310,7 @@ async function loadHistory() {
     .forEach(p => { spfScoreById[p.id] = spfScoreOf(p); });
 
   const spfPointsByDate = {};
+  const spfAppsByDate = {};
   allAppsWithProd.forEach(({ r, rp }) => {
     let score = null;
     if (rp.id && spfScoreById[rp.id] != null) score = spfScoreById[rp.id];
@@ -1312,6 +1318,7 @@ async function loadHistory() {
     if (score == null) return;
     const ds = localDateOfISO(r.applied_at);
     spfPointsByDate[ds] = (spfPointsByDate[ds] || 0) + score;
+    spfAppsByDate[ds] = (spfAppsByDate[ds] || 0) + 1;
   });
 
   let prot = null;
@@ -1319,17 +1326,22 @@ async function loadHistory() {
   if (spfDates.length) {
     const start = spfDates[0] > WSTART ? spfDates[0] : WSTART;
     if (start <= ENDS) {
-      let elig = 0, sumPct = 0, daysWithSpf = 0;
+      let elig = 0, sumPct = 0, daysWithSpf = 0, totalPts = 0, totalApps = 0;
       eachDateStr(start, ENDS, (ds) => {
         elig++;
         const pts = spfPointsByDate[ds] || 0;
         if (pts > 0) daysWithSpf++;
+        totalPts += pts;
+        totalApps += spfAppsByDate[ds] || 0;
         sumPct += Math.min(100, Math.round(pts / (IDEAL_SPF_APPS * 100) * 100));
       });
       if (elig > 0) {
         prot = {
           pct: Math.round(sumPct / elig),
-          sub: `${daysWithSpf} de ${elig} días con SPF registrado · ideal: rutina AM + 4 reaplicaciones de máxima calidad`
+          sub: `${daysWithSpf} de ${elig} días con SPF registrado · ideal: rutina AM + 4 reaplicaciones de máxima calidad`,
+          elig, daysWithSpf,
+          avgAppsPerDay: totalApps / elig,
+          avgScorePerApp: totalApps > 0 ? totalPts / totalApps : 0
         };
       }
     }
@@ -1370,6 +1382,53 @@ async function loadHistory() {
 
   const mileDots = [25, 50, 75, 100].map(p => `<span class="pj-dot${journeyPct >= p ? ' on' : ''}" style="left:${p}%"></span>`).join('');
 
+  // ── FOCO: un solo mensaje señalando qué reforzar para subir la barra más
+  // baja — evita tener que adivinar leyendo las 5 barras y sus desgloses.
+  const focusRoles = [
+    { label: 'Protección anti-melasma', icon: '🛡️', key: 'spf_facial', o: prot },
+    { label: 'Despigmentación',         icon: '🎯', key: 'despigmentacion', o: despig },
+    { label: 'Barrera sana',            icon: '💧', key: 'barrera', o: barr },
+    { label: 'Renovación celular',      icon: '🔬', key: 'regeneracion_celular', o: rege },
+    { label: 'Textura / Poros',         icon: '🔍', key: 'textura_poros', o: textura }
+  ];
+  const buildFocusHTML = () => {
+    const withData = focusRoles.filter(r => r.o && r.o.pct != null);
+    if (!withData.length) return '';
+    const worst = withData.reduce((a, b) => (b.o.pct < a.o.pct ? b : a));
+    if (worst.o.pct >= 90) {
+      return `<div class="focus-card good">
+  <div class="focus-card-title">✅ Vas muy bien</div>
+  <div class="focus-card-text">Todas tus barras están arriba de 90%. No hay nada puntual que reforzar ahora mismo — sigue así.</div>
+</div>`;
+    }
+    let text;
+    if (worst.key === 'spf_facial') {
+      const s = worst.o;
+      if (s.elig > 0 && s.daysWithSpf / s.elig < 0.8) {
+        text = `Te faltó protector solar por completo en ${s.elig - s.daysWithSpf} de los últimos ${s.elig} días — asegurar que SIEMPRE te pongas algo, aunque sea el más sencillo, es lo que más va a subir esta barra.`;
+      } else if (s.avgAppsPerDay < 2.5) {
+        text = `Te pones protector casi todos los días, pero en promedio solo ${s.avgAppsPerDay.toFixed(1)} veces al día (el ideal son 5: rutina AM + 4 reaplicaciones). Reforzar las reaplicaciones durante el día es tu mayor oportunidad.`;
+      } else if (s.avgScorePerApp < 70) {
+        text = `Aplicas seguido, pero con protectores de menor puntuación en promedio. Usa más seguido tus protectores con PA++++, UVA 400/Mexoryl o tintados para subir el %.`;
+      } else {
+        text = `Esta barra ya está cerca del 100% — sigue reforzando la constancia diaria.`;
+      }
+    } else {
+      const detail = (worst.o.detail || []).filter(x => x.p.name !== 'Registros antiguos');
+      if (detail.length) {
+        const worstProduct = detail.reduce((a, b) => (b.adh.pct < a.adh.pct ? b : a));
+        text = `De tus productos de ${worst.label}, el que más se te dificulta es ${worstProduct.p.emoji || ''} ${worstProduct.p.name} (${worstProduct.adh.pct}%) — reforzarlo es tu mayor oportunidad para subir esta barra.`;
+      } else {
+        text = `${worst.label} es tu barra más baja (${worst.o.pct}%) — vale la pena revisar qué se te está dificultando ahí.`;
+      }
+    }
+    return `<div class="focus-card">
+  <div class="focus-card-title">${worst.icon} Enfócate en: ${worst.label}</div>
+  <div class="focus-card-text">${text}</div>
+</div>`;
+  };
+  const focusHTML = buildFocusHTML();
+
   el.innerHTML = `
 <div class="pj-card">
   <div class="pj-top">
@@ -1381,6 +1440,7 @@ async function loadHistory() {
   <div class="pj-miles"><span>Barrera</span><span>Brillo</span><span>Aclaran</span><span>Visible</span></div>
   <div class="pj-note">${melStart ? `Cuenta desde tu primer registro de un producto de despigmentación o renovación celular (${fmtDate(melStart)}), no desde que abriste la app. ` : ''}Calculado al cierre de ayer. Los hitos son una guía, no una promesa médica.</div>
 </div>
+${focusHTML}
 <div class="adh-label">Adherencia · últimos 90 días</div>
 <div class="adh-card">
   ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma')}
