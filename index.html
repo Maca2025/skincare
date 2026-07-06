@@ -1370,9 +1370,32 @@ async function loadHistory() {
   const constVals = [prot, despig, barr, rege].map(x => x ? x.pct : null).filter(x => x != null);
   const constancia = constVals.length ? Math.round(constVals.reduce((a, b) => a + b, 0) / constVals.length) : null;
 
-  const adhRow = (o, color, icon, label) => {
+  // Diagnóstico por rol: en vez de listar productos y sus %, dice en prosa
+  // qué es lo que específicamente está fallando y qué reforzar — se usa tanto
+  // en cada barra individual como en el mensaje de "Enfócate en" de arriba.
+  const diagnosisText = (key, label, o) => {
+    if (o.pct >= 90) return `Vas muy bien aquí — arriba de 90%. Sigue así.`;
+    if (key === 'spf_facial') {
+      if (o.elig > 0 && o.daysWithSpf / o.elig < 0.8) {
+        return `Te faltó protector solar por completo en ${o.elig - o.daysWithSpf} de los últimos ${o.elig} días — asegurar que SIEMPRE te pongas algo, aunque sea el más sencillo, es lo que más va a subir esta barra.`;
+      } else if (o.avgAppsPerDay < 2.5) {
+        return `Te pones protector casi todos los días, pero en promedio solo ${o.avgAppsPerDay.toFixed(1)} veces al día (el ideal son 5: rutina AM + 4 reaplicaciones). Reforzar las reaplicaciones durante el día es tu mayor oportunidad.`;
+      } else if (o.avgScorePerApp < 70) {
+        return `Aplicas seguido, pero con protectores de menor puntuación en promedio. Usa más seguido los que tienen PA++++, UVA 400/Mexoryl o tinte para subir el %.`;
+      }
+      return `Cerca del 100% — sigue reforzando la constancia diaria.`;
+    }
+    const detail = (o.detail || []).filter(x => x.p.name !== 'Registros antiguos');
+    if (detail.length) {
+      const worstProduct = detail.reduce((a, b) => (b.adh.pct < a.adh.pct ? b : a));
+      return `El que más se te dificulta es ${worstProduct.p.emoji || ''} ${worstProduct.p.name} (${worstProduct.adh.pct}%) — reforzarlo es tu mayor oportunidad aquí.`;
+    }
+    return `Estás en ${o.pct}% — sigue registrando para ver más detalle.`;
+  };
+
+  const adhRow = (o, color, icon, label, key) => {
     if (!o) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
-    const sub = o.sub || o.detail.map(x => `${x.p.emoji || ''} ${x.p.name} ${x.adh.pct}%`.trim()).join(' · ');
+    const sub = diagnosisText(key, label, o);
     return `<div class="adh-row">
   <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${o.pct}%</span></div>
   <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${color}"></div></div>
@@ -1401,27 +1424,7 @@ async function loadHistory() {
   <div class="focus-card-text">Todas tus barras están arriba de 90%. No hay nada puntual que reforzar ahora mismo — sigue así.</div>
 </div>`;
     }
-    let text;
-    if (worst.key === 'spf_facial') {
-      const s = worst.o;
-      if (s.elig > 0 && s.daysWithSpf / s.elig < 0.8) {
-        text = `Te faltó protector solar por completo en ${s.elig - s.daysWithSpf} de los últimos ${s.elig} días — asegurar que SIEMPRE te pongas algo, aunque sea el más sencillo, es lo que más va a subir esta barra.`;
-      } else if (s.avgAppsPerDay < 2.5) {
-        text = `Te pones protector casi todos los días, pero en promedio solo ${s.avgAppsPerDay.toFixed(1)} veces al día (el ideal son 5: rutina AM + 4 reaplicaciones). Reforzar las reaplicaciones durante el día es tu mayor oportunidad.`;
-      } else if (s.avgScorePerApp < 70) {
-        text = `Aplicas seguido, pero con protectores de menor puntuación en promedio. Usa más seguido tus protectores con PA++++, UVA 400/Mexoryl o tintados para subir el %.`;
-      } else {
-        text = `Esta barra ya está cerca del 100% — sigue reforzando la constancia diaria.`;
-      }
-    } else {
-      const detail = (worst.o.detail || []).filter(x => x.p.name !== 'Registros antiguos');
-      if (detail.length) {
-        const worstProduct = detail.reduce((a, b) => (b.adh.pct < a.adh.pct ? b : a));
-        text = `De tus productos de ${worst.label}, el que más se te dificulta es ${worstProduct.p.emoji || ''} ${worstProduct.p.name} (${worstProduct.adh.pct}%) — reforzarlo es tu mayor oportunidad para subir esta barra.`;
-      } else {
-        text = `${worst.label} es tu barra más baja (${worst.o.pct}%) — vale la pena revisar qué se te está dificultando ahí.`;
-      }
-    }
+    const text = diagnosisText(worst.key, worst.label, worst.o);
     return `<div class="focus-card">
   <div class="focus-card-title">${worst.icon} Enfócate en: ${worst.label}</div>
   <div class="focus-card-text">${text}</div>
@@ -1443,14 +1446,14 @@ async function loadHistory() {
 ${focusHTML}
 <div class="adh-label">Adherencia · últimos 90 días</div>
 <div class="adh-card">
-  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma')}
-  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación')}
-  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana')}
-  ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular')}
+  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma', 'spf_facial')}
+  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'despigmentacion')}
+  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'barrera')}
+  ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular', 'regeneracion_celular')}
 </div>
 <div class="adh-label">Textura de piel · últimos 90 días</div>
 <div class="adh-card">
-  ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros')}
+  ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros')}
 </div>`;
 
   const logEl = document.getElementById('log-content');
