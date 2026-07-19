@@ -515,7 +515,7 @@ async function loadHistory() {
   const appProd = r => (r.product_id && _prodById[r.product_id]) || { id: null, name: r.product_name || '', emoji: '', category: '', clinical_roles: [], clinical_role: null, schedule_days: null };
   const allAppsWithProd = apps.map(r => ({ r, rp: appProd(r) }));
   const ROLE_CONFIG = {
-    spf_facial:           { label: 'Protección anti-melasma', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (x.category !== '💋 Labios' && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body|labios|\blip\b/i.test(x.name || '')) },
+    spf_facial:           { label: 'Protección solar', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (x.category !== '💋 Labios' && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body|labios|\blip\b/i.test(x.name || '')) },
     despigmentacion:      { label: 'Despigmentación',         icon: '🎯', color: '#C47A00', legacyRegex: x => /finacea|azela|melascreen|antipigment|despigmentante/i.test(x.name || '') },
     barrera:              { label: 'Barrera sana',            icon: '💧', color: '#3A8A7A', legacyRegex: x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '') },
     regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || '') },
@@ -745,7 +745,7 @@ async function loadHistory() {
   };
   const mileDots = [25, 50, 75, 100].map(p => `<span class="pj-dot${journeyPct >= p ? ' on' : ''}" style="left:${p}%"></span>`).join('');
   const focusRoles = [
-    { label: 'Protección anti-melasma', icon: '🛡️', key: 'spf_facial', o: prot },
+    { label: 'Protección solar', icon: '🛡️', key: 'spf_facial', o: prot },
     { label: 'Despigmentación',         icon: '🎯', key: 'despigmentacion', o: despig },
     { label: 'Barrera sana',            icon: '💧', key: 'barrera', o: barr },
     { label: 'Renovación celular',      icon: '🔬', key: 'regeneracion_celular', o: rege },
@@ -813,7 +813,7 @@ async function loadHistory() {
   el.innerHTML = `
 <div class="pj-card">
   <div class="pj-top">
-    <span class="pj-title">🗺️ Tu camino · melasma</span>
+    <span class="pj-title">🗺️ Tu camino · manchas solares</span>
     ${constancia != null ? `<span class="pj-const">constancia ${constancia}%</span>` : ''}
   </div>
   <div class="pj-week">Semana ${weekNum > 16 ? '16+' : weekNum} de 16${melStart ? ` · desde ${fmtDate(melStart)}` : ''}</div>
@@ -826,7 +826,7 @@ ${focusHTML}
 ${heatHTML}
 <div class="adh-label">Adherencia · últimos 90 días</div>
 <div class="adh-card">
-  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma', 'spf_facial', sparkHTML(spfWeekly(), '#C4818A'))}
+  ${adhRow(prot, '#C4818A', '🛡️', 'Protección solar', 'spf_facial', sparkHTML(spfWeekly(), '#C4818A'))}
   ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'despigmentacion', sparkHTML(roleWeekly('despigmentacion'), '#C47A00'))}
   ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'barrera', sparkHTML(roleWeekly('barrera'), '#3A8A7A'))}
   ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular', 'regeneracion_celular', sparkHTML(roleWeekly('regeneracion_celular'), '#7E6BB0'))}
@@ -843,15 +843,35 @@ ${routineHTML}`;
 // ── HISTORIAL CON FILTRO POR PRODUCTO ────────────────────────────────────────
 let histApps = [];
 let histFilter = '';
+let histCatFilter = '';
+// Categoría de un registro: por product_id; para registros viejos sin id,
+// se intenta resolver por nombre.
+function categoryOfApp(r) {
+  let p = r.product_id ? allProducts.find(x => x.id === r.product_id) : null;
+  if (!p) {
+    const pid = productIdForLoggedName(r.product_name);
+    p = pid ? allProducts.find(x => x.id === pid) : null;
+  }
+  return p ? p.category : null;
+}
 function renderHistorial() {
   const logEl = document.getElementById('log-content');
   if (!logEl) return;
-  const names = [...new Set(histApps.map(r => r.product_name))].sort((a, b) => a.localeCompare(b));
-  const options = '<option value="">— Todos los productos —</option>' +
+  // Filtro 1: tipo de producto (categoría). Filtro 2: producto específico —
+  // la lista de productos se acota a la categoría elegida.
+  const catOrder = c => { const i = PRODUCT_CATEGORIES.indexOf(c); return i === -1 ? 999 : i; };
+  const cats = [...new Set(histApps.map(categoryOfApp).filter(Boolean))].sort((a, b) => catOrder(a) - catOrder(b));
+  const byCat = histCatFilter ? histApps.filter(r => categoryOfApp(r) === histCatFilter) : histApps;
+  const names = [...new Set(byCat.map(r => r.product_name))].sort((a, b) => a.localeCompare(b));
+  if (histFilter && !names.includes(histFilter)) histFilter = '';
+  const catOptions = '<option value="">— Todos los tipos —</option>' +
+    cats.map(c => `<option value="${esc(c)}"${c === histCatFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const prodOptions = '<option value="">— Todos los productos —</option>' +
     names.map(n => `<option value="${esc(n)}"${n === histFilter ? ' selected' : ''}>${esc(n)}</option>`).join('');
-  const filtered = histFilter ? histApps.filter(r => r.product_name === histFilter) : histApps;
+  const filtered = histFilter ? byCat.filter(r => r.product_name === histFilter) : byCat;
   logEl.innerHTML = `<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>
-<select class="prod-input prod-select hist-filter" onchange="histFilter=this.value; renderHistorial()">${options}</select>
+<select class="prod-input prod-select hist-filter" onchange="histCatFilter=this.value; renderHistorial()">${catOptions}</select>
+<select class="prod-input prod-select hist-filter" onchange="histFilter=this.value; renderHistorial()">${prodOptions}</select>
 ${buildHistorialByDay(filtered)}</div>`;
 }
 // ── REPORTE PARA LA DERMATÓLOGA ──────────────────────────────────────────────
@@ -884,7 +904,7 @@ async function openDermReport() {
   const rowT = (label, o) => o ? `<tr><td>${label}</td><td style="text-align:right;font-weight:700">${o.pct}%</td></tr>` : '';
   const w = window.open('', '_blank');
   if (!w) { showToast('❌ Permite ventanas emergentes para generar el reporte', 'error'); return; }
-  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Reporte skincare — melasma</title>
+  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Reporte skincare — manchas solares</title>
 <style>
 body{font-family:Georgia,serif;max-width:700px;margin:24px auto;color:#2A2420;padding:0 16px}
 h1{font-size:20px}h2{font-size:15px;margin-top:26px;border-bottom:1px solid #ddd;padding-bottom:4px}
@@ -896,7 +916,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;bord
 @media print{.no-print{display:none}}
 </style></head><body>
 <button class="no-print" onclick="window.print()" style="padding:9px 18px;margin-bottom:16px;cursor:pointer">🖨️ Imprimir / guardar como PDF</button>
-<h1>Reporte de seguimiento — melasma</h1>
+<h1>Reporte de seguimiento — manchas solares (lentigos)</h1>
 <p style="font-size:12px;color:#666">Generado: ${new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })} · Semana ${m.weekNum > 16 ? '16+' : m.weekNum} de tratamiento${m.melStart ? ` (desde ${m.melStart})` : ''} · Adherencia calculada sobre los últimos 90 días</p>
 <h2>Adherencia por objetivo</h2>
 <table>
@@ -1258,7 +1278,7 @@ function openSPFPicker(stepId = null) {
   currentPickerStepId = stepId;
   const body = document.getElementById('spf-picker-body');
   const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
-  <strong>⚠️ NO NEGOCIABLE para melasma.</strong> El UV es el detonante principal — sin SPF diario todos los serums trabajan a fracción de su potencia.
+  <strong>⚠️ NO NEGOCIABLE para manchas solares.</strong> El UV es la causa directa de los sunspots — sin SPF diario, los despigmentantes aclaran mientras el sol vuelve a pigmentar.
 </div>`;
   const products = allProducts.filter(p => p.category === '🌞 SPF Facial' && p.status !== 'out');
   body.innerHTML = warnBox + products.map(p => spfItemHTML(p, 'selectSPF')).join('') +
@@ -1289,7 +1309,7 @@ function openBodySPFPicker(stepId = null) {
   currentPickerStepId = stepId;
   const body = document.getElementById('body-spf-picker-body');
   const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
-  <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — mismo mecanismo que el melasma facial. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
+  <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — el mismo mecanismo que los sunspots de la cara. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
 </div>`;
   const products = allProducts.filter(p => p.category === '☀️ SPF Corporal' && p.status !== 'out');
   body.innerHTML = warnBox + products.map(p => spfItemHTML(p, 'selectBodySPF')).join('');
@@ -1383,42 +1403,42 @@ const COMPARE_COLS = [
     label:'UVB',
     title:'UVB — Rayos que queman (290–320 nm)',
     desc:'El número SPF mide exclusivamente la protección contra UVB. SPF 50 bloquea el 98% de estos rayos. Son los responsables de las quemaduras solares.',
-    melasma:'Detonante directo: los UVB activan los melanocitos y disparan la producción de melanina. Sin protección UVB diaria las manchas no pueden mejorar.' },
+    melasma:'Causa principal de los sunspots: los lentigos solares son daño UV acumulado. Sin protección UVB diaria, las manchas nuevas siguen apareciendo y las tratadas se re-pigmentan.' },
   { id:'uva',
     label:'UVA',
     title:'UVA Básico — Rayos de envejecimiento (320–370 nm)',
     desc:'Penetran nubes, vidrio y se mantienen presentes todo el año, incluso en días nublados o en interiores cerca de ventanas. Causan manchas y envejecimiento prematuro.',
-    melasma:'Detonante principal del melasma. Penetran más profundo que UVB y activan el melanocito de forma persistente y acumulativa. No protegerse de UVA mientras se usa tretinoína o Finacea anula el efecto de ambos.' },
+    melasma:'Contribuye directo al fotoenvejecimiento y a la pigmentación de los lentigos. Además, usar tretinoína sin buena protección UVA anula gran parte del beneficio.' },
   { id:'uvalong',
     label:'UVA Largos',
     title:'UVA de Onda Larga (370–400 nm)',
     desc:'La fracción más profunda del espectro UVA. La mayoría de los filtros solares tradicionales no cubren este rango. Filtros como Tinosorb M, Mexoryl XL o Bemotrizinol lo alcanzan.',
-    melasma:'Muy relevante: esta franja está especialmente asociada a la melanogénesis persistente. L\'Oréal UV Defender y Eucerin Pigment Control cubren este rango.' },
+    melasma:'Suma cobertura real contra el daño acumulativo que forma sunspots. L\'Oréal UV Defender y Eucerin Pigment Control cubren este rango.' },
   { id:'uva400',
     label:'UVA 400nm',
     title:'UVA 400nm — Cobertura UV completa hasta el límite con la luz visible',
     desc:'El filtro Mexoryl 400 (patente exclusiva de L\'Oréal / LRP UVMune 400) extiende la cobertura UV hasta exactamente 400nm — el límite exacto donde termina el UV y empieza la luz visible. Ningún otro filtro llega tan lejos.',
-    melasma:'La protección más importante disponible para melasma. Elimina el "gap" de 380–400nm que existe en casi todos los SPF del mercado. Este rango es altamente pigmentogénico y raramente está cubierto.' },
+    melasma:'La cobertura UV más completa disponible — cierra el "gap" de 380–400nm de casi todos los SPF del mercado. Para sunspots es un plus sólido (aunque menos decisivo que en melasma).' },
   { id:'pa4',
     label:'PA++++',
     title:'PA++++ — Sistema asiático de clasificación UVA',
     desc:'Sistema de clasificación japonés/coreano basado en el índice PPD (Persistent Pigment Darkening). PA++++ es la categoría máxima y equivale a PPD ≥ 16. Los SPF europeos a veces usan el sello de círculo UVA en lugar del sistema PA.',
-    melasma:'Imprescindible: indica que el producto tiene protección UVA robusta y estandarizada. Sin PA++++ o sello UVA no hay garantía del nivel de protección contra los rayos que más activan el melasma.' },
+    melasma:'Imprescindible: garantiza protección UVA robusta y estandarizada contra el daño acumulativo que produce y re-pigmenta los lentigos.' },
   { id:'vis',
     label:'Luz Visible',
     title:'Luz Visible — Óxidos de hierro (400–700 nm)',
     desc:'Solo las fórmulas tintadas (con óxidos de hierro o pigmentos minerales) bloquean la luz visible. Las fórmulas transparentes —sin importar cuán alto sea el SPF— no ofrecen protección en este rango.',
-    melasma:'Crítico en pieles tipos III–VI. La luz azul-violeta (400–500nm) activa la melanogénesis de forma independiente al UV, incluso bajo luz artificial, pantallas o luz fluorescente en interiores. Para melasma resistente, agregar tintado puede marcar una diferencia significativa.' },
+    melasma:'Para sunspots la luz visible pesa MENOS que en melasma (los lentigos son primariamente UV). El tinte sigue sumando en pieles III–VI y da acabado uniforme, pero ya no es crítico — elige por comodidad.' },
   { id:'ira',
     label:'IR-A',
     title:'Infrarrojo A — Calor profundo (700–1400 nm)',
     desc:'Radiación infrarroja que penetra hasta la dermis profunda y genera calor en los tejidos. Solo algunos filtros avanzados como el Heliocare 360 (con tecnología Fernblock) ofrecen protección en este rango.',
-    melasma:'Evidencia emergente: el calor generado por IR-A puede estimular la melanogénesis por vía térmica, independientemente del UV. Relevante especialmente en climas cálidos, cocinas o exposición directa al sol por períodos largos.' },
+    melasma:'En sunspots el calor tiene un papel menor (a diferencia del melasma, donde sí es detonante). Es un extra agradable, no un criterio de compra.' },
   { id:'act',
     label:'Activo ✦',
     title:'Activo Despigmentante — Thiamidol (Eucerin)',
     desc:'El único SPF de este arsenal que no solo protege sino que trata activamente las manchas existentes. El Thiamidol inhibe la tirosinasa (enzima que produce melanina) con eficacia clínicamente comparable a la hidroquinona al 2%, sin sus efectos adversos.',
-    melasma:'Convierte el SPF en doble función: protección + tratamiento simultáneo. Si solo pudieras usar un SPF para melasma, el Eucerin Pigment Control es el que trabaja mientras protege.' },
+    melasma:'El Thiamidol tiene evidencia también en lentigos solares: protege y aclara a la vez. Doble función ideal para sunspots.' },
 ];
 // La tabla ya NO está escrita a mano: se deriva de los tags reales de tus
 // productos en Stock (antes un SPF nuevo jamás aparecía aquí). Mapeo:
@@ -1470,7 +1490,7 @@ function openCompare() {
   ${COMPARE_COLS.map(c => chk(r[c.id])).join('')}
 </tr>`).join('');
   body.innerHTML = `
-<p style="font-size:11px;color:#9A8888;margin-bottom:12px;line-height:1.5">Toca el encabezado de cada columna para ver qué es y por qué importa para melasma. La tabla se genera de los tags de tus productos en Stock.</p>
+<p style="font-size:11px;color:#9A8888;margin-bottom:12px;line-height:1.5">Toca el encabezado de cada columna para ver qué es y por qué importa para tus manchas solares. La tabla se genera de los tags de tus productos en Stock.</p>
 <div id="col-info-box" style="display:none;background:#F5F0FA;border-left:3px solid #7A5A9A;border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
 <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
   <table style="width:100%;border-collapse:collapse;font-family:inherit">
@@ -1501,7 +1521,7 @@ function showColInfo(colId) {
     <div style="font-size:12px;font-weight:700;color:#2A2420;margin-bottom:6px">${col.title}</div>
     <div style="font-size:11px;color:#4A3E3A;line-height:1.65;margin-bottom:8px">${col.desc}</div>
     <div style="background:#EDE8F5;border-radius:7px;padding:7px 10px;font-size:11px;color:#5A3A8A;font-weight:600;line-height:1.5">
-      💜 Para melasma: ${col.melasma}
+      💜 Para tus manchas: ${col.melasma}
     </div>`;
   box.style.display = 'block';
   box.scrollIntoView({ behavior:'smooth', block:'nearest' });

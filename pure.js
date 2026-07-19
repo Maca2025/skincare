@@ -82,16 +82,17 @@ function adherenceFromDoneDates(done, scheduleDays, wstart, ends) {
   return { pct: Math.min(100, Math.round(hit / elig * 100)), hit, elig, start };
 }
 
-// Puntuación de calidad de un SPF facial según sus tags (PA++++, profundidad
-// UVA, tinte — el tinte también bloquea luz visible, otro detonante de
-// melasma). 100 = protector "ideal".
+// Puntuación de calidad de un SPF facial según sus tags. 100 = "ideal".
+// Pesos calibrados para MANCHAS SOLARES (lentigos): los sunspots son daño UV
+// directo, así que la cobertura UVA profunda y el PA++++ pesan más, y el
+// tinte (luz visible) pesa menos que cuando el objetivo era melasma.
 function spfScoreOf(p) {
-  let score = 20; // base por estar registrado como SPF facial
+  let score = 25; // base por estar registrado como SPF facial
   tagsOf(p).forEach(t => {
-    if (t.cls === 'pa4') score += 25;
+    if (t.cls === 'pa4') score += 30;
     if (t.cls === 'uva400') score += 35;
     else if (t.cls === 'uvalong') score += 20;
-    if (t.cls === 'tinted') score += 20;
+    if (t.cls === 'tinted') score += 10;
   });
   return Math.min(100, score);
 }
