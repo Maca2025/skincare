@@ -42,6 +42,7 @@
   </div>
   <!-- TODAY -->
   <div id="tab-today" class="tab-content active">
+    <div id="today-summary"></div>
     <div class="backdate-card" id="backdate-card">
       <div class="backdate-row">
         <span class="backdate-lbl">🕐 Registrar para:</span>
@@ -109,6 +110,8 @@
       <div class="notes-label">📝 Notes for today</div>
       <div class="skin-state-label">¿Cómo está tu piel hoy?</div>
       <div class="skin-state-row" id="skin-state-row"></div>
+      <div class="skin-state-label">☀️ Exposición solar de hoy</div>
+      <div class="skin-state-row" id="sun-exposure-row"></div>
       <textarea class="notes-ta" id="daily-notes" placeholder="How did your skin feel? Any reactions, observations..."></textarea>
     </div>
     <button class="save-btn" id="save-btn" onclick="saveNote()">💾 Guardar nota</button>
@@ -129,7 +132,14 @@
       </div>
       <div class="photo-preview-wrap" id="photo-preview-wrap">
         <img id="photo-preview" src="" alt="Preview">
+        <svg id="photo-guide-overlay" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid meet"
+          style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0.55">
+          <ellipse cx="50" cy="55" rx="26" ry="34" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <path d="M 20 133 Q 24 96 50 94 Q 76 96 80 133" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <line x1="50" y1="10" x2="50" y2="125" stroke="#FFFFFF" stroke-width="0.7" stroke-dasharray="2 4"/>
+        </svg>
       </div>
+      <button class="mini-action-btn" id="photo-guide-btn" style="margin-top:8px;display:none" onclick="togglePhotoGuide()">📐 Guía de encuadre (mismo ángulo cada semana)</button>
       <textarea class="caption-input" id="photo-caption" placeholder="Nota (opcional) — ej. 'Semana 3 · mejilla izquierda mejorando'"></textarea>
       <button class="upload-btn" id="upload-btn" onclick="uploadPhoto()" disabled>Subir foto</button>
     </div>
@@ -383,6 +393,65 @@
         <textarea class="prod-input prod-ta" id="sf-how" placeholder="Cómo aplicarlo en esta rutina específica..."></textarea>
       </div>
       <button class="save-btn" id="save-step-btn" onclick="saveNewStep()" style="margin-top:4px">Guardar paso</button>
+    </div>
+  </div>
+</div>
+<!-- Edit Application -->
+<div class="modal-overlay" id="edit-app-modal" onclick="closeModal('edit-app-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">✏️ Editar registro</div>
+      <button class="modal-close" onclick="closeModal('edit-app-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ea-id">
+      <div class="prod-field">
+        <label class="prod-label">Producto</label>
+        <select class="prod-input prod-select" id="ea-product"></select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Fecha y hora</label>
+        <input class="prod-input" id="ea-datetime" type="datetime-local">
+      </div>
+      <button class="save-btn" onclick="saveEditedApplication()" style="margin-top:4px;margin-bottom:0">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+<!-- Guía de manchas solares -->
+<div class="modal-overlay" id="guide-modal" onclick="closeModal('guide-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📖 Guía · Manchas solares</div>
+      <button class="modal-close" onclick="closeModal('guide-modal')">✕</button>
+    </div>
+    <div class="modal-body guide-body">
+      <h4>¿Qué son los lentigos solares?</h4>
+      <p>Acumulaciones localizadas de melanina causadas por daño UV acumulado a lo largo de años. Son planos, de borde definido y color café uniforme, y aparecen donde más sol recibes: cara, brazos, manos y escote. A diferencia del melasma, <strong>no dependen de hormonas ni del calor</strong> — su causa es casi puramente UV, por eso el SPF diario es la mitad del tratamiento.</p>
+      <h4>Cronología realista con tópicos</h4>
+      <p>Con tretinoína + despigmentante (azelaico/Thiamidol) + SPF constante:</p>
+      <p><strong>Semanas 0–4</strong> · adaptación: la piel tolera los activos, puede haber resequedad ligera.<br>
+      <strong>Semanas 4–8</strong> · mejora textura y luminosidad general; las manchas aún casi igual.<br>
+      <strong>Semanas 8–16</strong> · aclarado gradual y visible de los lentigos más superficiales.<br>
+      <strong>Semana 16+</strong> · mantenimiento. Los lentigos viejos o profundos suelen aclarar solo parcialmente con tópicos — ahí es donde los procedimientos en consultorio brillan.</p>
+      <h4>🚨 Cuándo enseñarle una mancha a tu dermatóloga PRONTO</h4>
+      <p>La regla ABCDE: <strong>A</strong>simetría (una mitad distinta a la otra), <strong>B</strong>ordes irregulares o borrosos, <strong>C</strong>olor no uniforme (varios tonos en la misma mancha), <strong>D</strong>iámetro &gt;6 mm y creciendo, <strong>E</strong>volución (cambia de forma/color, se abulta, pica o sangra).</p>
+      <p><strong>Una mancha nueva que se ve "diferente" a todas tus demás manchas merece dermatoscopia</strong> — no la trates con despigmentantes sin que la revisen primero.</p>
+      <h4>Procedimientos en consultorio</h4>
+      <p>Para lentigos son muy efectivos y de bajo riesgo (a diferencia del melasma, donde el láser puede empeorarlo):</p>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table class="guide-table">
+        <tr><th></th><th>❄️ Crioterapia</th><th>💡 IPL</th><th>⚡ Láser Q-switched</th></tr>
+        <tr><td>Qué es</td><td>Nitrógeno líquido congela la lesión</td><td>Pulsos de luz intensa de amplio espectro</td><td>Pulsos láser ultra-cortos que rompen el pigmento</td></tr>
+        <tr><td>Sesiones típicas</td><td>1–2</td><td>1–3</td><td>1–2</td></tr>
+        <tr><td>Recuperación</td><td>Costra 5–10 días</td><td>Manchas se oscurecen y descaman ~1 semana</td><td>Costra fina pocos días</td></tr>
+        <tr><td>Ideal para</td><td>Lentigos aislados y gruesos; opción más económica</td><td>Múltiples lentigos + mejora general del tono</td><td>Lentigos definidos; máxima precisión</td></tr>
+        <tr><td>Ojo (fototipos III–VI)</td><td>Riesgo de hipo/hiperpigmentación en piel morena</td><td>Requiere calibración cuidadosa; riesgo de HPI si se agresiva</td><td>Preferir Nd:YAG 1064 nm en piel morena; riesgo de HPI manejable</td></tr>
+      </table>
+      </div>
+      <p style="margin-top:10px">HPI = hiperpigmentación post-inflamatoria. En cualquier procedimiento: SPF estricto antes y después, e idealmente pre-tratamiento con tus despigmentantes.</p>
+      <p class="guide-disclaimer">Contenido educativo para preparar tu consulta — las decisiones de tratamiento son con tu dermatóloga.</p>
     </div>
   </div>
 </div>
