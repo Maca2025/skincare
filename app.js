@@ -61,6 +61,7 @@ async function loadProducts() {
 // ── PRODUCT CATEGORIES (lista maestra — única fuente de verdad) ──────────────
 const PRODUCT_CATEGORIES = [
   '🧼 Limpieza',
+  '💦 Toners',
   '✨ Serums AM',
   '💧 Hidratantes',
   '💊 Activos',
@@ -1007,6 +1008,77 @@ function openGenericPickerByCat(stepId, cat) {
     .map(p => spfItemHTML(p, 'selectFromGenericPicker')).join('');
   openModal('product-picker-modal');
 }
+
+// ── MULTI PICKER ─────────────────────────────────────────────────────────────
+// Categorías donde un mismo paso admite VARIOS productos a la vez (eliges
+// los que quieras cada día y se registra cada uno por separado). Para volver
+// multi otra categoría, solo agrégala aquí.
+const MULTI_PICK_CATEGORIES = ['💦 Toners', '✨ Serums AM'];
+let multiPickSelected = new Set();
+function openMultiPickerByCat(stepId, cat) {
+  currentPickerStepId = stepId;
+  multiPickSelected = new Set();
+  document.getElementById('product-picker-title').textContent = cat + ' · elige uno o varios';
+  const body = document.getElementById('product-picker-body');
+  const items = allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out');
+  body.innerHTML = (items.length ? items.map(p => {
+    const logName = p.logged_as || `${p.emoji} ${p.name}`;
+    return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" onclick="toggleMultiPick(this)">
+  <div class="spf-item-name"><span class="multi-pick-check">○</span> ${esc(p.emoji)} ${esc(p.name)}</div>
+  <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
+  <div class="spf-item-note">${fmtRich(p.note || '')}</div>
+</div>`;
+  }).join('') : '<div class="empty-state">No hay productos de esta categoría en Stock todavía.</div>') +
+  `<button class="save-btn" id="multi-pick-btn" onclick="confirmMultiPick()" disabled style="margin-top:6px;margin-bottom:0">Aplicar seleccionados</button>`;
+  openModal('product-picker-modal');
+}
+function toggleMultiPick(el) {
+  const name = el.dataset.name;
+  const check = el.querySelector('.multi-pick-check');
+  if (multiPickSelected.has(name)) {
+    multiPickSelected.delete(name);
+    el.classList.remove('multi-on');
+    if (check) check.textContent = '○';
+  } else {
+    multiPickSelected.add(name);
+    el.classList.add('multi-on');
+    if (check) check.textContent = '●';
+  }
+  const btn = document.getElementById('multi-pick-btn');
+  if (btn) {
+    btn.disabled = multiPickSelected.size === 0;
+    btn.textContent = multiPickSelected.size
+      ? `Aplicar ${multiPickSelected.size} seleccionado${multiPickSelected.size > 1 ? 's' : ''}`
+      : 'Aplicar seleccionados';
+  }
+}
+async function confirmMultiPick() {
+  const names = [...multiPickSelected];
+  if (!names.length) return;
+  multiPickSelected = new Set();
+  const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
+  const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
+  const stepElId = currentPickerStepId;
+  closeModal('product-picker-modal');
+  markPickerStepDone(names.join(' · '));
+  let okCount = 0;
+  for (const name of names) {
+    selectedProduct = name;
+    const ok = await logApplication(source, routineStepId);
+    if (ok) okCount++;
+  }
+  // Rollback del checkmark solo si NINGUNO se pudo registrar.
+  if (okCount === 0 && stepElId) {
+    const step = document.getElementById(stepElId);
+    if (step) {
+      step.classList.remove('done');
+      const sb = step.closest('.sec-body');
+      if (sb) updateProgress(sb.id);
+    }
+  } else if (okCount > 1) {
+    showToast(`✅ ${okCount} productos registrados`, 'success');
+  }
+}
 // ── SPF COMPARE TABLE ────────────────────────────────────────────────────────
 const COMPARE_COLS = [
   { id:'uvb',
@@ -1679,6 +1751,7 @@ async function saveNewStep() {
 function pickerFnForCat(cat, stepId) {
   if (cat === '🌞 SPF Facial')   return `openSPFPicker('${stepId}')`;
   if (cat === '☀️ SPF Corporal') return `openBodySPFPicker('${stepId}')`;
+  if (MULTI_PICK_CATEGORIES.includes(cat)) return `openMultiPickerByCat('${stepId}','${jsAttrEsc(cat)}')`;
   return `openGenericPickerByCat('${stepId}','${jsAttrEsc(cat)}')`;
 }
 // ── REAPLICACIONES: grid de categorías (generado desde Stock) ────────────────
@@ -1692,6 +1765,7 @@ const REAPP_LABELS = {
 function reappPickerFnForCat(cat) {
   if (cat === '🌞 SPF Facial')   return `openSPFPicker()`;
   if (cat === '☀️ SPF Corporal') return `openBodySPFPicker()`;
+  if (MULTI_PICK_CATEGORIES.includes(cat)) return `openMultiPickerByCat(null,'${jsAttrEsc(cat)}')`;
   return `openGenericPickerByCat(null,'${jsAttrEsc(cat)}')`;
 }
 function renderReappCategories() {
@@ -1830,7 +1904,13 @@ async function loadTodayRoutines(dateStr) {
   const hydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
   (appsForHydration || []).forEach(r => {
     const label = r.product_name;
-    if (r.routine_step_id) { hydration.byStepId.set(r.routine_step_id, label); return; }
+    if (r.routine_step_id) {
+      // Un paso multi (ej. Toners) puede tener VARIAS aplicaciones el mismo
+      // día — se concatenan para mostrarlas todas en el paso.
+      const prev = hydration.byStepId.get(r.routine_step_id);
+      hydration.byStepId.set(r.routine_step_id, prev ? prev + ' · ' + label : label);
+      return;
+    }
     if (r.product_id) hydration.byProductId.set(r.product_id, label);
     const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
     if (prod && prod.category) hydration.byCategory.set(prod.category, label);
