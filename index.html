@@ -100,11 +100,15 @@
     </div>
     <div class="reapp-card">
       <h3>🔄 Reaplicaciones</h3>
+      <div id="spf-reminder-wrap"></div>
+      <div id="reapp-repeat-wrap"></div>
       <div id="reapp-categories-wrap"></div>
       <div id="reapp-history"></div>
     </div>
     <div class="notes-card">
       <div class="notes-label">📝 Notes for today</div>
+      <div class="skin-state-label">¿Cómo está tu piel hoy?</div>
+      <div class="skin-state-row" id="skin-state-row"></div>
       <textarea class="notes-ta" id="daily-notes" placeholder="How did your skin feel? Any reactions, observations..."></textarea>
     </div>
     <button class="save-btn" id="save-btn" onclick="saveNote()">💾 Guardar nota</button>
@@ -276,6 +280,19 @@
         <div class="field-hint">Solo afecta el cálculo de adherencia — ej. un producto "días pares" cuenta 100% si lo aplicas cada vez que toca, no cada día del calendario. Si no marcas nada aquí pero el producto ya es un paso fijo de alguna rutina, se usa el calendario de esa rutina automáticamente.</div>
       </div>
       <div class="prod-field">
+        <label class="prod-label">Caducidad (opcional)</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1">
+            <input class="prod-input" id="pf-opened" type="date">
+            <div class="field-hint">Fecha de apertura</div>
+          </div>
+          <div style="flex:1">
+            <input class="prod-input" id="pf-pao" type="number" min="1" max="36" placeholder="Ej: 12">
+            <div class="field-hint">Vida en meses (PAO del envase)</div>
+          </div>
+        </div>
+      </div>
+      <div class="prod-field">
         <label class="prod-label">Descripción del producto</label>
         <textarea class="prod-input prod-ta" id="pf-note" placeholder="Para qué sirve, beneficios principales, ingredientes clave..."></textarea>
       </div>
@@ -367,6 +384,17 @@
       </div>
       <button class="save-btn" id="save-step-btn" onclick="saveNewStep()" style="margin-top:4px">Guardar paso</button>
     </div>
+  </div>
+</div>
+<!-- Photo Slider Compare -->
+<div class="modal-overlay" id="slider-modal" onclick="closeModal('slider-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="slider-title">🔀 Comparar fotos</div>
+      <button class="modal-close" onclick="closeModal('slider-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="slider-body"></div>
   </div>
 </div>
 <!-- Confirm sheet (reemplaza confirm() nativo) -->

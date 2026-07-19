@@ -153,10 +153,47 @@ function updateProgress(bodyId) {
   }
 }
 
-// ── DAILY NOTES ──────────────────────────────────────────────────────────────
+// ── DAILY NOTES + ESTADO DE PIEL ─────────────────────────────────────────────
+// Requiere la columna daily_notes.skin_state (ver migracion-mejoras.sql).
+const SKIN_STATES = [
+  { v: 1, e: '😖', l: 'Irritada' },
+  { v: 2, e: '😕', l: 'Sensible' },
+  { v: 3, e: '😐', l: 'Normal' },
+  { v: 4, e: '🙂', l: 'Bien' },
+  { v: 5, e: '✨', l: 'Radiante' },
+];
+let selectedSkinState = null;
+function renderSkinStateRow() {
+  const el = document.getElementById('skin-state-row');
+  if (!el) return;
+  el.innerHTML = SKIN_STATES.map(s =>
+    `<button class="skin-btn${selectedSkinState === s.v ? ' on' : ''}" onclick="setSkinState(${s.v})">
+  <div class="skin-btn-emoji">${s.e}</div><div class="skin-btn-lbl">${s.l}</div>
+</button>`).join('');
+}
+async function setSkinState(v) {
+  const prev = selectedSkinState;
+  selectedSkinState = selectedSkinState === v ? null : v;
+  renderSkinStateRow();
+  // Se guarda al toque (sin esperar al botón de la nota), conservando el
+  // texto que esté en el textarea.
+  const { error } = await db.from('daily_notes').upsert(
+    { note_date: TODAY_STR, notes: document.getElementById('daily-notes').value.trim(), skin_state: selectedSkinState, updated_at: new Date().toISOString() },
+    { onConflict: 'note_date' }
+  );
+  if (error) {
+    selectedSkinState = prev;
+    renderSkinStateRow();
+    showToast('❌ ' + error.message + ' (¿corriste migracion-mejoras.sql?)', 'error');
+  } else if (selectedSkinState) {
+    showToast('✅ Estado de piel guardado', 'success');
+  }
+}
 async function loadTodayNote() {
-  const { data } = await db.from('daily_notes').select('notes').eq('note_date', TODAY_STR).maybeSingle();
+  const { data } = await db.from('daily_notes').select('*').eq('note_date', TODAY_STR).maybeSingle();
   document.getElementById('daily-notes').value = (data && data.notes) ? data.notes : '';
+  selectedSkinState = data ? (data.skin_state || null) : null;
+  renderSkinStateRow();
 }
 async function saveNote() {
   const btn = document.getElementById('save-btn');
@@ -164,7 +201,7 @@ async function saveNote() {
   if (!notes) { showToast('⚠️ Escribe algo antes de guardar', 'error'); return; }
   btn.disabled = true; btn.textContent = '⏳ Guardando...';
   const { error } = await db.from('daily_notes').upsert(
-    { note_date: TODAY_STR, notes, updated_at: new Date().toISOString() },
+    { note_date: TODAY_STR, notes, skin_state: selectedSkinState, updated_at: new Date().toISOString() },
     { onConflict: 'note_date' }
   );
   btn.disabled = false; btn.textContent = '💾 Guardar nota';
@@ -346,6 +383,7 @@ async function loadPhotoGallery() {
       }
     </div>
   </div>
+  ${canCmp ? `<button class="mini-action-btn" style="margin-top:8px" onclick="openSliderCompare('${t.key}')">🔀 Comparar con slider (elige fechas)</button>` : ''}
 </div>`;
       }).join('');
   const galleryHTML = photos.length === 0
@@ -367,7 +405,46 @@ async function loadPhotoGallery() {
   el.innerHTML = `
 <div class="compare-card"><h3>📷 Comparativa por área</h3>${compareHTML}</div>
 <div class="gallery-card"><h3>🖼️ Galería</h3>${galleryHTML}</div>`;
+  _photosByType = byType;
   galleryLoaded = true;
+}
+// ── COMPARADOR CON SLIDER ────────────────────────────────────────────────────
+// Elige DOS fechas cualquiera de una misma área y deslízalas superpuestas
+// (la comparativa fija solo muestra primera vs. última).
+let _photosByType = {};
+let _sliderType = null;
+function openSliderCompare(typeKey) {
+  _sliderType = typeKey;
+  const arr = _photosByType[typeKey] || [];
+  if (arr.length < 2) return;
+  const t = PHOTO_TYPES.find(x => x.key === typeKey);
+  document.getElementById('slider-title').textContent = `🔀 ${t ? t.label : 'Comparar'}`;
+  const opts = (sel) => arr.map((p, i) =>
+    `<option value="${i}"${i === sel ? ' selected' : ''}>${p.photo_date}${p.caption ? ' · ' + esc(p.caption).slice(0, 25) : ''}</option>`).join('');
+  document.getElementById('slider-body').innerHTML = `
+<div class="slider-selects">
+  <select class="prod-input prod-select" id="slider-a" onchange="renderSliderStage()" style="flex:1">${opts(0)}</select>
+  <select class="prod-input prod-select" id="slider-b" onchange="renderSliderStage()" style="flex:1">${opts(arr.length - 1)}</select>
+</div>
+<div class="slider-stage" id="slider-stage"></div>
+<input type="range" class="slider-range" min="0" max="100" value="50" oninput="sliderMove(this.value)">
+<div style="display:flex;justify-content:space-between;font-size:11px;color:#9A8888;margin-top:2px"><span>← primera fecha</span><span>segunda fecha →</span></div>`;
+  renderSliderStage();
+  openModal('slider-modal');
+}
+function renderSliderStage() {
+  const arr = _photosByType[_sliderType] || [];
+  const selA = document.getElementById('slider-a'), selB = document.getElementById('slider-b');
+  if (!selA || !selB) return;
+  const a = arr[Number(selA.value)], b = arr[Number(selB.value)];
+  if (!a || !b) return;
+  document.getElementById('slider-stage').innerHTML = `
+<img src="${esc(b.photo_url)}">
+<div class="slider-top" id="slider-top" style="clip-path:inset(0 50% 0 0)"><img src="${esc(a.photo_url)}"></div>`;
+}
+function sliderMove(v) {
+  const el = document.getElementById('slider-top');
+  if (el) el.style.clipPath = `inset(0 ${100 - v}% 0 0)`;
 }
 // Borra la foto: fila en la base + archivo en el bucket (antes no existía
 // forma de borrar, y el archivo hubiera quedado huérfano en Storage).
@@ -413,13 +490,14 @@ async function loadHistory() {
   const el = document.getElementById('history-content');
   el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span><br><br>Loading...</div>';
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
-  const [appsRes, stepsRes, routinesRes, allStepsRes] = await Promise.all([
+  const [appsRes, stepsRes, routinesRes, allStepsRes, notesRes] = await Promise.all([
     db.from('product_applications').select('id, product_name, product_id, applied_at, source, routine_step_id')
       .gte('applied_at', localDayBoundsUTC(toDateStr(since90)).startISO)
       .order('applied_at', { ascending: false }),
     db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null),
     db.from('routines').select('id, section_key, schedule_days, sort_order').eq('active', true),
-    db.from('routine_steps').select('id, routine_id')
+    db.from('routine_steps').select('id, routine_id'),
+    db.from('daily_notes').select('note_date, skin_state').gte('note_date', toDateStr(since90))
   ]);
   const apps = appsRes.data || [];
   // Si un producto es paso fijo de una rutina, esa rutina define cuándo "toca".
@@ -531,6 +609,42 @@ async function loadHistory() {
   const barr    = roleAdherence('barrera');
   const rege    = roleAdherence('regeneracion_celular');
   const textura = roleAdherence('textura_poros');
+  // ── TENDENCIA SEMANAL: 12 cubetas de 7 días terminando ayer ────────────────
+  // Las barras grandes son el promedio de 90 días (una foto); estas mini
+  // barras dicen si vas mejorando o empeorando semana a semana.
+  const weekBuckets = [];
+  {
+    const f = d => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    for (let k = 11; k >= 0; k--) {
+      const endD = new Date(ENDS + 'T12:00:00Z'); endD.setUTCDate(endD.getUTCDate() - k * 7);
+      const startD = new Date(endD); startD.setUTCDate(startD.getUTCDate() - 6);
+      weekBuckets.push({ start: f(startD), end: f(endD) });
+    }
+  }
+  const roleWeekly = (role) => weekBuckets.map(b => {
+    const pcts = allProducts.filter(p => hasRole(p, role))
+      .map(p => adherenceFromDoneDates(productDoneDates(p), effectiveScheduleDays(p), b.start, b.end))
+      .filter(Boolean).map(a => a.pct);
+    return pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) : null;
+  });
+  const spfWeekly = () => weekBuckets.map(b => {
+    if (!spfDates.length) return null;
+    const first = spfDates[0];
+    if (first > b.end) return null;
+    let elig = 0, sum = 0;
+    eachDateStr(first > b.start ? first : b.start, b.end, ds => {
+      elig++;
+      sum += Math.min(100, Math.round((spfPointsByDate[ds] || 0) / (IDEAL_SPF_APPS * 100) * 100));
+    });
+    return elig ? Math.round(sum / elig) : null;
+  });
+  const sparkHTML = (weeks, color) => {
+    if (!weeks.some(w => w != null)) return '';
+    return `<div class="spark">${weeks.map(w =>
+      w == null ? '<span class="spark-empty"></span>'
+        : `<span class="spark-bar" style="height:${Math.max(8, w)}%;background:${color}" title="${w}%"></span>`
+    ).join('')}</div><div class="spark-lbl">tendencia · últimas 12 semanas</div>`;
+  };
   const melasmaProducts = allProducts.filter(p => hasRole(p, 'despigmentacion') || hasRole(p, 'regeneracion_celular'));
   let melStart = null;
   melasmaProducts.forEach(p => {
@@ -564,6 +678,7 @@ async function loadHistory() {
     doneStepsByDate[ds].add(r.routine_step_id);
   });
   const bySectionSum = { am: { hit: 0, total: 0 }, pm: { hit: 0, total: 0 }, body: { hit: 0, total: 0 }, feet: { hit: 0, total: 0 } };
+  const dailyRoutinePct = {}; // ds → fracción 0..1 de pasos hechos ese día (para el heatmap)
   let routineSumPct = 0, routineElig = 0;
   const haveAnyRoutineData = ((routinesRes && routinesRes.data) || []).length > 0;
   if (haveAnyRoutineData && WSTART <= ENDS) {
@@ -589,7 +704,11 @@ async function loadHistory() {
       tally('pm', pmR ? [pmR] : []);
       tally('body', bodyRs);
       tally('feet', feetRs);
-      if (dayTotal > 0) { routineElig++; routineSumPct += Math.round(dayHit / dayTotal * 100); }
+      if (dayTotal > 0) {
+        routineElig++;
+        routineSumPct += Math.round(dayHit / dayTotal * 100);
+        dailyRoutinePct[ds] = dayHit / dayTotal;
+      }
     });
   }
   const routineCompletePct = routineElig > 0 ? Math.round(routineSumPct / routineElig) : null;
@@ -614,13 +733,14 @@ async function loadHistory() {
     }
     return `Estás en ${o.pct}% — sigue registrando para ver más detalle.`;
   };
-  const adhRow = (o, color, icon, label, key) => {
+  const adhRow = (o, color, icon, label, key, spark) => {
     if (!o) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Aún sin registros hasta ayer</div></div>`;
     const sub = diagnosisText(key, label, o);
     return `<div class="adh-row">
   <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${o.pct}%</span></div>
   <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${color}"></div></div>
   <div class="adh-sub">${sub}</div>
+  ${spark || ''}
 </div>`;
   };
   const mileDots = [25, 50, 75, 100].map(p => `<span class="pj-dot${journeyPct >= p ? ' on' : ''}" style="left:${p}%"></span>`).join('');
@@ -648,6 +768,30 @@ async function loadHistory() {
 </div>`;
   };
   const focusHTML = buildFocusHTML();
+  // ── HEATMAP DE CONSTANCIA (12 semanas, estilo GitHub) ──────────────────────
+  const skinByDate = {};
+  ((notesRes && notesRes.data) || []).forEach(r => { if (r.skin_state) skinByDate[r.note_date] = r.skin_state; });
+  const heatHTML = (() => {
+    const cols = weekBuckets.map(b => {
+      const cells = [];
+      eachDateStr(b.start, b.end, (ds) => {
+        const p = dailyRoutinePct[ds];
+        let bg = '#F0ECE7';
+        if (p != null) bg = `rgba(40,120,72,${(0.15 + p * 0.85).toFixed(2)})`;
+        const pctTxt = p != null ? `${Math.round(p * 100)}% rutina` : 'sin registros';
+        const skin = skinByDate[ds] ? ` · piel ${skinByDate[ds]}/5` : '';
+        cells.push(`<div class="heat-cell" style="background:${bg}" title="${ds} · ${pctTxt}${skin}"></div>`);
+      });
+      return `<div class="heat-col">${cells.join('')}</div>`;
+    }).join('');
+    return `<div class="heat-card">
+  <div class="heat-title">🗓️ Constancia diaria · últimas 12 semanas</div>
+  <div class="heat-grid">${cols}</div>
+  <div class="heat-legend">menos <span class="box" style="background:#F0ECE7"></span><span class="box" style="background:rgba(40,120,72,0.35)"></span><span class="box" style="background:rgba(40,120,72,0.65)"></span><span class="box" style="background:rgba(40,120,72,1)"></span> más · toca un día para ver el detalle</div>
+</div>`;
+  })();
+  // Datos que reutiliza el reporte para la dermatóloga.
+  lastReportData = { prot, despig, barr, rege, textura, constancia, weekNum, melStart };
   const routineRow = (pct, color, icon, label, sub) => {
     if (pct == null) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Sin rutinas programadas en la ventana o aún sin registros.</div></div>`;
     return `<div class="adh-row">
@@ -677,22 +821,99 @@ async function loadHistory() {
   <div class="pj-miles"><span>Barrera</span><span>Brillo</span><span>Aclaran</span><span>Visible</span></div>
   <div class="pj-note">${melStart ? `Cuenta desde tu primer registro de un producto de despigmentación o renovación celular (${fmtDate(melStart)}), no desde que abriste la app. ` : ''}Calculado al cierre de ayer. Los hitos son una guía, no una promesa médica.</div>
 </div>
+<button class="report-btn" onclick="openDermReport()">📄 Generar reporte para dermatóloga</button>
 ${focusHTML}
+${heatHTML}
 <div class="adh-label">Adherencia · últimos 90 días</div>
 <div class="adh-card">
-  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma', 'spf_facial')}
-  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'despigmentacion')}
-  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'barrera')}
-  ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular', 'regeneracion_celular')}
+  ${adhRow(prot, '#C4818A', '🛡️', 'Protección anti-melasma', 'spf_facial', sparkHTML(spfWeekly(), '#C4818A'))}
+  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'despigmentacion', sparkHTML(roleWeekly('despigmentacion'), '#C47A00'))}
+  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'barrera', sparkHTML(roleWeekly('barrera'), '#3A8A7A'))}
+  ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular', 'regeneracion_celular', sparkHTML(roleWeekly('regeneracion_celular'), '#7E6BB0'))}
 </div>
 <div class="adh-label">Textura de piel · últimos 90 días</div>
 <div class="adh-card">
-  ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros')}
+  ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros', sparkHTML(roleWeekly('textura_poros'), '#5B8FA8'))}
 </div>
 ${routineHTML}`;
-  const logEl = document.getElementById('log-content');
-  if (logEl) logEl.innerHTML = `<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>${buildHistorialByDay(apps)}</div>`;
+  histApps = apps;
+  renderHistorial();
   historyLoaded = true;
+}
+// ── HISTORIAL CON FILTRO POR PRODUCTO ────────────────────────────────────────
+let histApps = [];
+let histFilter = '';
+function renderHistorial() {
+  const logEl = document.getElementById('log-content');
+  if (!logEl) return;
+  const names = [...new Set(histApps.map(r => r.product_name))].sort((a, b) => a.localeCompare(b));
+  const options = '<option value="">— Todos los productos —</option>' +
+    names.map(n => `<option value="${esc(n)}"${n === histFilter ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  const filtered = histFilter ? histApps.filter(r => r.product_name === histFilter) : histApps;
+  logEl.innerHTML = `<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>
+<select class="prod-input prod-select hist-filter" onchange="histFilter=this.value; renderHistorial()">${options}</select>
+${buildHistorialByDay(filtered)}</div>`;
+}
+// ── REPORTE PARA LA DERMATÓLOGA ──────────────────────────────────────────────
+// Abre una ventana imprimible (desde ahí se guarda como PDF) con: adherencia
+// por rol, evolución fotográfica antes/ahora por área, y notas de 30 días.
+let lastReportData = null;
+async function openDermReport() {
+  if (!lastReportData) { showToast('⚠️ Espera a que cargue Progreso', 'error'); return; }
+  showToast('⏳ Preparando reporte...', '');
+  const { data: photos } = await db.from('progress_photos').select('*').order('created_at', { ascending: true });
+  const byType = {};
+  (photos || []).forEach(p => { const t = p.photo_type || 'general'; (byType[t] = byType[t] || []).push(p); });
+  const pairs = [];
+  for (const t of PHOTO_TYPES) {
+    const arr = byType[t.key];
+    if (!arr || arr.length < 2) continue;
+    pairs.push({ label: t.label, a: arr[0], b: arr[arr.length - 1] });
+  }
+  const allPaths = pairs.flatMap(p => [extractStoragePath(p.a.photo_url), extractStoragePath(p.b.photo_url)]);
+  if (allPaths.length) {
+    const { data: signed } = await db.storage.from('progress-photos').createSignedUrls(allPaths, 3600);
+    pairs.forEach((p, i) => {
+      const sa = signed && signed[i * 2], sb = signed && signed[i * 2 + 1];
+      if (sa && sa.signedUrl) p.a.photo_url = sa.signedUrl;
+      if (sb && sb.signedUrl) p.b.photo_url = sb.signedUrl;
+    });
+  }
+  const { data: notes } = await db.from('daily_notes').select('*').order('note_date', { ascending: false }).limit(30);
+  const m = lastReportData;
+  const rowT = (label, o) => o ? `<tr><td>${label}</td><td style="text-align:right;font-weight:700">${o.pct}%</td></tr>` : '';
+  const w = window.open('', '_blank');
+  if (!w) { showToast('❌ Permite ventanas emergentes para generar el reporte', 'error'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Reporte skincare — melasma</title>
+<style>
+body{font-family:Georgia,serif;max-width:700px;margin:24px auto;color:#2A2420;padding:0 16px}
+h1{font-size:20px}h2{font-size:15px;margin-top:26px;border-bottom:1px solid #ddd;padding-bottom:4px}
+h3{font-size:13px;margin:14px 0 4px}
+table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;border-bottom:1px solid #eee}
+.pair{display:flex;gap:10px;margin:8px 0 16px}.pair>div{flex:1;text-align:center;font-size:11px;color:#666}
+.pair img{width:100%;border-radius:8px}
+.note{font-size:12px;margin:7px 0;color:#444;line-height:1.5}.note b{color:#000}
+@media print{.no-print{display:none}}
+</style></head><body>
+<button class="no-print" onclick="window.print()" style="padding:9px 18px;margin-bottom:16px;cursor:pointer">🖨️ Imprimir / guardar como PDF</button>
+<h1>Reporte de seguimiento — melasma</h1>
+<p style="font-size:12px;color:#666">Generado: ${new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })} · Semana ${m.weekNum > 16 ? '16+' : m.weekNum} de tratamiento${m.melStart ? ` (desde ${m.melStart})` : ''} · Adherencia calculada sobre los últimos 90 días</p>
+<h2>Adherencia por objetivo</h2>
+<table>
+${rowT('🛡️ Protección solar facial (calidad + reaplicaciones)', m.prot)}
+${rowT('🎯 Despigmentación', m.despig)}
+${rowT('💧 Barrera cutánea', m.barr)}
+${rowT('🔬 Renovación celular (tretinoína/retinol)', m.rege)}
+${rowT('🔍 Textura / poros', m.textura)}
+</table>
+${m.constancia != null ? `<p style="font-size:13px"><b>Constancia global: ${m.constancia}%</b></p>` : ''}
+<h2>Evolución fotográfica</h2>
+${pairs.map(p => `<h3>${p.label}</h3><div class="pair"><div><img src="${p.a.photo_url}"><br>ANTES · ${p.a.photo_date}</div><div><img src="${p.b.photo_url}"><br>AHORA · ${p.b.photo_date}</div></div>`).join('') || '<p style="font-size:12px;color:#888">Aún no hay pares de fotos por área.</p>'}
+<h2>Notas y estado de piel (últimos 30 registros)</h2>
+${(notes || []).filter(n => n.notes || n.skin_state).map(n => `<div class="note"><b>${n.note_date}</b>${n.skin_state ? ` · piel ${n.skin_state}/5` : ''}${n.notes ? ` — ${esc(n.notes)}` : ''}</div>`).join('') || '<p style="font-size:12px;color:#888">Sin notas registradas.</p>'}
+<p style="font-size:10px;color:#999;margin-top:30px">Generado por Skincare Tracker. Los porcentajes reflejan registros de la usuaria, no medición clínica.</p>
+</body></html>`);
+  w.document.close();
 }
 function buildHistorialByDay(appsData) {
   if (!appsData.length) return '<div class="empty-state">Aún no hay aplicaciones registradas.<br>Ve a ☀️ Today para empezar.</div>';
@@ -873,6 +1094,7 @@ async function logApplication(source, routineStepId) {
   return true;
 }
 async function loadTodayApplications() {
+  loadLastReapp();
   const _todayBounds = localDayBoundsUTC(TODAY_STR);
   const { data } = await db.from('product_applications')
     .select('*')
@@ -891,6 +1113,82 @@ async function loadTodayApplications() {
   <span class="reapp-entry-time">${time}</span>
 </div>`;
     }).join('');
+}
+
+// ── REPETIR ÚLTIMA REAPLICACIÓN ──────────────────────────────────────────────
+// El caso más común del día: volver a ponerte lo mismo de hace unas horas.
+let _lastReappName = null;
+async function loadLastReapp() {
+  const { data } = await db.from('product_applications').select('product_name')
+    .eq('source', 'reaplicacion').order('applied_at', { ascending: false }).limit(1);
+  const el = document.getElementById('reapp-repeat-wrap');
+  if (!el) return;
+  if (data && data.length) {
+    _lastReappName = data[0].product_name;
+    el.innerHTML = `<button class="mini-action-btn" onclick="repeatLastReapp()">🔁 Repetir última: <strong>${esc(_lastReappName)}</strong></button>`;
+  } else {
+    _lastReappName = null;
+    el.innerHTML = '';
+  }
+}
+async function repeatLastReapp() {
+  if (!_lastReappName) return;
+  selectedProduct = _lastReappName;
+  await logApplication('reaplicacion');
+}
+
+// ── RECORDATORIO DE REAPLICACIÓN SPF ─────────────────────────────────────────
+// Limitación honesta: avisa mientras la app está abierta (pestaña o PWA
+// activa) — push con la app cerrada requeriría un servidor de notificaciones.
+// Revisa cada 30 min: si entre 10am y 7pm han pasado >3.5h desde tu último
+// SPF facial registrado, manda notificación (o toast si no diste permiso).
+const SPF_REMINDER_KEY = 'skincare_spf_reminder';
+const SPF_REMINDER_GAP_H = 3.5;
+function renderSpfReminderBtn() {
+  const el = document.getElementById('spf-reminder-wrap');
+  if (!el) return;
+  const on = localStorage.getItem(SPF_REMINDER_KEY) === '1';
+  el.innerHTML = `<button class="mini-action-btn${on ? ' on' : ''}" onclick="toggleSpfReminder()">${on ? '🔔 Recordatorio SPF activo · cada ~3.5 h (10am–7pm)' : '🔕 Activar recordatorio de reaplicar SPF'}</button>`;
+}
+async function toggleSpfReminder() {
+  const on = localStorage.getItem(SPF_REMINDER_KEY) === '1';
+  if (!on) {
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch (e) {}
+    }
+    localStorage.setItem(SPF_REMINDER_KEY, '1');
+    showToast('🔔 Te aviso si pasan ~3.5 h sin SPF', 'success');
+    checkSpfReminder();
+  } else {
+    localStorage.removeItem(SPF_REMINDER_KEY);
+    showToast('🔕 Recordatorio desactivado', '');
+  }
+  renderSpfReminderBtn();
+}
+let _lastSpfNudge = 0;
+async function checkSpfReminder() {
+  if (localStorage.getItem(SPF_REMINDER_KEY) !== '1') return;
+  const h = new Date().getHours();
+  if (h < 10 || h >= 19) return;
+  if (Date.now() - _lastSpfNudge < 60 * 60 * 1000) return; // máx. 1 aviso por hora
+  const spfIds = allProducts.filter(p => p.category === '🌞 SPF Facial').map(p => p.id);
+  if (!spfIds.length) return;
+  const b = localDayBoundsUTC(TODAY_STR);
+  const { data } = await db.from('product_applications').select('applied_at')
+    .in('product_id', spfIds)
+    .gte('applied_at', b.startISO).lt('applied_at', b.endISO)
+    .order('applied_at', { ascending: false }).limit(1);
+  const last = (data && data.length) ? new Date(data[0].applied_at) : null;
+  const gapH = last ? (Date.now() - last.getTime()) / 3600000 : Infinity;
+  if (gapH < SPF_REMINDER_GAP_H) return;
+  _lastSpfNudge = Date.now();
+  const msg = last ? `Han pasado ${gapH.toFixed(1)} h desde tu último SPF facial` : 'Hoy aún no registras SPF facial';
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification('☀️ Toca reaplicar SPF', { body: msg, icon: 'icon-192.png' }); }
+    catch (e) { showToast('☀️ ' + msg, ''); }
+  } else {
+    showToast('☀️ ' + msg, '');
+  }
 }
 
 // ── MODALS ───────────────────────────────────────────────────────────────────
@@ -1292,6 +1590,16 @@ function invItemDetailHTML(item) {
   html += `<button class="inv-custom-del" onclick="deleteCustomProduct('${item.id}')">🗑️ Eliminar producto</button>`;
   return html || '<div style="color:#B0A8A8;font-style:italic">Sin descripción.</div>';
 }
+// Caducidad por PAO: fecha de apertura + meses de vida del envase.
+function paoBadge(item) {
+  if (!item.opened_at || !item.pao_months) return '';
+  const exp = new Date(item.opened_at + 'T12:00:00');
+  exp.setMonth(exp.getMonth() + Number(item.pao_months));
+  const days = Math.floor((exp - new Date()) / 86400000);
+  if (days < 0)   return ` <span style="color:#C43020;font-weight:700">· ⏳ caducado</span>`;
+  if (days <= 30) return ` <span style="color:#C47A00;font-weight:700">· ⏳ caduca en ${days}d</span>`;
+  return ` <span style="color:#A09090">· ⏳ ${days}d</span>`;
+}
 function invItemHTML(item) {
   const domId = item.id;
   const status = item.status || 'ok';
@@ -1301,7 +1609,7 @@ function invItemHTML(item) {
     <div class="inv-emoji">${esc(item.emoji)}</div>
     <div class="inv-info">
       <div class="inv-name">${esc(item.name)}</div>
-      <div class="inv-brand">${esc(item.brand || '')}</div>
+      <div class="inv-brand">${esc(item.brand || '')}${paoBadge(item)}</div>
     </div>
     <div class="inv-chips" onclick="event.stopPropagation()">
       <span class="inv-chip ${status==='ok'?'active-ok':''}"  onclick="setInvStatus('${domId}','ok')">✅</span>
@@ -1344,7 +1652,7 @@ function resetPfClinicalFields() {
 }
 function openAddProductModal() {
   editingProductId = null;
-  ['pf-emoji','pf-name','pf-brand','pf-note','pf-how','pf-why','pf-cat-custom'].forEach(id => {
+  ['pf-emoji','pf-name','pf-brand','pf-note','pf-how','pf-why','pf-cat-custom','pf-opened','pf-pao'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; if (id === 'pf-cat-custom') el.style.display = 'none'; }
   });
@@ -1366,6 +1674,8 @@ function openEditProductModal(id) {
   document.getElementById('pf-note').value  = p.note || '';
   document.getElementById('pf-how').value   = p.how_to_apply || '';
   document.getElementById('pf-why').value   = p.why_it_works || '';
+  document.getElementById('pf-opened').value = p.opened_at || '';
+  document.getElementById('pf-pao').value    = p.pao_months || '';
   resetPfClinicalFields();
   const roles = (p.clinical_roles && p.clinical_roles.length) ? p.clinical_roles : (p.clinical_role ? [{ finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' }[p.clinical_role]] : []);
   roles.filter(Boolean).forEach(role => {
@@ -1407,6 +1717,8 @@ async function saveCustomProduct() {
   const why    = document.getElementById('pf-why').value.trim();
   const clinicalRoles = [...document.querySelectorAll('#pf-clinical-roles input[type="checkbox"]:checked')].map(cb => cb.value);
   const scheduleDays = (pfFreq === 'days' && pfDays.size) ? [...pfDays].sort((a,b) => a-b) : null;
+  const openedAt  = document.getElementById('pf-opened').value || null;
+  const paoMonths = parseInt(document.getElementById('pf-pao').value, 10) || null;
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (!cat)  { showToast('⚠️ Elige una categoría', 'error'); return; }
   const btn = document.getElementById('save-prod-btn');
@@ -1415,7 +1727,8 @@ async function saveCustomProduct() {
     const { data, error } = await db.from('products').update({
       emoji, name, brand: brand || null, category: cat,
       note: note || null, how_to_apply: how || null, why_it_works: why || null,
-      clinical_roles: clinicalRoles, schedule_days: scheduleDays
+      clinical_roles: clinicalRoles, schedule_days: scheduleDays,
+      opened_at: openedAt, pao_months: paoMonths
     }).eq('id', editingProductId).select().single();
     btn.disabled = false; btn.textContent = 'Guardar cambios';
     if (error) { showToast('❌ ' + error.message, 'error'); return; }
@@ -1432,6 +1745,7 @@ async function saveCustomProduct() {
     emoji, name, brand: brand || null, category: cat,
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
     clinical_roles: clinicalRoles, schedule_days: scheduleDays,
+    opened_at: openedAt, pao_months: paoMonths,
     tier: 'ok', tags: [], status: 'ok'
   }).select().single();
   btn.disabled = false; btn.textContent = 'Guardar producto';
@@ -1515,10 +1829,36 @@ ${allRoutines.map(r => `
     <div class="rout-card-sched">${fmtSection(r.section_key)} · ${fmtDays(r.schedule_days)}</div>
     <div class="rout-card-sub" id="rout-sub-${r.id}">cargando...</div>
   </div>
+  <button class="rout-card-del" title="Duplicar rutina" onclick="event.stopPropagation(); duplicateRoutine('${r.id}')">📄</button>
   <button class="rout-card-del" onclick="event.stopPropagation(); deleteRoutine('${r.id}')">🗑️</button>
   <div class="rout-card-arrow">›</div>
 </div>`).join('')}`;
   loadStepCounts();
+}
+// Copia una rutina completa (config + todos sus pasos) — útil para variantes
+// tipo "Cuerpo día par / día impar" sin capturar todo de nuevo.
+async function duplicateRoutine(routineId) {
+  const r = allRoutines.find(x => x.id === routineId);
+  if (!r) return;
+  const sort_order = allRoutines.length ? Math.max(...allRoutines.map(x => x.sort_order)) + 1 : 0;
+  const { data: nr, error } = await db.from('routines').insert({
+    emoji: r.emoji, name: r.name + ' (copia)', section_key: r.section_key,
+    schedule_days: r.schedule_days, active: true, sort_order
+  }).select().single();
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  const { data: steps } = await db.from('routine_steps').select('*').eq('routine_id', routineId).order('sort_order');
+  if (steps && steps.length) {
+    const copies = steps.map(s => ({
+      routine_id: nr.id, emoji: s.emoji, name: s.name, brand: s.brand,
+      how_to_apply: s.how_to_apply, why_it_works: s.why_it_works, warn: s.warn,
+      picker_category: s.picker_category, product_id: s.product_id, sort_order: s.sort_order
+    }));
+    const { error: stepsErr } = await db.from('routine_steps').insert(copies);
+    if (stepsErr) showToast('⚠️ Rutina copiada pero fallaron pasos: ' + stepsErr.message, 'error');
+  }
+  allRoutines.push(nr);
+  showToast('📄 Rutina duplicada', 'success');
+  renderRoutineList();
 }
 async function loadStepCounts() {
   const { data } = await db.from('routine_steps').select('routine_id');
@@ -1549,7 +1889,9 @@ function renderRoutineDetail(routine, steps) {
 </div>
 <div class="rout-card-sched" style="margin:-4px 0 10px 2px">${fmtSection(routine.section_key)} · ${fmtDays(routine.schedule_days)}</div>
 ${steps.map((s, i) => `
-<div class="rout-step-item" id="rstep-${s.id}">
+<div class="rout-step-item" id="rstep-${s.id}" draggable="true"
+  ondragstart="stepDragStart(event,'${s.id}')" ondragend="stepDragEnd(event)"
+  ondragover="stepDragOver(event)" ondrop="stepDrop(event,'${s.id}','${routine.id}')">
   <div class="rout-step-num">${i + 1}</div>
   <div class="rout-step-info">
     <div class="rout-step-name">${esc(s.emoji || '')} ${esc(s.name)}</div>
@@ -1564,9 +1906,29 @@ ${steps.map((s, i) => `
 </div>`).join('')}
 <button class="rout-add-step-btn" onclick="openAddStepModal('${routine.id}')">＋ Agregar paso</button>`;
 }
-// Reordenar: intenta primero el RPC atómico swap_step_order (creado en
-// supabase-hardening.sql); si no existe, cae a los dos updates de antes
-// pero verificando errores en lugar de ignorarlos.
+// Drag & drop de pasos (desktop; en móvil siguen las flechas ↑↓).
+let _dragStepId = null;
+function stepDragStart(e, id) { _dragStepId = id; e.currentTarget.classList.add('dragging'); }
+function stepDragEnd(e) { e.currentTarget.classList.remove('dragging'); }
+function stepDragOver(e) { e.preventDefault(); }
+async function stepDrop(e, targetId, routineId) {
+  e.preventDefault();
+  if (!_dragStepId || _dragStepId === targetId) return;
+  const { data: steps } = await db.from('routine_steps')
+    .select('id,sort_order').eq('routine_id', routineId).order('sort_order');
+  const ids = steps.map(s => s.id);
+  const from = ids.indexOf(_dragStepId), to = ids.indexOf(targetId);
+  _dragStepId = null;
+  if (from < 0 || to < 0) return;
+  ids.splice(to, 0, ids.splice(from, 1)[0]);
+  const results = await Promise.all(ids.map((id, i) =>
+    db.from('routine_steps').update({ sort_order: i }).eq('id', id)));
+  if (results.some(r => r.error)) showToast('❌ Error al reordenar — revisa el orden', 'error');
+  openRoutineDetail(routineId);
+}
+// Reordenar con flechas: intenta primero el RPC atómico swap_step_order
+// (creado en supabase-hardening.sql); si no existe, cae a dos updates
+// verificando errores.
 async function moveStep(stepId, direction, routineId) {
   const { data: steps } = await db.from('routine_steps')
     .select('id,sort_order').eq('routine_id', routineId).order('sort_order');
@@ -1959,7 +2321,10 @@ async function init() {
   renderReappCategories();
   loadTodayApplications();
   loadTodayNote();
+  renderSpfReminderBtn();
   flushPending();
+  checkSpfReminder();
+  setInterval(checkSpfReminder, 30 * 60 * 1000);
 }
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────
