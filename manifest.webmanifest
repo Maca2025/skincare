@@ -1,0 +1,14 @@
+{
+  "name": "Skincare Tracker",
+  "short_name": "Skincare",
+  "description": "Tracker de rutinas, fotos de progreso y adherencia para melasma",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4EFE8",
+  "theme_color": "#C4818A",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
