@@ -1448,6 +1448,54 @@ async function repeatLastReapp() {
 const SPF_REMINDER_KEY = 'skincare_spf_reminder';
 const SPF_NUDGE_TS_KEY = 'skincare_last_spf_nudge';
 const SPF_REMINDER_GAP_H = 2; // recordar cada 2 horas
+// ── WEB PUSH (notificaciones con la app CERRADA) ─────────────────────────────
+// La llave pública VAPID es pública por diseño (va en el cliente). La privada
+// vive SOLO en los secrets de la Edge Function — ver PUSH-SETUP.md.
+const VAPID_PUBLIC_KEY = 'BA4kHPEAdoycLdzOsSZqaJQAco5i5ChUFdlrB-RYeJ5m-c0_av5QF1yuD90BFA0_cGUQItoiThFDvfQcs5sbi8c';
+const PUSH_ENABLED_KEY = 'skincare_push_enabled';
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function enablePush() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    const j = sub.toJSON();
+    const { error } = await db.from('push_subscriptions').upsert(
+      { endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth },
+      { onConflict: 'endpoint' }
+    );
+    if (error) throw error;
+    localStorage.setItem(PUSH_ENABLED_KEY, '1');
+    return true;
+  } catch (e) {
+    localStorage.removeItem(PUSH_ENABLED_KEY);
+    return false;
+  }
+}
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await db.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+      await sub.unsubscribe();
+    }
+  } catch (e) { /* best effort */ }
+  localStorage.removeItem(PUSH_ENABLED_KEY);
+}
 function renderSpfReminderBtn() {
   const el = document.getElementById('spf-reminder-wrap');
   if (!el) return;
@@ -1464,10 +1512,14 @@ async function toggleSpfReminder() {
       showToast('⚠️ Las notificaciones están BLOQUEADAS — actívalas en los ajustes del navegador/sitio', 'error');
     }
     localStorage.setItem(SPF_REMINDER_KEY, '1');
-    showToast('🔔 Te aviso cada 2 h sin SPF (10am–7pm)', 'success');
+    const pushOk = await enablePush();
+    showToast(pushOk
+      ? '🔔 Push activo: te aviso cada 2 h aunque la app esté cerrada'
+      : '🔔 Aviso cada 2 h con la app abierta (push no disponible en este navegador)', 'success');
     checkSpfReminder();
   } else {
     localStorage.removeItem(SPF_REMINDER_KEY);
+    await disablePush();
     showToast('🔕 Recordatorio desactivado', '');
   }
   renderSpfReminderBtn();
@@ -1494,6 +1546,9 @@ async function notifySpf(msg) {
 let _lastSpfNudge = Number(localStorage.getItem(SPF_NUDGE_TS_KEY) || 0);
 async function checkSpfReminder() {
   if (localStorage.getItem(SPF_REMINDER_KEY) !== '1') return;
+  // Con push activo, el servidor (Edge Function + cron) es quien avisa —
+  // así no llegan avisos dobles.
+  if (localStorage.getItem(PUSH_ENABLED_KEY) === '1') return;
   const h = new Date().getHours();
   if (h < 10 || h >= 19) return;
   if (_currentUV != null && _currentUV < 2) return; // UV casi nulo: no molestar

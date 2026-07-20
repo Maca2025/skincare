@@ -4,7 +4,7 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
-const CACHE = 'skincare-shell-v1';
+const CACHE = 'skincare-shell-v2';
 const SHELL = [
   './',
   './index.html',
@@ -24,6 +24,23 @@ self.addEventListener('activate', e => {
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+// ── WEB PUSH: el servidor (Edge Function spf-push) manda el push aunque la
+// app esté cerrada; aquí solo se muestra y se maneja el tap.
+self.addEventListener('push', e => {
+  let data = { title: '✦ Skincare Tracker', body: '' };
+  try { data = e.data.json(); }
+  catch (err) { if (e.data) data.body = e.data.text(); }
+  e.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'spf-reminder'
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if ('focus' in c) return c.focus(); }
+    return clients.openWindow('./');
+  }));
 });
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
