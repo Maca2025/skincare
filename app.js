@@ -887,22 +887,28 @@ async function loadHistory() {
     if (r.sun_exposure) sunByDate[r.note_date] = r.sun_exposure;
   });
   const heatHTML = (() => {
+    // El title solo sirve con mouse; en móvil el detalle se muestra al TOCAR
+    // el cuadro (showHeatDay), en la caja bajo el grid.
+    _heatDayInfo = {};
+    const DOW_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const cols = weekBuckets.map(b => {
       const cells = [];
-      eachDateStr(b.start, b.end, (ds) => {
+      eachDateStr(b.start, b.end, (ds, dow) => {
         const p = dailyRoutinePct[ds];
         let bg = '#F0ECE7';
         if (p != null) bg = `rgba(40,120,72,${(0.15 + p * 0.85).toFixed(2)})`;
-        const pctTxt = p != null ? `${Math.round(p * 100)}% rutina` : 'sin registros';
-        const skin = skinByDate[ds] ? ` · piel ${skinByDate[ds]}/5` : '';
-        const sun = sunByDate[ds] ? ` · sol: ${sunByDate[ds]}` : '';
-        cells.push(`<div class="heat-cell" style="background:${bg}" title="${ds} · ${pctTxt}${skin}${sun}"></div>`);
+        const pctTxt = p != null ? `📋 ${Math.round(p * 100)}% de rutina completada` : '📋 sin registros de rutina';
+        const skin = skinByDate[ds] ? ` · 🙂 piel ${skinByDate[ds]}/5` : '';
+        const sun = sunByDate[ds] ? ` · ☀️ sol: ${sunByDate[ds]}` : '';
+        _heatDayInfo[ds] = `<strong>${DOW_ES[dow]} ${fmtDate(ds)}</strong><br>${pctTxt}${skin}${sun}`;
+        cells.push(`<div class="heat-cell" style="background:${bg}" onclick="showHeatDay('${ds}', this)"></div>`);
       });
       return `<div class="heat-col">${cells.join('')}</div>`;
     }).join('');
     return `<div class="heat-card">
   <div class="heat-title">🗓️ Constancia diaria · últimas 12 semanas</div>
   <div class="heat-grid">${cols}</div>
+  <div class="heat-detail" id="heat-day-detail" style="display:none"></div>
   <div class="heat-legend">menos <span class="box" style="background:#F0ECE7"></span><span class="box" style="background:rgba(40,120,72,0.35)"></span><span class="box" style="background:rgba(40,120,72,0.65)"></span><span class="box" style="background:rgba(40,120,72,1)"></span> más · toca un día para ver el detalle</div>
 </div>`;
   })();
@@ -1230,6 +1236,16 @@ function buildHistorialByDay(appsData) {
 function fmtDate(ds) {
   const d = new Date(ds + 'T12:00:00');
   return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+}
+// Detalle del heatmap al tocar un cuadro (los tooltips title no existen en móvil).
+let _heatDayInfo = {};
+function showHeatDay(ds, cell) {
+  const box = document.getElementById('heat-day-detail');
+  if (!box) return;
+  document.querySelectorAll('.heat-cell.sel').forEach(c => c.classList.remove('sel'));
+  if (cell) cell.classList.add('sel');
+  box.innerHTML = _heatDayInfo[ds] || `<strong>${fmtDate(ds)}</strong><br>sin registros`;
+  box.style.display = 'block';
 }
 // Borra un registro hecho por error — con hoja de confirmación propia (no el
 // confirm() nativo) y toast de "Deshacer" que lo restaura tal cual.

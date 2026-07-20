@@ -349,7 +349,9 @@ body {
 .heat-title { font-size: 12.5px; font-weight: 700; color: #7A5A5A; margin-bottom: 10px; }
 .heat-grid { display: flex; gap: 3px; }
 .heat-col { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.heat-cell { aspect-ratio: 1; border-radius: 3px; background: #F0ECE7; }
+.heat-cell { aspect-ratio: 1; border-radius: 3px; background: #F0ECE7; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.heat-cell.sel { outline: 2px solid #C4818A; outline-offset: 1px; }
+.heat-detail { font-size: 11.5px; color: #4A3E3A; background: #FDFAF8; border-radius: 8px; padding: 9px 11px; margin-top: 10px; border-left: 3px solid #C4818A; line-height: 1.6; }
 .heat-legend { display: flex; align-items: center; gap: 4px; font-size: 9.5px; color: #A09090; margin-top: 8px; justify-content: flex-end; }
 .heat-legend .box { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 /* BOTONES DE ACCIÓN CHICOS (recordatorio SPF, repetir, slider) */
