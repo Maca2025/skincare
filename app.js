@@ -35,7 +35,11 @@ async function refreshDateIfChanged() {
   showToast('📅 Nuevo día — Today actualizado', '');
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') refreshDateIfChanged();
+  if (document.visibilityState === 'visible') {
+    refreshDateIfChanged();
+    // Al volver a la app, revisa de una vez si toca recordatorio de SPF.
+    if (typeof checkSpfReminder === 'function' && appStarted) checkSpfReminder();
+  }
 });
 
 // ── PM NIGHT ROTATION ────────────────────────────────────────────────────────
@@ -1442,12 +1446,13 @@ async function repeatLastReapp() {
 // Revisa cada 30 min: si entre 10am y 7pm han pasado >3.5h desde tu último
 // SPF facial registrado, manda notificación (o toast si no diste permiso).
 const SPF_REMINDER_KEY = 'skincare_spf_reminder';
-const SPF_REMINDER_GAP_H = 3.5;
+const SPF_NUDGE_TS_KEY = 'skincare_last_spf_nudge';
+const SPF_REMINDER_GAP_H = 2; // recordar cada 2 horas
 function renderSpfReminderBtn() {
   const el = document.getElementById('spf-reminder-wrap');
   if (!el) return;
   const on = localStorage.getItem(SPF_REMINDER_KEY) === '1';
-  el.innerHTML = `<button class="mini-action-btn${on ? ' on' : ''}" onclick="toggleSpfReminder()">${on ? '🔔 Recordatorio SPF activo · cada ~3.5 h (10am–7pm)' : '🔕 Activar recordatorio de reaplicar SPF'}</button>`;
+  el.innerHTML = `<button class="mini-action-btn${on ? ' on' : ''}" onclick="toggleSpfReminder()">${on ? '🔔 Recordatorio SPF activo · cada 2 h (10am–7pm)' : '🔕 Activar recordatorio de reaplicar SPF'}</button>`;
 }
 async function toggleSpfReminder() {
   const on = localStorage.getItem(SPF_REMINDER_KEY) === '1';
@@ -1455,8 +1460,11 @@ async function toggleSpfReminder() {
     if ('Notification' in window && Notification.permission === 'default') {
       try { await Notification.requestPermission(); } catch (e) {}
     }
+    if ('Notification' in window && Notification.permission === 'denied') {
+      showToast('⚠️ Las notificaciones están BLOQUEADAS — actívalas en los ajustes del navegador/sitio', 'error');
+    }
     localStorage.setItem(SPF_REMINDER_KEY, '1');
-    showToast('🔔 Te aviso si pasan ~3.5 h sin SPF', 'success');
+    showToast('🔔 Te aviso cada 2 h sin SPF (10am–7pm)', 'success');
     checkSpfReminder();
   } else {
     localStorage.removeItem(SPF_REMINDER_KEY);
@@ -1464,13 +1472,32 @@ async function toggleSpfReminder() {
   }
   renderSpfReminderBtn();
 }
-let _lastSpfNudge = 0;
+// En iPhone, new Notification() NO existe: hay que mostrarlas a través del
+// service worker (reg.showNotification), y solo funcionan con la app agregada
+// a pantalla de inicio (iOS 16.4+) y permiso concedido. Fallback: toast.
+async function notifySpf(msg) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.showNotification) {
+        await reg.showNotification('☀️ Toca reaplicar SPF', {
+          body: msg, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'spf-reminder'
+        });
+        return;
+      }
+    } catch (e) { /* sigue al fallback */ }
+    try { new Notification('☀️ Toca reaplicar SPF', { body: msg, icon: 'icon-192.png' }); return; } catch (e) {}
+  }
+  showToast('☀️ ' + msg, '');
+}
+// _lastSpfNudge persiste en localStorage para no duplicar avisos al recargar.
+let _lastSpfNudge = Number(localStorage.getItem(SPF_NUDGE_TS_KEY) || 0);
 async function checkSpfReminder() {
   if (localStorage.getItem(SPF_REMINDER_KEY) !== '1') return;
   const h = new Date().getHours();
   if (h < 10 || h >= 19) return;
-  if (_currentUV != null && _currentUV < 3) return; // UV bajo: sin insistir
-  if (Date.now() - _lastSpfNudge < 60 * 60 * 1000) return; // máx. 1 aviso por hora
+  if (_currentUV != null && _currentUV < 2) return; // UV casi nulo: no molestar
+  if (Date.now() - _lastSpfNudge < SPF_REMINDER_GAP_H * 3600000) return; // 1 aviso por ciclo de 2 h
   const spfIds = allProducts.filter(p => p.category === '🌞 SPF Facial').map(p => p.id);
   if (!spfIds.length) return;
   const b = localDayBoundsUTC(TODAY_STR);
@@ -1480,17 +1507,11 @@ async function checkSpfReminder() {
     .order('applied_at', { ascending: false }).limit(1);
   const last = (data && data.length) ? new Date(data[0].applied_at) : null;
   const gapH = last ? (Date.now() - last.getTime()) / 3600000 : Infinity;
-  // Con UV extremo (≥8, normal en GDL a mediodía) el umbral baja a 3 h.
-  const gapNeeded = (_currentUV != null && _currentUV >= 8) ? 3 : SPF_REMINDER_GAP_H;
-  if (gapH < gapNeeded) return;
+  if (gapH < SPF_REMINDER_GAP_H) return;
   _lastSpfNudge = Date.now();
+  localStorage.setItem(SPF_NUDGE_TS_KEY, String(_lastSpfNudge));
   const msg = last ? `Han pasado ${gapH.toFixed(1)} h desde tu último SPF facial` : 'Hoy aún no registras SPF facial';
-  if ('Notification' in window && Notification.permission === 'granted') {
-    try { new Notification('☀️ Toca reaplicar SPF', { body: msg, icon: 'icon-192.png' }); }
-    catch (e) { showToast('☀️ ' + msg, ''); }
-  } else {
-    showToast('☀️ ' + msg, '');
-  }
+  notifySpf(msg);
 }
 
 // ── MODALS ───────────────────────────────────────────────────────────────────
@@ -2666,7 +2687,7 @@ async function init() {
   fetchUV();
   setInterval(fetchUV, 30 * 60 * 1000);
   checkSpfReminder();
-  setInterval(checkSpfReminder, 30 * 60 * 1000);
+  setInterval(checkSpfReminder, 15 * 60 * 1000);
   checkPhotoReminder();
 }
 
