@@ -57,6 +57,7 @@
         <div class="sec-title">Morning Routine
           <div class="sec-sub" id="am-sec-sub">Face &amp; Neck <span class="sec-progress" id="prog-am-body"></span></div>
         </div>
+        <button class="sec-switch-btn" id="am-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('am')" title="Cambiar rutina de hoy">🔄</button>
         <span class="sec-arrow">⌄</span>
       </div>
       <div class="sec-body" id="am-body">
@@ -69,6 +70,7 @@
         <div class="sec-title">Evening Routine
           <div class="sec-sub" id="pm-sec-sub">Face &amp; Neck <span class="sec-progress" id="prog-pm-body"></span></div>
         </div>
+        <button class="sec-switch-btn" id="pm-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('pm')" title="Cambiar rutina de hoy">🔄</button>
         <span class="sec-arrow">⌄</span>
       </div>
       <div class="sec-body" id="pm-body">
@@ -79,8 +81,9 @@
       <div class="sec-hdr bod-hdr" onclick="toggleSec('sec-body-card')">
         <span class="sec-icon">🧴</span>
         <div class="sec-title">Body
-          <div class="sec-sub">Ducha <span class="sec-progress" id="prog-body-body"></span></div>
+          <div class="sec-sub" id="body-sec-sub">Ducha <span class="sec-progress" id="prog-body-body"></span></div>
         </div>
+        <button class="sec-switch-btn" id="body-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('body')" title="Cambiar rutina de hoy">🔄</button>
         <span class="sec-arrow">⌄</span>
       </div>
       <div class="sec-body" id="body-body">
@@ -91,8 +94,9 @@
       <div class="sec-hdr ft-hdr" onclick="toggleSec('sec-feet')">
         <span class="sec-icon">🦶</span>
         <div class="sec-title">Feet
-          <div class="sec-sub">Nightly · ~15 min <span class="sec-progress" id="prog-feet-body"></span></div>
+          <div class="sec-sub" id="feet-sec-sub">Nightly · ~15 min <span class="sec-progress" id="prog-feet-body"></span></div>
         </div>
+        <button class="sec-switch-btn" id="feet-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('feet')" title="Cambiar rutina de hoy">🔄</button>
         <span class="sec-arrow">⌄</span>
       </div>
       <div class="sec-body" id="feet-body">
@@ -416,6 +420,17 @@
       </div>
       <button class="save-btn" onclick="saveEditedApplication()" style="margin-top:4px;margin-bottom:0">Guardar cambios</button>
     </div>
+  </div>
+</div>
+<!-- Cambiar rutina del día (override manual, solo para el día que se ve) -->
+<div class="modal-overlay" id="routine-switch-modal" onclick="closeModal('routine-switch-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="routine-switch-title">🔄 Cambiar rutina de hoy</div>
+      <button class="modal-close" onclick="closeModal('routine-switch-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="routine-switch-body"></div>
   </div>
 </div>
 <!-- Guía de manchas solares -->

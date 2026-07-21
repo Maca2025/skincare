@@ -325,6 +325,19 @@ body {
 .rout-step-del:hover { color: #C43020; }
 .rout-add-step-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 16px; background: white; border: 1.5px dashed #C4818A; border-radius: 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: #C4818A; cursor: pointer; margin-top: 8px; }
 .rout-add-step-btn:hover { background: #FDF8F8; }
+/* CAMBIAR RUTINA DEL DÍA (override manual por sección/fecha) */
+.sec-switch-btn { background: rgba(255,255,255,0.55); border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 14px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background 0.15s, transform 0.15s; -webkit-tap-highlight-color: transparent; }
+.sec-switch-btn:hover { background: rgba(255,255,255,0.95); transform: scale(1.06); }
+.sec-override-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #B06010; background: #FFF3E0; padding: 2px 8px; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sec-override-badge:hover { background: #FFE7C2; }
+.rsw-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; margin-bottom: 8px; cursor: pointer; border: 1.5px solid #EAE4E0; background: #FDFAF8; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+.rsw-item:hover { border-color: #C4818A; }
+.rsw-item.active { border-color: #C4818A; background: #FBEAF0; }
+.rsw-emoji { font-size: 20px; flex-shrink: 0; }
+.rsw-info { flex: 1; min-width: 0; }
+.rsw-name { font-size: 13.5px; font-weight: 700; color: #2A2420; }
+.rsw-sched { font-size: 11px; color: #9A8888; margin-top: 2px; }
+.rsw-badge-auto { font-size: 10px; font-weight: 700; color: #3A8A3A; background: #EAF5EA; padding: 2px 8px; border-radius: 10px; flex-shrink: 0; }
 /* LOGIN */
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
 .login-card { width: 100%; max-width: 340px; background: white; border-radius: 20px; padding: 28px 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
