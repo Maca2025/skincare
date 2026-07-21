@@ -2837,11 +2837,15 @@ async function loadTodayRoutines(dateStr) {
   // PM
   if (pmR) {
     const steps = stepsByRoutine[pmR.id] || [];
-    const nightType = pmNightType(dow);
-    const nightInfo = PM_NIGHT_INFO[nightType];
+    // La rotación de noche (tretinoína/exfoliante/descanso) es una guía POR
+    // CALENDARIO — solo aplica cuando se está usando la rutina automática.
+    // Si hay override manual, esa etiqueta ya no describe lo que se ve, así
+    // que se oculta por completo (aquí y dentro de renderDbSteps).
+    const nightType = ov.pm ? null : pmNightType(dow);
+    const nightInfo = nightType ? PM_NIGHT_INFO[nightType] : null;
     const pmBadge = ov.pm ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('pm')">🔄 ${esc(pmR.emoji||'')} ${esc(pmR.name)} · toca para volver</span>` : '';
     document.getElementById('pm-sec-sub').innerHTML =
-      `Face &amp; Neck ${nightCapsule(nightInfo)} <span class="sec-progress" id="prog-pm-body"></span>${pmBadge}`;
+      `Face &amp; Neck ${nightInfo ? nightCapsule(nightInfo) : ''} <span class="sec-progress" id="prog-pm-body"></span>${pmBadge}`;
     renderDbSteps('pm-body', steps, nightType, hydration);
   }
   updateSwitchBtnVisibility('pm');
