@@ -413,8 +413,10 @@ body {
   body { align-items: stretch; padding: 0; }
   .phone { max-width: none; width: 100%; padding: 0; }
 
+  /* !important necesario: app.js hace document.getElementById('app-root').style.display='block'
+     (login) y eso es un inline style — le gana a cualquier regla normal de hoja de estilos. */
   #app-root {
-    display: grid;
+    display: grid !important;
     grid-template-columns: 240px minmax(0, 1fr);
     grid-template-rows: auto 1fr;
     grid-template-areas:
@@ -448,7 +450,7 @@ body {
     overflow-y: auto;
     box-shadow: 2px 0 14px rgba(0,0,0,0.04);
   }
-  .tab-btn { text-align: left; padding: 12px 14px; font-size: 13.5px; }
+  .tab-btn { flex: 0 0 auto; text-align: left; padding: 12px 14px; font-size: 13.5px; }
   .tab-btn.active { box-shadow: none; background: #FBEAF0; }
 
   .tab-content { grid-area: content; padding: 28px 40px 60px; max-width: 760px; }
