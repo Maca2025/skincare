@@ -2190,27 +2190,63 @@ async function loadRoutines() {
   routinesLoaded = true;
   renderRoutineList();
 }
-function renderRoutineList() {
-  currentRoutineId = null;
-  const el = document.getElementById('routines-content');
-  if (!el) return;
-  el.innerHTML = `
-<div class="rout-hdr">
-  <div class="rout-hdr-title">✏️ Rutinas</div>
-  <button class="rout-add-btn" onclick="openAddRoutineModal()">＋ Nueva</button>
-</div>
-${allRoutines.map(r => `
+// Orden fijo de secciones (mismo orden que las tarjetas de Today).
+const ROUTINE_SECTION_ORDER = ['am', 'pm', 'body', 'feet'];
+const ROUTINE_SECTION_ICON  = { am: '☀️', pm: '🌙', body: '🧴', feet: '🦶' };
+const ROUTINE_SECTION_TITLE = { am: 'Mañana', pm: 'Noche', body: 'Cuerpo', feet: 'Pies' };
+// Mismos degradados de color que ya usan las tarjetas AM/PM/Cuerpo/Pies en Today.
+const ROUTINE_SECTION_HDR_CLS = { am: 'am-hdr', pm: 'pm-hdr', body: 'bod-hdr', feet: 'ft-hdr' };
+function routineCardHTML(r) {
+  return `
 <div class="rout-card" onclick="openRoutineDetail('${r.id}')">
   <div class="rout-card-emoji">${esc(r.emoji)}</div>
   <div class="rout-card-info">
     <div class="rout-card-name">${esc(r.name)}</div>
-    <div class="rout-card-sched">${fmtSection(r.section_key)} · ${fmtDays(r.schedule_days)}</div>
+    <div class="rout-card-sched">${esc(fmtDays(r.schedule_days))}</div>
     <div class="rout-card-sub" id="rout-sub-${r.id}">cargando...</div>
   </div>
   <button class="rout-card-del" title="Duplicar rutina" onclick="event.stopPropagation(); duplicateRoutine('${r.id}')">📄</button>
   <button class="rout-card-del" onclick="event.stopPropagation(); deleteRoutine('${r.id}')">🗑️</button>
   <div class="rout-card-arrow">›</div>
-</div>`).join('')}`;
+</div>`;
+}
+function renderRoutineList() {
+  currentRoutineId = null;
+  const el = document.getElementById('routines-content');
+  if (!el) return;
+  const bySection = {};
+  allRoutines.forEach(r => { (bySection[r.section_key] = bySection[r.section_key] || []).push(r); });
+  // Secciones con section_key desconocido/vacío (no debería pasar, pero por si acaso).
+  const knownKeys = new Set(ROUTINE_SECTION_ORDER);
+  const extraKeys = Object.keys(bySection).filter(k => !knownKeys.has(k));
+  const orderedKeys = [...ROUTINE_SECTION_ORDER, ...extraKeys];
+  const sectionsHTML = orderedKeys.map(key => {
+    const list = bySection[key] || [];
+    const secId = 'rout-sec-' + key;
+    const icon = ROUTINE_SECTION_ICON[key] || '⚠️';
+    const title = ROUTINE_SECTION_TITLE[key] || key;
+    const hdrCls = ROUTINE_SECTION_HDR_CLS[key] || '';
+    const body = list.length
+      ? list.map(routineCardHTML).join('')
+      : '<div class="tap-hint">Sin rutinas en esta sección todavía.</div>';
+    return `
+<div class="section" id="${secId}">
+  <div class="sec-hdr ${hdrCls}" onclick="toggleSec('${secId}')">
+    <span class="sec-icon">${icon}</span>
+    <div class="sec-title">${esc(title)}
+      <div class="sec-sub">${list.length} rutina${list.length === 1 ? '' : 's'}</div>
+    </div>
+    <span class="sec-arrow">⌄</span>
+  </div>
+  <div class="sec-body">${body}</div>
+</div>`;
+  }).join('');
+  el.innerHTML = `
+<div class="rout-hdr">
+  <div class="rout-hdr-title">✏️ Rutinas</div>
+  <button class="rout-add-btn" onclick="openAddRoutineModal()">＋ Nueva</button>
+</div>
+${sectionsHTML}`;
   loadStepCounts();
 }
 // Copia una rutina completa (config + todos sus pasos) — útil para variantes
@@ -2646,11 +2682,89 @@ function renderGroupedDbSteps(bodyId, routines, stepsByRoutine, todayHydration) 
   updateProgress(bodyId);
 }
 
+// ── CAMBIAR RUTINA DEL DÍA (override manual, solo UI) ───────────────────────
+// A veces la piel no está para la rutina que "toca" por calendario. Esto deja
+// elegir OTRA rutina de la misma sección (am/pm/body/feet) solo para el día
+// que se está viendo — nunca toca routines.schedule_days ni product_applications,
+// así que mañana (o al quitar el override) vuelve solo a la rutina automática.
+// Se guarda en localStorage por fecha (preferencia de UI, no dato clínico —
+// no afecta el cálculo de adherencia, que vive en pure.js y va por producto).
+const ROUTINE_OVERRIDE_KEY = 'routineOverrides_v1';
+function loadRoutineOverrides() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ROUTINE_OVERRIDE_KEY) || '{}');
+    const cutoff = toDateStr(new Date(Date.now() - 14 * 86400000));
+    Object.keys(raw).forEach(d => { if (d < cutoff) delete raw[d]; });
+    return raw;
+  } catch (e) { return {}; }
+}
+let routineOverrides = loadRoutineOverrides();
+let allRoutinesCache = [];
+function saveRoutineOverrides() {
+  try { localStorage.setItem(ROUTINE_OVERRIDE_KEY, JSON.stringify(routineOverrides)); } catch (e) {}
+}
+function currentViewDateStr() {
+  const bd = document.getElementById('backdate-input');
+  return (bd && bd.value) ? bd.value.slice(0, 10) : TODAY_STR;
+}
+function updateSwitchBtnVisibility(sectionKey) {
+  const btn = document.getElementById(sectionKey + '-switch-btn');
+  if (!btn) return;
+  const count = allRoutinesCache.filter(r => r.section_key === sectionKey).length;
+  btn.style.display = count > 1 ? 'flex' : 'none';
+}
+function openRoutineSwitch(sectionKey) {
+  const dateStr = currentViewDateStr();
+  const dow = new Date(dateStr + 'T12:00:00').getDay();
+  const options = allRoutinesCache
+    .filter(r => r.section_key === sectionKey)
+    .sort((a, b) => a.sort_order - b.sort_order);
+  if (!options.length) { showToast('No hay otras rutinas guardadas para esta sección', ''); return; }
+  const currentOverrideId = (routineOverrides[dateStr] || {})[sectionKey] || null;
+  const scheduledTodayIds = new Set(
+    options.filter(r => !r.schedule_days || !r.schedule_days.length || r.schedule_days.includes(dow)).map(r => r.id)
+  );
+  document.getElementById('routine-switch-title').textContent = `🔄 ${fmtSection(sectionKey)} — rutina de hoy`;
+  const resetBtn = currentOverrideId
+    ? `<button class="mini-action-btn on" onclick="clearRoutineOverride('${sectionKey}')">↩️ Volver a la rutina automática de hoy</button>`
+    : '';
+  document.getElementById('routine-switch-body').innerHTML = resetBtn + options.map(r => {
+    const isActive = currentOverrideId ? r.id === currentOverrideId : scheduledTodayIds.has(r.id);
+    return `<div class="rsw-item${isActive ? ' active' : ''}" onclick="setRoutineOverride('${sectionKey}','${r.id}')">
+  <span class="rsw-emoji">${esc(r.emoji || '')}</span>
+  <div class="rsw-info">
+    <div class="rsw-name">${esc(r.name)}</div>
+    <div class="rsw-sched">${esc(fmtDays(r.schedule_days))}</div>
+  </div>
+  ${isActive ? '<span class="rsw-badge-auto">Hoy</span>' : ''}
+</div>`;
+  }).join('');
+  openModal('routine-switch-modal');
+}
+function setRoutineOverride(sectionKey, routineId) {
+  const ds = currentViewDateStr();
+  if (!routineOverrides[ds]) routineOverrides[ds] = {};
+  routineOverrides[ds][sectionKey] = routineId;
+  saveRoutineOverrides();
+  closeModal('routine-switch-modal');
+  loadTodayRoutines(ds);
+  showToast('✅ Rutina cambiada solo para hoy', 'success');
+}
+function clearRoutineOverride(sectionKey) {
+  const ds = currentViewDateStr();
+  if (routineOverrides[ds]) delete routineOverrides[ds][sectionKey];
+  saveRoutineOverrides();
+  closeModal('routine-switch-modal');
+  loadTodayRoutines(ds);
+  showToast('↩️ De vuelta a la rutina automática', '');
+}
+
 // ── TODAY (carga AM/PM/Body/Feet para un día específico) ─────────────────────
 async function loadTodayRoutines(dateStr) {
   const dow = new Date(dateStr + 'T12:00:00').getDay();
   const { data: routines } = await db.from('routines')
     .select('*').eq('active', true).order('sort_order');
+  allRoutinesCache = routines || [];
   const dayRoutines = (routines || []).filter(r =>
     !r.schedule_days || r.schedule_days.includes(dow)
   );
@@ -2662,7 +2776,24 @@ async function loadTodayRoutines(dateStr) {
   const feetRoutines = dayRoutines
     .filter(r => r.section_key === 'feet')
     .sort((a, b) => a.sort_order - b.sort_order);
-  const ids = [...new Set([...Object.values(bySection).map(r => r.id), ...bodyRoutines.map(r => r.id), ...feetRoutines.map(r => r.id)])];
+  // Override manual: si hay una rutina elegida a mano para este día/sección,
+  // reemplaza la selección automática (sin tocar schedule_days en la base).
+  const ov = routineOverrides[dateStr] || {};
+  const byId = id => allRoutinesCache.find(r => r.id === id);
+  let amR = bySection['am'];
+  let pmR = bySection['pm'];
+  let bodyList = bodyRoutines;
+  let feetList = feetRoutines;
+  if (ov.am) { const r = byId(ov.am); if (r) amR = r; }
+  if (ov.pm) { const r = byId(ov.pm); if (r) pmR = r; }
+  if (ov.body) { const r = byId(ov.body); if (r) bodyList = [r]; }
+  if (ov.feet) { const r = byId(ov.feet); if (r) feetList = [r]; }
+  const ids = [...new Set([
+    ...(amR ? [amR.id] : []),
+    ...(pmR ? [pmR.id] : []),
+    ...bodyList.map(r => r.id),
+    ...feetList.map(r => r.id)
+  ])];
   const { data: allSteps } = ids.length
     ? await db.from('routine_steps').select('*').in('routine_id', ids).order('sort_order')
     : { data: [] };
@@ -2695,38 +2826,53 @@ async function loadTodayRoutines(dateStr) {
     hydration.byName.set(label, label);
   });
   // AM
-  const amR = bySection['am'];
+  const amBadge = r => ov.am ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('am')">🔄 ${esc(r.emoji||'')} ${esc(r.name)} · toca para volver</span>` : '';
   if (amR) {
     const steps = stepsByRoutine[amR.id] || [];
     document.getElementById('am-sec-sub').innerHTML =
-      `Face &amp; Neck <span class="sec-progress" id="prog-am-body"></span>`;
+      `Face &amp; Neck <span class="sec-progress" id="prog-am-body"></span>${amBadge(amR)}`;
     renderDbSteps('am-body', steps, null, hydration);
   }
+  updateSwitchBtnVisibility('am');
   // PM
-  const pmR = bySection['pm'];
   if (pmR) {
     const steps = stepsByRoutine[pmR.id] || [];
     const nightType = pmNightType(dow);
     const nightInfo = PM_NIGHT_INFO[nightType];
+    const pmBadge = ov.pm ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('pm')">🔄 ${esc(pmR.emoji||'')} ${esc(pmR.name)} · toca para volver</span>` : '';
     document.getElementById('pm-sec-sub').innerHTML =
-      `Face &amp; Neck ${nightCapsule(nightInfo)} <span class="sec-progress" id="prog-pm-body"></span>`;
+      `Face &amp; Neck ${nightCapsule(nightInfo)} <span class="sec-progress" id="prog-pm-body"></span>${pmBadge}`;
     renderDbSteps('pm-body', steps, nightType, hydration);
   }
-  // Body — todas las rutinas de cuerpo que apliquen ese día, agrupadas.
-  if (bodyRoutines.length) {
-    renderGroupedDbSteps('body-body', bodyRoutines, stepsByRoutine, hydration);
+  updateSwitchBtnVisibility('pm');
+  // Body — todas las rutinas de cuerpo que apliquen ese día, agrupadas (o la
+  // única elegida a mano si hay override).
+  const bodySub = document.getElementById('body-sec-sub');
+  if (bodySub) {
+    const bodyBadge = (ov.body && bodyList[0]) ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('body')">🔄 ${esc(bodyList[0].emoji||'')} ${esc(bodyList[0].name)} · toca para volver</span>` : '';
+    bodySub.innerHTML = `Ducha <span class="sec-progress" id="prog-body-body"></span>${bodyBadge}`;
+  }
+  if (bodyList.length) {
+    renderGroupedDbSteps('body-body', bodyList, stepsByRoutine, hydration);
   } else {
     const c = document.getElementById('body-body');
     if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de cuerpo programada ese día.</div>';
   }
+  updateSwitchBtnVisibility('body');
   // Feet
-  if (feetRoutines.length) {
-    const steps = feetRoutines.flatMap(r => stepsByRoutine[r.id] || []);
+  const feetSub = document.getElementById('feet-sec-sub');
+  if (feetSub) {
+    const feetBadge = (ov.feet && feetList[0]) ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('feet')">🔄 ${esc(feetList[0].emoji||'')} ${esc(feetList[0].name)} · toca para volver</span>` : '';
+    feetSub.innerHTML = `Nightly · ~15 min <span class="sec-progress" id="prog-feet-body"></span>${feetBadge}`;
+  }
+  if (feetList.length) {
+    const steps = feetList.flatMap(r => stepsByRoutine[r.id] || []);
     renderDbSteps('feet-body', steps, null, hydration);
   } else {
     const c = document.getElementById('feet-body');
     if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de pies programada ese día.</div>';
   }
+  updateSwitchBtnVisibility('feet');
 }
 async function init() {
   await loadProducts();
