@@ -401,3 +401,90 @@ body {
 .guide-disclaimer { font-size: 10.5px !important; color: #A09090 !important; font-style: italic; border-top: 1px solid #EDE8E2; padding-top: 8px; margin-top: 12px; }
 /* PREVIEW DE FOTO (overlay de encuadre) */
 .photo-preview-wrap { position: relative; }
+
+/* ============================================================
+   VERSIÓN ESCRITORIO (≥880px)
+   Mismo HTML/JS que la versión móvil — solo se reordena el layout.
+   Sidebar de navegación + header ancho + modales centrados y
+   más grandes + más columnas en grids. Nada de esto se activa
+   por debajo de 880px, así que el celular queda intacto.
+   ============================================================ */
+@media (min-width: 880px) {
+  body { align-items: stretch; padding: 0; }
+  .phone { max-width: none; width: 100%; padding: 0; }
+
+  #app-root {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "sidebar header"
+      "sidebar content";
+    min-height: 100vh;
+  }
+
+  .hdr {
+    grid-area: header;
+    text-align: left;
+    padding: 26px 40px 18px;
+    background: white;
+    border-bottom: 1px solid #EFE9E3;
+  }
+  .hdr h1 { font-size: 21px; }
+  .hdr .date { margin-top: 4px; }
+
+  .tabs {
+    grid-area: sidebar;
+    flex-direction: column;
+    align-items: stretch;
+    background: white;
+    border-radius: 0;
+    padding: 24px 14px;
+    gap: 3px;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    box-shadow: 2px 0 14px rgba(0,0,0,0.04);
+  }
+  .tab-btn { text-align: left; padding: 12px 14px; font-size: 13.5px; }
+  .tab-btn.active { box-shadow: none; background: #FBEAF0; }
+
+  .tab-content { grid-area: content; padding: 28px 40px 60px; max-width: 760px; }
+
+  .logout-btn { top: 26px; right: 34px; }
+
+  /* Más columnas cuando hay espacio */
+  .gallery-grid { grid-template-columns: repeat(5, 1fr); }
+  .streak-grid { grid-template-columns: repeat(4, 1fr); }
+  .reapp-categories { grid-template-columns: repeat(3, 1fr); }
+  .photo-type-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* Modales: diálogo centrado en vez de hoja inferior */
+  .modal-overlay { align-items: center; }
+  .modal-sheet {
+    max-width: 640px;
+    max-height: 88vh;
+    border-radius: 20px;
+    transform: scale(0.96);
+    opacity: 0;
+    transition: transform 0.22s ease, opacity 0.22s ease;
+  }
+  .modal-overlay.open .modal-sheet { transform: scale(1); opacity: 1; }
+  .modal-handle { display: none; }
+  .modal-body { padding: 16px 28px 32px; }
+
+  /* Formulario de "Nuevo producto" en 2 columnas — menos scroll */
+  #add-product-modal .modal-body { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; }
+  #add-product-modal .modal-body > * { grid-column: 1 / -1; }
+  #add-product-modal .modal-body > .prod-field:nth-child(2),
+  #add-product-modal .modal-body > .prod-field:nth-child(3) { grid-column: span 1; }
+
+  .login-card { max-width: 380px; }
+}
+
+@media (min-width: 1200px) {
+  .tab-content { max-width: 880px; }
+  .gallery-grid { grid-template-columns: repeat(6, 1fr); }
+}
