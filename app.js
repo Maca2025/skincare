@@ -895,6 +895,26 @@ async function loadHistory() {
     // el cuadro (showHeatDay), en la caja bajo el grid.
     _heatDayInfo = {};
     const DOW_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    // Día de la semana de cada FILA (0..6). Todas las columnas comparten el
+    // mismo orden porque cada cubeta son 7 días que terminan en el mismo dow.
+    const _firstStart = new Date(weekBuckets[0].start + 'T12:00:00Z');
+    const rowDows = [];
+    for (let i = 0; i < 7; i++) rowDows.push((_firstStart.getUTCDay() + i) % 7);
+    // Etiquetas de FILA (días de la semana), alineadas con las celdas.
+    const dayColHTML = '<div class="heat-daycol">' +
+      rowDows.map(dw => `<div class="heat-daylabel">${DOW_ES[dw]}</div>`).join('') +
+      '</div>';
+    // Etiquetas de COLUMNA (mes): se muestra el mes solo cuando cambia.
+    let _prevMonth = null;
+    const monthRowHTML = '<div class="heat-months">' +
+      weekBuckets.map(b => {
+        const md = new Date(b.end + 'T12:00:00Z');
+        const m = md.getUTCMonth();
+        let lbl = '';
+        if (m !== _prevMonth) { lbl = MONTHS[m].slice(0, 3); _prevMonth = m; }
+        return `<div class="heat-monthlabel">${lbl}</div>`;
+      }).join('') +
+      '</div>';
     const cols = weekBuckets.map(b => {
       const cells = [];
       eachDateStr(b.start, b.end, (ds, dow) => {
@@ -911,7 +931,8 @@ async function loadHistory() {
     }).join('');
     return `<div class="heat-card">
   <div class="heat-title">🗓️ Constancia diaria · últimas 12 semanas</div>
-  <div class="heat-grid">${cols}</div>
+  <div class="heat-monthsrow"><div class="heat-daycol-spacer"></div>${monthRowHTML}</div>
+  <div class="heat-body">${dayColHTML}<div class="heat-grid">${cols}</div></div>
   <div class="heat-detail" id="heat-day-detail" style="display:none"></div>
   <div class="heat-legend">menos <span class="box" style="background:#F0ECE7"></span><span class="box" style="background:rgba(40,120,72,0.35)"></span><span class="box" style="background:rgba(40,120,72,0.65)"></span><span class="box" style="background:rgba(40,120,72,1)"></span> más · toca un día para ver el detalle</div>
 </div>`;
