@@ -687,6 +687,14 @@ async function loadHistory() {
   const IDEAL_SPF_APPS = 5;            // techo: día de playa / exposición máxima
   const IDEAL_SPF_BY_SUN = { interior: 2, normal: 3, alta: 4, playa: 5 };
   const IDEAL_SPF_DEFAULT = 3;         // sin nota ese día: se asume día normal
+  // CUERPO: ideal mucho más bajo que cara. La piel corporal va cubierta por ropa
+  // buena parte del tiempo y nadie reaplica protector corporal 5 veces al día.
+  // `interior` vale 1 y no 0 porque traes brazos y escote descubiertos a diario
+  // en Guadalajara (altitud + UV alto todo el año): incluso un día bajo techo
+  // acumula UVA incidental, que es justo lo que pigmenta los brazos.
+  // Si prefieres que los días de interior NO se evalúen, pon 0 aquí.
+  const IDEAL_BODY_SPF_BY_SUN = { interior: 1, normal: 1, alta: 2, playa: 4 };
+  const IDEAL_BODY_SPF_DEFAULT = 1;
   // Estado de piel y exposición solar por fecha (se usan más abajo también en
   // el heatmap y en la correlación).
   const skinByDate = {};
@@ -696,6 +704,10 @@ async function loadHistory() {
     if (r.sun_exposure) sunByDate[r.note_date] = r.sun_exposure;
   });
   const idealSpfAppsFor = ds => IDEAL_SPF_BY_SUN[sunByDate[ds]] || IDEAL_SPF_DEFAULT;
+  const idealBodySpfAppsFor = ds => {
+    const v = IDEAL_BODY_SPF_BY_SUN[sunByDate[ds]];
+    return v == null ? IDEAL_BODY_SPF_DEFAULT : v;
+  };
   const spfScoreById = {};
   allProducts.filter(p => p.category !== '💋 Labios' && hasRole(p, 'spf_facial'))
     .forEach(p => { spfScoreById[p.id] = spfScoreOf(p); });
@@ -756,8 +768,12 @@ async function loadHistory() {
       // Protección: los puntos se normalizan al ideal del día según exposición
       // solar. Así el techo diario sigue siendo fijo (500 = 5 aplicaciones) pero
       // cumplir 2 en un día de interior ya vale el 100% de ese día.
-      if (ax === 'proteccion' || ax === 'cuerpo_proteccion') {
+      if (ax === 'proteccion') {
         v = v * (IDEAL_SPF_APPS / idealSpfAppsFor(ds));
+      } else if (ax === 'cuerpo_proteccion') {
+        const ideal = idealBodySpfAppsFor(ds);
+        if (ideal <= 0) return; // día no evaluable (ej. interior en 0)
+        v = v * (IDEAL_SPF_APPS / ideal);
       }
       dosePtsByDate[ds][ax] = (dosePtsByDate[ds][ax] || 0) + v;
     });
@@ -807,9 +823,26 @@ async function loadHistory() {
     if (o.overDays > 0) {
       return `Vas bien de dosis, pero tuviste ${o.overDays} día${o.overDays === 1 ? '' : 's'} de más con retinoide o ácido esta semana. Más no acelera resultados y sí irrita — espaciarlos rinde igual.`;
     }
-    if (o.pct >= 90) return `Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.`;
-    if (key === 'proteccion' || key === 'cuerpo_proteccion') {
+    // Mensajes distintos por eje: si las 5 barras dicen lo mismo, se dejan de leer.
+    if (o.pct >= 90) {
+      const ALTO = {
+        aclarado: 'Dosis despigmentante completa. Aquí el limitante ya no eres tú sino el tiempo: los resultados en manchas tardan 3–4 meses de uso sostenido en verse.',
+        textura: 'Estás en el techo útil de renovación. Subir la frecuencia ya no acelera nada y sí arriesga irritación — mantener este ritmo es lo correcto.',
+        barrera: 'Barrera bien sostenida. Esto no es cosmético: una barrera sana es lo que te permite tolerar la tretinoína y los ácidos sin descamarte.',
+        firmeza: 'Buen estímulo de colágeno. La síntesis es lenta por biología — los cambios en firmeza se aprecian hacia los 4–6 meses.',
+        cuerpo_textura: 'Dosis completa de exfoliación corporal. Más no mejora, y en cuerpo la piel también se irrita.',
+        cuerpo_firmeza: 'Buen estímulo de firmeza corporal. Sostenerlo es lo que cuenta.',
+        cuerpo_barrera: 'Hidratación corporal bien cubierta.',
+        pies: 'Dosis queratolítica completa. Si ya no ves grietas, puedes bajar a mantenimiento.',
+        cabello: 'Uso constante. El folículo responde lento: dale meses.'
+      };
+      return ALTO[key] || 'Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.';
+    }
+    if (key === 'proteccion') {
       return `El ideal se ajusta a tu exposición del día: ${IDEAL_SPF_BY_SUN.interior} aplicaciones en interior, ${IDEAL_SPF_BY_SUN.normal} en un día normal, ${IDEAL_SPF_BY_SUN.playa} en playa. Reaplicar es lo que más sube esta barra — mucho más que cambiar de producto: a tu ritmo actual, un protector 15 puntos mejor te daría +6, y dos aplicaciones extra te dan +34.`;
+    }
+    if (key === 'cuerpo_proteccion') {
+      return `Brazos y escote acumulan UVA aunque no tomes sol. El ideal aquí es bajo (${IDEAL_BODY_SPF_BY_SUN.interior} aplicación en día normal, ${IDEAL_BODY_SPF_BY_SUN.playa} en playa): con ponerte protector corporal en la mañana casi cubres el día.`;
     }
     if (o.pct >= 60) return `Buen nivel. Para cerrar la brecha, subir la frecuencia rinde más que agregar productos nuevos.`;
     if (o.pct >= 30) return `Estímulo parcial: los productos que tienes alcanzan, falta constancia en los días.`;
