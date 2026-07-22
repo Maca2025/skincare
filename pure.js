@@ -86,13 +86,42 @@ function adherenceFromDoneDates(done, scheduleDays, wstart, ends) {
 // Pesos calibrados para MANCHAS SOLARES (lentigos): los sunspots son daño UV
 // directo, así que la cobertura UVA profunda y el PA++++ pesan más, y el
 // tinte (luz visible) pesa menos que cuando el objetivo era melasma.
+// ── PROTECCIÓN UVA ───────────────────────────────────────────────────────────
+// NO es una suma de etiquetas: tener más tags no significa proteger más. La
+// puntuación se arma de tres componentes FÍSICAMENTE INDEPENDIENTES.
+//
+// 1) MAGNITUD — cuánta UVA se bloquea. Los sistemas asiático y europeo miden lo
+//    mismo con métodos distintos, así que son EQUIVALENTES y jamás se suman:
+//      · PA++++  (ISO 24442, PPD in vivo)  = PPD ≥ 16
+//      · Sello UVA europeo (ISO 24443)     = UVA-PF ≥ SPF/3 → en SPF50 ≥ 16.7
+//    Por eso un SPF50 europeo con el sello UVA protege igual que un PA++++
+//    aunque no lleve etiqueta PA: la etiqueta refleja el mercado, no la fórmula.
+//    Antes, un SPF50 europeo sin tag PA sacaba 25/100 — se subestimaba solo por
+//    venderse bajo otra normativa.
+//
+// 2) ESPECTRO — hasta qué longitud de onda llega. El mínimo de amplio espectro
+//    es una longitud de onda crítica ≥370 nm. Ir más allá SÍ es un beneficio
+//    extra: UVA-400 / Mexoryl 400 (MCE, pico 385 nm) cierra el hueco 380–400 nm
+//    que los demás filtros dejan abierto y reduce la pigmentación por UVA-1.
+//
+// 3) LUZ VISIBLE — los óxidos de hierro de los tintados. Superan a un SPF50+ sin
+//    tinte para prevenir pigmentación por luz visible.
+//
+// Tags de MAGNITUD (excluyentes): pa4 | pa3 | pa2 | euuva (sello UVA en SPF50).
+// Tags de ESPECTRO (excluyentes):  uva400 | uvalong.
+// Tag de VISIBLE: tinted.
 function spfScoreOf(p) {
-  let score = 25; // base por estar registrado como SPF facial
-  tagsOf(p).forEach(t => {
-    if (t.cls === 'pa4') score += 30;
-    if (t.cls === 'uva400') score += 35;
-    else if (t.cls === 'uvalong') score += 20;
-    if (t.cls === 'tinted') score += 10;
-  });
-  return Math.min(100, score);
+  const tags = tagsOf(p);
+  const has = cls => tags.some(t => t.cls === cls);
+  // 1) Magnitud UVA (0–55): se toma el MEJOR dato disponible, nunca se acumula.
+  let mag;
+  if (has('pa4') || has('euuva')) mag = 55;
+  else if (has('pa3')) mag = 40;
+  else if (has('pa2')) mag = 25;
+  else mag = 20; // SPF sin dato UVA: se asume solo el mínimo de amplio espectro
+  // 2) Espectro más allá del mínimo de 370 nm (0–30).
+  const esp = has('uva400') ? 30 : (has('uvalong') ? 15 : 0);
+  // 3) Luz visible por óxidos de hierro (0–15).
+  const vis = has('tinted') ? 15 : 0;
+  return Math.min(100, mag + esp + vis);
 }
