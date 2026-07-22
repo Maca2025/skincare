@@ -895,29 +895,42 @@ async function loadHistory() {
     // el cuadro (showHeatDay), en la caja bajo el grid.
     _heatDayInfo = {};
     const DOW_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    // Día de la semana de cada FILA (0..6). Todas las columnas comparten el
-    // mismo orden porque cada cubeta son 7 días que terminan en el mismo dow.
-    const _firstStart = new Date(weekBuckets[0].start + 'T12:00:00Z');
-    const rowDows = [];
-    for (let i = 0; i < 7; i++) rowDows.push((_firstStart.getUTCDay() + i) % 7);
-    // Etiquetas de FILA (días de la semana), alineadas con las celdas.
+    // Columnas propias del heatmap: semanas de CALENDARIO lunes→domingo, para
+    // que la primera fila siempre sea lunes. (No se usa `weekBuckets`, que son
+    // ventanas móviles de 7 días y harían rotar las filas según el día de hoy.)
+    const HEAT_WEEKS = 12;
+    const _fUTC = d => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    const _endD = new Date(ENDS + 'T12:00:00Z');
+    // Lunes de la semana que contiene ENDS (getUTCDay: 0=Dom → retroceder 6).
+    const _lastMon = new Date(_endD);
+    _lastMon.setUTCDate(_lastMon.getUTCDate() - ((_endD.getUTCDay() + 6) % 7));
+    const heatCols = [];
+    for (let k = HEAT_WEEKS - 1; k >= 0; k--) {
+      const s = new Date(_lastMon); s.setUTCDate(s.getUTCDate() - k * 7);
+      const e = new Date(s); e.setUTCDate(e.getUTCDate() + 6);
+      heatCols.push({ start: _fUTC(s), end: _fUTC(e) });
+    }
+    // Filas fijas: lunes → domingo.
+    const rowDows = [1, 2, 3, 4, 5, 6, 0];
     const dayColHTML = '<div class="heat-daycol">' +
       rowDows.map(dw => `<div class="heat-daylabel">${DOW_ES[dw]}</div>`).join('') +
       '</div>';
     // Etiquetas de COLUMNA (mes): se muestra el mes solo cuando cambia.
     let _prevMonth = null;
     const monthRowHTML = '<div class="heat-months">' +
-      weekBuckets.map(b => {
-        const md = new Date(b.end + 'T12:00:00Z');
-        const m = md.getUTCMonth();
+      heatCols.map(b => {
+        const m = new Date(b.start + 'T12:00:00Z').getUTCMonth();
         let lbl = '';
         if (m !== _prevMonth) { lbl = MONTHS[m].slice(0, 3); _prevMonth = m; }
         return `<div class="heat-monthlabel">${lbl}</div>`;
       }).join('') +
       '</div>';
-    const cols = weekBuckets.map(b => {
+    const cols = heatCols.map(b => {
       const cells = [];
       eachDateStr(b.start, b.end, (ds, dow) => {
+        // Días futuros de la semana en curso: hueco invisible que mantiene la
+        // rejilla alineada sin fingir que hay dato.
+        if (ds > ENDS) { cells.push('<div class="heat-cell heat-cell-void"></div>'); return; }
         const p = dailyRoutinePct[ds];
         let bg = '#F0ECE7';
         if (p != null) bg = `rgba(40,120,72,${(0.15 + p * 0.85).toFixed(2)})`;
@@ -1711,6 +1724,10 @@ function openGenericPickerByCat(stepId, cat) {
 // los que quieras cada día y se registra cada uno por separado). Para volver
 // multi otra categoría, solo agrégala aquí.
 const MULTI_PICK_CATEGORIES = ['💦 Toners', '✨ Serums AM'];
+// Hora local que separa AM de PM al deducir a qué sección pertenece un registro
+// que NO trae routine_step_id (reaplicaciones y registros sueltos). Evita que
+// un toner de la mañana marque el paso "Toners" de la rutina de noche.
+const AM_PM_CUTOFF_HOUR = 15;
 let multiPickSelected = new Set();
 function openMultiPickerByCat(stepId, cat) {
   currentPickerStepId = stepId;
@@ -2617,7 +2634,7 @@ function renderReappCategories() {
     : '';
   el.innerHTML = group('Cara', faceCats) + group('Cuerpo', bodyCats);
 }
-function dbStepHTML(s, index, todayHydration) {
+function dbStepHTML(s, index, todayHydration, sectionKey) {
   const n  = index + 1;
   const id = 'sd_' + Math.random().toString(36).slice(2, 9);
   const _prod = stepProductOf(s) || allProducts.find(p => p.name === s.name);
@@ -2631,15 +2648,18 @@ function dbStepHTML(s, index, todayHydration) {
   // Prioridades 2/3/4: heurísticos viejos, solo para historial previo.
   let appliedName = null;
   if (todayHydration) {
+    // Los fallbacks van prefijados por sección para no invadir otra rutina del
+    // mismo día (ver construcción de `hydration`).
+    const sec = (sectionKey || 'am') + '|';
     if (todayHydration.byStepId && todayHydration.byStepId.has(s.id)) {
       appliedName = todayHydration.byStepId.get(s.id);
-    } else if (s.product_id && todayHydration.byProductId.has(s.product_id)) {
-      appliedName = todayHydration.byProductId.get(s.product_id);
-    } else if (s.picker_category && todayHydration.byCategory.has(s.picker_category)) {
-      appliedName = todayHydration.byCategory.get(s.picker_category);
+    } else if (s.product_id && todayHydration.byProductId.has(sec + s.product_id)) {
+      appliedName = todayHydration.byProductId.get(sec + s.product_id);
+    } else if (s.picker_category && todayHydration.byCategory.has(sec + s.picker_category)) {
+      appliedName = todayHydration.byCategory.get(sec + s.picker_category);
     } else if (!s.picker_category && !s.product_id) {
       const expected = `${dEmoji} ${dName}`.trim();
-      if (todayHydration.byName.has(expected)) appliedName = todayHydration.byName.get(expected);
+      if (todayHydration.byName.has(sec + expected)) appliedName = todayHydration.byName.get(sec + expected);
     }
   }
   const doneCls = appliedName ? ' done' : '';
@@ -2677,7 +2697,7 @@ function dbStepHTML(s, index, todayHydration) {
   <div class="step-chevron" onclick="toggleStep('step_${id}','${id}')">›</div>
 </div>`;
 }
-function renderDbSteps(bodyId, steps, nightType, todayHydration) {
+function renderDbSteps(bodyId, steps, nightType, todayHydration, sectionKey) {
   const c = document.getElementById(bodyId);
   const hint = c.querySelector('.tap-hint');
   let badge = '';
@@ -2687,17 +2707,17 @@ function renderDbSteps(bodyId, steps, nightType, todayHydration) {
       <span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;background:${info.bg};color:${info.color}">${info.label}</span>
     </div>`;
   }
-  c.innerHTML = (hint ? hint.outerHTML : '') + badge + steps.map((s, i) => dbStepHTML(s, i, todayHydration)).join('');
+  c.innerHTML = (hint ? hint.outerHTML : '') + badge + steps.map((s, i) => dbStepHTML(s, i, todayHydration, sectionKey)).join('');
   updateProgress(bodyId);
 }
-function renderGroupedDbSteps(bodyId, routines, stepsByRoutine, todayHydration) {
+function renderGroupedDbSteps(bodyId, routines, stepsByRoutine, todayHydration, sectionKey) {
   const c = document.getElementById(bodyId);
   const hint = c.querySelector('.tap-hint');
   const groupsHTML = routines.map(r => {
     const steps = stepsByRoutine[r.id] || [];
     if (!steps.length) return '';
     const title = `<div class="reapp-history-title">${esc(r.emoji || '')} ${esc(r.name)}</div>`;
-    return title + steps.map((s, i) => dbStepHTML(s, i, todayHydration)).join('');
+    return title + steps.map((s, i) => dbStepHTML(s, i, todayHydration, sectionKey)).join('');
   }).join('');
   c.innerHTML = (hint ? hint.outerHTML : '') + groupsHTML;
   updateProgress(bodyId);
@@ -2832,6 +2852,10 @@ async function loadTodayRoutines(dateStr) {
   const _prodByIdForHydration = {};
   allProducts.forEach(p => { _prodByIdForHydration[p.id] = p; });
   const hydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
+  // Los fallbacks (producto/categoría/nombre) se guardan SEGMENTADOS POR SECCIÓN.
+  // Si no lo estuvieran, un toner aplicado en la mañana (sin routine_step_id)
+  // marcaría también el paso "Toners" de la rutina de NOCHE, porque ambos pasos
+  // comparten picker_category. La sección se deduce de la hora del registro.
   (appsForHydration || []).forEach(r => {
     const label = r.product_name;
     if (r.routine_step_id) {
@@ -2841,10 +2865,16 @@ async function loadTodayRoutines(dateStr) {
       hydration.byStepId.set(r.routine_step_id, prev ? prev + ' · ' + label : label);
       return;
     }
-    if (r.product_id) hydration.byProductId.set(r.product_id, label);
+    // Cara: solo la sección que corresponde a la hora. Cuerpo/pies siempre,
+    // porque sus categorías no chocan con las de cara (no hay ambigüedad).
+    const _h = new Date(r.applied_at).getHours();
+    const sections = [_h < AM_PM_CUTOFF_HOUR ? 'am' : 'pm', 'body', 'feet'];
     const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
-    if (prod && prod.category) hydration.byCategory.set(prod.category, label);
-    hydration.byName.set(label, label);
+    sections.forEach(sec => {
+      if (r.product_id) hydration.byProductId.set(sec + '|' + r.product_id, label);
+      if (prod && prod.category) hydration.byCategory.set(sec + '|' + prod.category, label);
+      hydration.byName.set(sec + '|' + label, label);
+    });
   });
   // AM
   const amBadge = r => ov.am ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('am')">🔄 ${esc(r.emoji||'')} ${esc(r.name)} · toca para volver</span>` : '';
@@ -2852,7 +2882,7 @@ async function loadTodayRoutines(dateStr) {
     const steps = stepsByRoutine[amR.id] || [];
     document.getElementById('am-sec-sub').innerHTML =
       `Face &amp; Neck <span class="sec-progress" id="prog-am-body"></span>${amBadge(amR)}`;
-    renderDbSteps('am-body', steps, null, hydration);
+    renderDbSteps('am-body', steps, null, hydration, 'am');
   }
   updateSwitchBtnVisibility('am');
   // PM
@@ -2867,7 +2897,7 @@ async function loadTodayRoutines(dateStr) {
     const pmBadge = ov.pm ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('pm')">🔄 ${esc(pmR.emoji||'')} ${esc(pmR.name)} · toca para volver</span>` : '';
     document.getElementById('pm-sec-sub').innerHTML =
       `Face &amp; Neck ${nightInfo ? nightCapsule(nightInfo) : ''} <span class="sec-progress" id="prog-pm-body"></span>${pmBadge}`;
-    renderDbSteps('pm-body', steps, nightType, hydration);
+    renderDbSteps('pm-body', steps, nightType, hydration, 'pm');
   }
   updateSwitchBtnVisibility('pm');
   // Body — todas las rutinas de cuerpo que apliquen ese día, agrupadas (o la
@@ -2878,7 +2908,7 @@ async function loadTodayRoutines(dateStr) {
     bodySub.innerHTML = `Ducha <span class="sec-progress" id="prog-body-body"></span>${bodyBadge}`;
   }
   if (bodyList.length) {
-    renderGroupedDbSteps('body-body', bodyList, stepsByRoutine, hydration);
+    renderGroupedDbSteps('body-body', bodyList, stepsByRoutine, hydration, 'body');
   } else {
     const c = document.getElementById('body-body');
     if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de cuerpo programada ese día.</div>';
@@ -2892,7 +2922,7 @@ async function loadTodayRoutines(dateStr) {
   }
   if (feetList.length) {
     const steps = feetList.flatMap(r => stepsByRoutine[r.id] || []);
-    renderDbSteps('feet-body', steps, null, hydration);
+    renderDbSteps('feet-body', steps, null, hydration, 'feet');
   } else {
     const c = document.getElementById('feet-body');
     if (c) c.innerHTML = '<div class="tap-hint">Sin rutina de pies programada ese día.</div>';

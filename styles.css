@@ -373,6 +373,7 @@ body {
 .heat-monthlabel { flex: 1; font-size: 8.5px; font-weight: 600; color: #A09090; text-align: left; white-space: nowrap; overflow: visible; }
 .heat-cell { aspect-ratio: 1; border-radius: 3px; background: #F0ECE7; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .heat-cell.sel { outline: 2px solid #C4818A; outline-offset: 1px; }
+.heat-cell-void { background: transparent; cursor: default; }
 .heat-detail { font-size: 11.5px; color: #4A3E3A; background: #FDFAF8; border-radius: 8px; padding: 9px 11px; margin-top: 10px; border-left: 3px solid #C4818A; line-height: 1.6; }
 .heat-legend { display: flex; align-items: center; gap: 4px; font-size: 9.5px; color: #A09090; margin-top: 8px; justify-content: flex-end; }
 .heat-legend .box { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
