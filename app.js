@@ -680,7 +680,22 @@ async function loadHistory() {
     return { pct: Math.min(100, pct), detail: results };
   };
   // ── PROTECCIÓN SPF: puntuación por calidad (spfScoreOf vive en pure.js) ────
-  const IDEAL_SPF_APPS = 5; // 1 rutina AM + 4 reaplicaciones
+  // El ideal de aplicaciones se MODULA por la exposición solar registrada ese
+  // día: exigir 5 reaplicaciones en un día de oficina no tiene sentido clínico
+  // y castiga sin motivo. Reaplicar cada 2 h es el estándar para exposición
+  // real, no para estar bajo techo.
+  const IDEAL_SPF_APPS = 5;            // techo: día de playa / exposición máxima
+  const IDEAL_SPF_BY_SUN = { interior: 2, normal: 3, alta: 4, playa: 5 };
+  const IDEAL_SPF_DEFAULT = 3;         // sin nota ese día: se asume día normal
+  // Estado de piel y exposición solar por fecha (se usan más abajo también en
+  // el heatmap y en la correlación).
+  const skinByDate = {};
+  const sunByDate = {};
+  ((notesRes && notesRes.data) || []).forEach(r => {
+    if (r.skin_state) skinByDate[r.note_date] = r.skin_state;
+    if (r.sun_exposure) sunByDate[r.note_date] = r.sun_exposure;
+  });
+  const idealSpfAppsFor = ds => IDEAL_SPF_BY_SUN[sunByDate[ds]] || IDEAL_SPF_DEFAULT;
   const spfScoreById = {};
   allProducts.filter(p => p.category !== '💋 Labios' && hasRole(p, 'spf_facial'))
     .forEach(p => { spfScoreById[p.id] = spfScoreOf(p); });
@@ -707,7 +722,7 @@ async function loadHistory() {
         if (pts > 0) daysWithSpf++;
         totalPts += pts;
         totalApps += spfAppsByDate[ds] || 0;
-        sumPct += Math.min(100, Math.round(pts / (IDEAL_SPF_APPS * 100) * 100));
+        sumPct += Math.min(100, Math.round(pts / (idealSpfAppsFor(ds) * 100) * 100));
       });
       if (elig > 0) {
         prot = {
@@ -724,6 +739,82 @@ async function loadHistory() {
   const barr    = roleAdherence('barrera');
   const rege    = roleAdherence('regeneracion_celular');
   const textura = roleAdherence('textura_poros');
+  // ── DOSIS POR EJE DE RESULTADO (Fase B) ────────────────────────────────────
+  // Mide ESTÍMULO ENTREGADO, no obediencia. Una aplicación cuenta completa
+  // aunque no venga de un paso de rutina: es justo lo que la adherencia no veía.
+  // La matemática (techo diario + ventana semanal) vive en pure.js.
+  const dosePtsByDate = {};   // ds → { eje: puntos }
+  const irritantByDate = {};  // ds → 1 si hubo retinoide o ácido exfoliante
+  allAppsWithProd.forEach(({ r, rp }) => {
+    const dose = rp.id ? PRODUCT_DOSE[rp.id] : null;
+    if (!dose) return;
+    const ds = localDateOfISO(r.applied_at);
+    if (!dosePtsByDate[ds]) dosePtsByDate[ds] = {};
+    Object.keys(dose).forEach(ax => {
+      // null = protección: se toma spfScoreOf para no duplicar la calibración UVA.
+      let v = dose[ax] == null ? spfScoreOf(rp) : dose[ax];
+      // Protección: los puntos se normalizan al ideal del día según exposición
+      // solar. Así el techo diario sigue siendo fijo (500 = 5 aplicaciones) pero
+      // cumplir 2 en un día de interior ya vale el 100% de ese día.
+      if (ax === 'proteccion' || ax === 'cuerpo_proteccion') {
+        v = v * (IDEAL_SPF_APPS / idealSpfAppsFor(ds));
+      }
+      dosePtsByDate[ds][ax] = (dosePtsByDate[ds][ax] || 0) + v;
+    });
+    if (typeof IRRITANTES !== 'undefined' && IRRITANTES.has(rp.id)) irritantByDate[ds] = 1;
+  });
+  // Semanas calendario lunes→domingo (mismas columnas que el heatmap).
+  const doseWeeks = [];
+  {
+    const fw = d => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    const e0 = new Date(ENDS + 'T12:00:00Z');
+    const mon = new Date(e0); mon.setUTCDate(mon.getUTCDate() - ((e0.getUTCDay() + 6) % 7));
+    for (let k = 11; k >= 0; k--) {
+      const s = new Date(mon); s.setUTCDate(s.getUTCDate() - k * 7);
+      const days = [];
+      for (let i = 0; i < 7; i++) { const d = new Date(s); d.setUTCDate(d.getUTCDate() + i); days.push(fw(d)); }
+      doseWeeks.push(days.filter(ds => ds <= ENDS));
+    }
+  }
+  // Un eje solo se evalúa desde la primera semana con registro suyo: no se
+  // castiga el tiempo anterior a empezar a usar ese tipo de producto.
+  const doseAxis = (axKey) => {
+    const cfg = DOSE_AXES[axKey];
+    if (!cfg) return null;
+    const weekly = doseWeeks.map(days => {
+      if (!days.length) return null;
+      const pts = days.map(ds => (dosePtsByDate[ds] || {})[axKey] || 0);
+      if (!pts.some(p => p > 0)) return null;
+      // La semana en curso está incompleta: se prorratea el ideal por los días
+      // transcurridos. Si no, el lunes parecería un desplome del 90% al 10%.
+      const idealDias = cfg.diasIdeales * (days.length / 7);
+      return doseWeekPct(pts, cfg.techoDiario, idealDias);
+    });
+    const firstIdx = weekly.findIndex(w => w != null);
+    if (firstIdx === -1) return null;
+    const vivas = weekly.slice(firstIdx).map(w => w == null ? 0 : w);
+    const pct = Math.round(vivas.reduce((a, b) => a + b, 0) / vivas.length);
+    const ultimaSemana = doseWeeks[doseWeeks.length - 1] || [];
+    const overDays = overExposureDays(ultimaSemana.map(ds => irritantByDate[ds] || 0), cfg.diasIdeales);
+    return { pct, weekly, overDays, cfg };
+  };
+  const EJES_CARA = ['proteccion', 'aclarado', 'textura', 'barrera', 'firmeza'];
+  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello'];
+  const dosisCara = EJES_CARA.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
+  const dosisOtros = EJES_OTROS.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
+  // Se define aquí (y no junto al render) porque buildFocusHTML lo usa antes.
+  const doseDiag = (key, o) => {
+    if (o.overDays > 0) {
+      return `Vas bien de dosis, pero tuviste ${o.overDays} día${o.overDays === 1 ? '' : 's'} de más con retinoide o ácido esta semana. Más no acelera resultados y sí irrita — espaciarlos rinde igual.`;
+    }
+    if (o.pct >= 90) return `Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.`;
+    if (key === 'proteccion' || key === 'cuerpo_proteccion') {
+      return `El ideal se ajusta a tu exposición del día: ${IDEAL_SPF_BY_SUN.interior} aplicaciones en interior, ${IDEAL_SPF_BY_SUN.normal} en un día normal, ${IDEAL_SPF_BY_SUN.playa} en playa. Reaplicar es lo que más sube esta barra — mucho más que cambiar de producto: a tu ritmo actual, un protector 15 puntos mejor te daría +6, y dos aplicaciones extra te dan +34.`;
+    }
+    if (o.pct >= 60) return `Buen nivel. Para cerrar la brecha, subir la frecuencia rinde más que agregar productos nuevos.`;
+    if (o.pct >= 30) return `Estímulo parcial: los productos que tienes alcanzan, falta constancia en los días.`;
+    return `Casi sin estímulo en este eje. Revisa si tienes producto en Stock que lo cubra.`;
+  };
   // ── TENDENCIA SEMANAL: 12 cubetas de 7 días terminando ayer ────────────────
   // Las barras grandes son el promedio de 90 días (una foto); estas mini
   // barras dicen si vas mejorando o empeorando semana a semana.
@@ -749,7 +840,7 @@ async function loadHistory() {
     let elig = 0, sum = 0;
     eachDateStr(first > b.start ? first : b.start, b.end, ds => {
       elig++;
-      sum += Math.min(100, Math.round((spfPointsByDate[ds] || 0) / (IDEAL_SPF_APPS * 100) * 100));
+      sum += Math.min(100, Math.round((spfPointsByDate[ds] || 0) / (idealSpfAppsFor(ds) * 100) * 100));
     });
     return elig ? Math.round(sum / elig) : null;
   });
@@ -867,6 +958,29 @@ async function loadHistory() {
     { label: 'Textura / Poros',         icon: '🔍', key: 'textura_poros', o: textura }
   ];
   const buildFocusHTML = () => {
+    // Prioridad: el eje de DOSIS más bajo. La adherencia solo se usa como
+    // respaldo si todavía no hay datos de dosis — señala el estímulo que le
+    // falta a la piel, no el paso de rutina que se saltó.
+    if (dosisCara.length) {
+      const sobre = dosisCara.find(x => x.o.overDays > 0);
+      if (sobre) {
+        return `<div class="focus-card">
+  <div class="focus-card-title">⚠️ Cuidado: ${esc(sobre.o.cfg.label)}</div>
+  <div class="focus-card-text">${doseDiag(sobre.key, sobre.o)}</div>
+</div>`;
+      }
+      const peor = dosisCara.reduce((a, b) => (b.o.pct < a.o.pct ? b : a));
+      if (peor.o.pct >= 90) {
+        return `<div class="focus-card good">
+  <div class="focus-card-title">✅ Vas muy bien</div>
+  <div class="focus-card-text">Estás entregando prácticamente todo el estímulo útil en cada eje. No hay nada que reforzar ahora mismo — sigue así.</div>
+</div>`;
+      }
+      return `<div class="focus-card">
+  <div class="focus-card-title">${peor.o.cfg.icon} Enfócate en: ${esc(peor.o.cfg.label)}</div>
+  <div class="focus-card-text">${doseDiag(peor.key, peor.o)}</div>
+</div>`;
+    }
     const withData = focusRoles.filter(r => r.o && r.o.pct != null);
     if (!withData.length) return '';
     const worst = withData.reduce((a, b) => (b.o.pct < a.o.pct ? b : a));
@@ -884,12 +998,8 @@ async function loadHistory() {
   };
   const focusHTML = buildFocusHTML();
   // ── HEATMAP DE CONSTANCIA (12 semanas, estilo GitHub) ──────────────────────
-  const skinByDate = {};
-  const sunByDate = {};
-  ((notesRes && notesRes.data) || []).forEach(r => {
-    if (r.skin_state) skinByDate[r.note_date] = r.skin_state;
-    if (r.sun_exposure) sunByDate[r.note_date] = r.sun_exposure;
-  });
+  // skinByDate / sunByDate se construyen arriba, junto al cálculo de SPF, que
+  // los necesita para modular el ideal diario por exposición solar.
   const heatHTML = (() => {
     // El title solo sirve con mouse; en móvil el detalle se muestra al TOCAR
     // el cuadro (showHeatDay), en la caja bajo el grid.
@@ -1017,6 +1127,27 @@ async function loadHistory() {
   <div class="adh-sub">${sub}</div>
 </div>`;
   };
+  // ── RENDER: ESTÍMULO ENTREGADO (dosis) ─────────────────────────────────────
+  const doseRow = ({ key, o }) => {
+    const c = o.cfg;
+    const spark = sparkHTML(o.weekly, c.color);
+    const warn = o.overDays > 0 ? ` <span class="dose-warn">⚠️ ${o.overDays}d de más</span>` : '';
+    return `<div class="adh-row">
+  <div class="adh-top"><span class="adh-name"><span class="adh-ic">${c.icon}</span>${esc(c.label)}${warn}</span><span class="adh-val" style="color:${c.color}">${o.pct}%</span></div>
+  <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${c.color}"></div></div>
+  <div class="adh-sub">${doseDiag(key, o)}</div>
+  ${spark || ''}
+</div>`;
+  };
+  const dosisHTML = dosisCara.length ? `
+<div class="adh-label">💪 Estímulo entregado · últimas 12 semanas</div>
+<div class="adh-card">
+  <div class="dose-intro">Mide la <strong>dosis de activos que tu piel recibió</strong>, no si seguiste una rutina. Una aplicación cuenta completa aunque la hagas fuera de rutina. Pasarse del ideal no baja el número — se avisa aparte.</div>
+  ${dosisCara.map(doseRow).join('')}
+</div>` : '';
+  const dosisOtrosHTML = dosisOtros.length ? `
+<div class="adh-label">🧴 Cuerpo, pies y cabello</div>
+<div class="adh-card">${dosisOtros.map(doseRow).join('')}</div>` : '';
   const ROUTINE_COLOR = '#6B7FA0';
   const routineHTML = `
 <div class="adh-label">Rutina completa · últimos 90 días</div>
@@ -1043,19 +1174,25 @@ ${streaksHTML}
 <button class="report-btn" onclick="openModal('guide-modal')">📖 Guía: manchas solares y procedimientos</button>
 ${focusHTML}
 ${heatHTML}
+${dosisHTML}
+${dosisOtrosHTML}
 ${corrHTML}
-<div class="adh-label">Adherencia · últimos 90 días</div>
-<div class="adh-card">
-  ${adhRow(prot, '#C4818A', '🛡️', 'Protección solar', 'spf_facial', sparkHTML(spfWeekly(), '#C4818A'))}
-  ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'despigmentacion', sparkHTML(roleWeekly('despigmentacion'), '#C47A00'))}
-  ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'barrera', sparkHTML(roleWeekly('barrera'), '#3A8A7A'))}
-  ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular', 'regeneracion_celular', sparkHTML(roleWeekly('regeneracion_celular'), '#7E6BB0'))}
-</div>
-<div class="adh-label">Textura de piel · últimos 90 días</div>
-<div class="adh-card">
-  ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros', sparkHTML(roleWeekly('textura_poros'), '#5B8FA8'))}
-</div>
-${routineHTML}`;
+<details class="adh-secondary">
+  <summary class="adh-secondary-sum">📋 Adherencia a rutinas · vista secundaria</summary>
+  <div class="adh-secondary-note">Esto mide si <em>seguiste el plan</em>, no cuánto estímulo recibió tu piel. Se conserva para revisar hábitos, pero el número que importa para resultados es el de arriba.</div>
+  <div class="adh-label">Adherencia · últimos 90 días</div>
+  <div class="adh-card">
+    ${adhRow(prot, '#C4818A', '🛡️', 'Protección solar', 'spf_facial', sparkHTML(spfWeekly(), '#C4818A'))}
+    ${adhRow(despig, '#C47A00', '🎯', 'Despigmentación', 'despigmentacion', sparkHTML(roleWeekly('despigmentacion'), '#C47A00'))}
+    ${adhRow(barr, '#3A8A7A', '💧', 'Barrera sana', 'barrera', sparkHTML(roleWeekly('barrera'), '#3A8A7A'))}
+    ${adhRow(rege, '#7E6BB0', '🔬', 'Renovación celular', 'regeneracion_celular', sparkHTML(roleWeekly('regeneracion_celular'), '#7E6BB0'))}
+  </div>
+  <div class="adh-label">Textura de piel · últimos 90 días</div>
+  <div class="adh-card">
+    ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros', sparkHTML(roleWeekly('textura_poros'), '#5B8FA8'))}
+  </div>
+  ${routineHTML}
+</details>`;
   histApps = apps;
   renderHistorial();
   historyLoaded = true;

@@ -110,18 +110,58 @@ function adherenceFromDoneDates(done, scheduleDays, wstart, ends) {
 // Tags de MAGNITUD (excluyentes): pa4 | pa3 | pa2 | euuva (sello UVA en SPF50).
 // Tags de ESPECTRO (excluyentes):  uva400 | uvalong.
 // Tag de VISIBLE: tinted.
+// PESOS CALIBRADOS A MANCHAS SOLARES (lentigos), no a melasma. En lentigos la
+// causa es casi puramente UV, así que la magnitud y el espectro mandan; la luz
+// visible es un extra real pero menor. En melasma habría que subir `vis` a ~20
+// y bajar `mag`, porque ahí la luz visible sí es detonante de primer orden.
 function spfScoreOf(p) {
   const tags = tagsOf(p);
   const has = cls => tags.some(t => t.cls === cls);
-  // 1) Magnitud UVA (0–55): se toma el MEJOR dato disponible, nunca se acumula.
+  // 1) Magnitud UVA (0–60): se toma el MEJOR dato disponible, nunca se acumula.
   let mag;
-  if (has('pa4') || has('euuva')) mag = 55;
-  else if (has('pa3')) mag = 40;
-  else if (has('pa2')) mag = 25;
-  else mag = 20; // SPF sin dato UVA: se asume solo el mínimo de amplio espectro
-  // 2) Espectro más allá del mínimo de 370 nm (0–30).
+  if (has('pa4') || has('euuva')) mag = 60;
+  else if (has('pa3')) mag = 43;
+  else if (has('pa2')) mag = 27;
+  else mag = 21; // SPF sin dato UVA: se asume solo el mínimo de amplio espectro
+  // 2) Espectro más allá del mínimo de 370 nm (0–30). La UVA larga es la que
+  //    más pigmenta, así que pesa igual que en melasma.
   const esp = has('uva400') ? 30 : (has('uvalong') ? 15 : 0);
-  // 3) Luz visible por óxidos de hierro (0–15).
-  const vis = has('tinted') ? 15 : 0;
+  // 3) Luz visible por óxidos de hierro (0–10).
+  const vis = has('tinted') ? 10 : 0;
   return Math.min(100, mag + esp + vis);
+}
+
+// ── DOSIS POR EJE DE RESULTADO (Fase B) ──────────────────────────────────────
+// Mide ESTÍMULO ENTREGADO, no obediencia a un plan. Una aplicación cuenta
+// completa aunque no venga de un paso de rutina.
+//
+// Dos correcciones hacen que el modelo se parezca a la biología real:
+//
+//   · TECHO DIARIO — exfoliar dos veces el mismo día no vale el doble. Los
+//     puntos de cada día se topan antes de sumar la semana.
+//   · VENTANA SEMANAL — el retinoide rinde ~4 noches/semana y se aplana. Si se
+//     midiera día por día, las noches de descanso contarían como falla y
+//     volveríamos a castigar la desviación, que es justo lo que queremos evitar.
+//
+// Pasarse del ideal NO baja el puntaje (se topa en 100): sobre-aplicar se avisa
+// aparte con `overExposureDays`, no se castiga con el número.
+//
+// dailyPoints: array de puntos crudos por día (7 posiciones = una semana).
+function doseWeekPct(dailyPoints, techoDiario, diasIdeales) {
+  if (!Array.isArray(dailyPoints) || !techoDiario || !diasIdeales) return null;
+  const total = dailyPoints.reduce((a, p) => a + Math.min(p || 0, techoDiario), 0);
+  return Math.min(100, Math.round(total / (techoDiario * diasIdeales) * 100));
+}
+
+// Días de la semana con IRRITANTES por encima de la frecuencia ideal. Es un
+// AVISO (riesgo de irritación), no una penalización del puntaje. Se tolera 1
+// día de margen antes de avisar.
+//
+// OJO: recibe días con retinoide o ácido exfoliante (ver IRRITANTES), NO los
+// puntos del eje `textura`. La niacinamida, el azelaico y el NAG suben textura
+// sin irritar; contarlos aquí disparaba avisos falsos.
+function overExposureDays(irritantDays, diasIdeales) {
+  if (!Array.isArray(irritantDays) || !diasIdeales) return 0;
+  const activos = irritantDays.filter(p => (p || 0) > 0).length;
+  return Math.max(0, activos - (diasIdeales + 1));
 }

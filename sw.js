@@ -4,12 +4,13 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
-const CACHE = 'skincare-shell-v2';
+const CACHE = 'skincare-shell-v3';
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './pure.js',
+  './activos-matriz.js',
   './app.js',
   './manifest.webmanifest',
   './icon-192.png',
