@@ -15,26 +15,51 @@
 // ══════════════════════════════════════════════════════════════════════════
 const DOSE_AXES = {
   proteccion: { icon: '🛡️', label: 'Protección solar', color: '#C4818A', grupo: 'cara', techoDiario: 500, diasIdeales: 7 },
-  aclarado: { icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', grupo: 'cara', techoDiario: 115, diasIdeales: 7 },
-  textura: { icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', grupo: 'cara', techoDiario: 95, diasIdeales: 4 },
-  barrera: { icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', grupo: 'cara', techoDiario: 140, diasIdeales: 7 },
-  firmeza: { icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', grupo: 'cara', techoDiario: 115, diasIdeales: 6 },
+  aclarado: { icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', grupo: 'cara', techoDiario: 370, diasIdeales: 7 },
+  textura: { icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', grupo: 'cara', techoDiario: 265, diasIdeales: 4 },
+  barrera: { icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', grupo: 'cara', techoDiario: 460, diasIdeales: 7 },
+  firmeza: { icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', grupo: 'cara', techoDiario: 200, diasIdeales: 6 },
   cuerpo_proteccion: { icon: '☀️', label: 'Protección corporal', color: '#C4818A', grupo: 'cuerpo', techoDiario: 500, diasIdeales: 7 },
   cuerpo_textura: { icon: '🫧', label: 'Textura corporal', color: '#7E6BB0', grupo: 'cuerpo', techoDiario: 80, diasIdeales: 3 },
   cuerpo_firmeza: { icon: '🧬', label: 'Firmeza corporal', color: '#B0567E', grupo: 'cuerpo', techoDiario: 75, diasIdeales: 5 },
   cuerpo_barrera: { icon: '💧', label: 'Hidratación corporal', color: '#3A8A7A', grupo: 'cuerpo', techoDiario: 95, diasIdeales: 7 },
   pies: { icon: '🦶', label: 'Pies / queratolítico', color: '#8A6A00', grupo: 'pies', techoDiario: 85, diasIdeales: 7 },
   cabello: { icon: '💇', label: 'Cabello', color: '#5B8FA8', grupo: 'cabello', techoDiario: 70, diasIdeales: 3 },
+  manos: { icon: '✋', label: 'Manos y brazos / pigmentación', color: '#C47A00', grupo: 'manos', techoDiario: 90, diasIdeales: 7 },
 };
+
+// ── EJE 'manos' — agregado 2026-07-23 ───────────────────────────────────────
+// Nuevo, mismo patrón que 'pies': zona del cuerpo con su propio eje porque los
+// productos que la tratan (crema de manos, jabón despigmentante) no encajan
+// en los ejes genéricos de cuerpo. Enfoque: pigmentación/manchas en manos y
+// brazos (mismo mecanismo que `aclarado` en cara — inhibición de tirosinasa —
+// pero NO se mete al eje `aclarado` porque ese es solo cara, ver regla 11).
+// techoDiario=90 y diasIdeales=7 son PROVISIONALES (como lo fueron los techos
+// originales de Fase B) — no hay datos reales todavía porque los productos
+// son nuevos. Recalibrar con datos reales en ~1 mes, igual que se hizo con
+// aclarado/textura/barrera/firmeza el 2026-07-23.
 
 // techoDiario  = dosis maxima util en un dia (rendimientos decrecientes).
 // diasIdeales  = dias/semana para llegar al 100%. Pasarse NO penaliza el
 //                puntaje (se topa), pero dispara el aviso de sobre-exfoliacion.
 // idealSemanal = techoDiario * diasIdeales.
+//
+// ── RECALIBRACIÓN 2026-07-23 (datos reales, no simulación) ──────────────────
+// aclarado/textura/barrera/firmeza estaban pegados en 90-100% con los techos
+// originales (85-100% de los días de julio topaban el techo). Se recalibraron
+// al percentil 90 real de puntos/día observado en 23 días de product_applications
+// (1-23 jul 2026): aclarado 115→370, textura 95→265, barrera 140→460,
+// firmeza 115→200. Con esto las mismas 4 semanas pasan de ~90-100% fijo a un
+// rango 43-100% que sí distingue semana buena de floja.
+// proteccion NO se tocó: nunca topaba su techo (máximo real 330/500) y ya
+// discriminaba (15-36% semanal) — es el único eje con señal útil hoy.
+// cuerpo_*, pies y cabello NO se tocaron: solo 2-14 días con registro, muy
+// poco para recalibrar con confianza. Revisar de nuevo cuando haya ~3-4
+// semanas continuas de datos en esos ejes.
 
 const PRODUCT_DOSE = {
   '0193747b-4c2f-4f7d-ac97-7565c98b94b6': { textura: 10 },  // Limpiador Oleoso
-  '05f7037d-f73b-4ff8-9081-c64afb2c5cf2': { textura: 65, firmeza: 60, aclarado: 30 },  // Retinol Overnight Lotion
+  '05f7037d-f73b-4ff8-9081-c64afb2c5cf2': { cuerpo_textura: 40, cuerpo_firmeza: 45 },  // Retinol Overnight Lotion — CORREGIDO 2026-07-23: usuaria confirma uso en CUERPO, no cara (aunque el note del producto en `products` diga "cara, cuello y escote" — revisar/actualizar ese texto si se puede). Puntos algo por debajo de las cremas corporales de retinol dedicadas (cuerpo_firmeza 55-60/cuerpo_textura 45-50) porque es "fórmula suave para principiantes".
   '0dfd4acf-5300-4822-aa77-f048fa588cd8': { barrera: 30, textura: 15 },  // Spray Ácido Hipocloroso
   '110a2828-a348-41f3-93b6-bc2b7612d731': { textura: 70, aclarado: 30, barrera: 10 },  // Toner AHA BHA PHA + Niacinamide 2%
   '17913609-6130-48bd-977e-45ee06379ff6': { barrera: 80, aclarado: 20, firmeza: 15 },  // Hyalu-Cica Moisture Cream
@@ -107,6 +132,15 @@ const PRODUCT_DOSE = {
   'f95c263b-102e-46c9-bc24-485bf192cdc9': { barrera: 40, firmeza: 35, aclarado: 30 },  // Tocobo Collagen Eye Gel Cream
   'fd5ac61c-3146-49ed-813f-d3b0c4e097aa': { firmeza: 55, barrera: 45 },  // Peptide + HA Serum
   'feac892a-7a0c-4647-9035-c5278c23cd19': { barrera: 70, firmeza: 30 },  // Laneige Cream Skin Toner & Moisturizer
+
+  // ── Alta 2026-07-23 (ver alta-productos-manos-cuello.sql) ────────────────
+  // Los 5 ids de aquí abajo son los mismos que puse en el SQL de alta — si
+  // cambias el id al correr el INSERT, actualiza también aquí.
+  '106e6207-662c-451d-ac3c-5c8c1db73883': { manos: 60 },  // Sadoer Kojic Acid Hand Cream — leave-on, kojic acid+niacinamide+HA, tier OTC fuerte
+  '6cfe7393-865c-4af0-b1bf-5d90e7cd52de': { manos: 15 },  // Hasselan Turmeric Lemon Kojic Acid Soap — rinse-off, mismo criterio que limpiadores (contacto corto = pocos puntos aunque el activo sea bueno)
+  'f0797f0c-1ccc-42fa-b3c2-3ba82ecd419a': { firmeza: 60, barrera: 30 },  // Mercilen Golden Peptide Honeycomb Neck Mask — mismo eje que "Neck and Chest Firming Cream" (cuello se trata como cara, ver nota del producto original). Algo más alto que la crema porque el formato parche/oclusivo mejora la entrega del activo.
+  'd2fa2faa-9408-41cf-8e86-3d3575ae2ac3': { textura: 40, barrera: 15 },  // Moisturizing Clay Mask (genérico) — mismo eje que "Poremizing Clay Stick Mask" pero potencia más baja: sin INCI verificable y formulación "hidratante" (menos arcilla activa que un clay stick clarificante).
+  '17bcd631-39a5-4f79-81c1-c494208c2cb1': { barrera: 10 },  // Mercilen Plant Extract Cleansing Cream — limpiador, puntúa bajo por tiempo de contacto corto (mismo criterio que Limpiador Oleoso: textura=10). El escualano/aceites van a barrera en vez de textura porque no exfolia, solo limpia sin agredir el manto lipídico.
 };
 
 // ── ACTIVOS IRRITANTES (retinoides y ácidos exfoliantes) ────────────────────

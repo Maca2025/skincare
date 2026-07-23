@@ -815,7 +815,7 @@ async function loadHistory() {
     return { pct, weekly, overDays, cfg };
   };
   const EJES_CARA = ['proteccion', 'aclarado', 'textura', 'barrera', 'firmeza'];
-  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello'];
+  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello', 'manos'];
   const dosisCara = EJES_CARA.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
   const dosisOtros = EJES_OTROS.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
   // Se define aquí (y no junto al render) porque buildFocusHTML lo usa antes.
@@ -834,7 +834,8 @@ async function loadHistory() {
         cuerpo_firmeza: 'Buen estímulo de firmeza corporal. Sostenerlo es lo que cuenta.',
         cuerpo_barrera: 'Hidratación corporal bien cubierta.',
         pies: 'Dosis queratolítica completa. Si ya no ves grietas, puedes bajar a mantenimiento.',
-        cabello: 'Uso constante. El folículo responde lento: dale meses.'
+        cabello: 'Uso constante. El folículo responde lento: dale meses.',
+        manos: 'Dosis despigmentante completa en manos y brazos. Igual que en cara, el ácido kójico y similares tardan meses en aclarar manchas ya formadas — lo importante es sostenerlo.'
       };
       return ALTO[key] || 'Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.';
     }
@@ -1179,7 +1180,7 @@ async function loadHistory() {
   ${dosisCara.map(doseRow).join('')}
 </div>` : '';
   const dosisOtrosHTML = dosisOtros.length ? `
-<div class="adh-label">🧴 Cuerpo, pies y cabello</div>
+<div class="adh-label">🧴 Cuerpo, pies, cabello y manos</div>
 <div class="adh-card">${dosisOtros.map(doseRow).join('')}</div>` : '';
   const ROUTINE_COLOR = '#6B7FA0';
   const routineHTML = `
