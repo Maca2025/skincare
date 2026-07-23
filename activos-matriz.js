@@ -15,10 +15,10 @@
 // ══════════════════════════════════════════════════════════════════════════
 const DOSE_AXES = {
   proteccion: { icon: '🛡️', label: 'Protección solar', color: '#C4818A', grupo: 'cara', techoDiario: 500, diasIdeales: 7 },
-  aclarado: { icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', grupo: 'cara', techoDiario: 115, diasIdeales: 7 },
-  textura: { icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', grupo: 'cara', techoDiario: 95, diasIdeales: 4 },
-  barrera: { icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', grupo: 'cara', techoDiario: 140, diasIdeales: 7 },
-  firmeza: { icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', grupo: 'cara', techoDiario: 115, diasIdeales: 6 },
+  aclarado: { icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', grupo: 'cara', techoDiario: 370, diasIdeales: 7 },
+  textura: { icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', grupo: 'cara', techoDiario: 265, diasIdeales: 4 },
+  barrera: { icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', grupo: 'cara', techoDiario: 460, diasIdeales: 7 },
+  firmeza: { icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', grupo: 'cara', techoDiario: 200, diasIdeales: 6 },
   cuerpo_proteccion: { icon: '☀️', label: 'Protección corporal', color: '#C4818A', grupo: 'cuerpo', techoDiario: 500, diasIdeales: 7 },
   cuerpo_textura: { icon: '🫧', label: 'Textura corporal', color: '#7E6BB0', grupo: 'cuerpo', techoDiario: 80, diasIdeales: 3 },
   cuerpo_firmeza: { icon: '🧬', label: 'Firmeza corporal', color: '#B0567E', grupo: 'cuerpo', techoDiario: 75, diasIdeales: 5 },
@@ -31,6 +31,19 @@ const DOSE_AXES = {
 // diasIdeales  = dias/semana para llegar al 100%. Pasarse NO penaliza el
 //                puntaje (se topa), pero dispara el aviso de sobre-exfoliacion.
 // idealSemanal = techoDiario * diasIdeales.
+//
+// ── RECALIBRACIÓN 2026-07-23 (datos reales, no simulación) ──────────────────
+// aclarado/textura/barrera/firmeza estaban pegados en 90-100% con los techos
+// originales (85-100% de los días de julio topaban el techo). Se recalibraron
+// al percentil 90 real de puntos/día observado en 23 días de product_applications
+// (1-23 jul 2026): aclarado 115→370, textura 95→265, barrera 140→460,
+// firmeza 115→200. Con esto las mismas 4 semanas pasan de ~90-100% fijo a un
+// rango 43-100% que sí distingue semana buena de floja.
+// proteccion NO se tocó: nunca topaba su techo (máximo real 330/500) y ya
+// discriminaba (15-36% semanal) — es el único eje con señal útil hoy.
+// cuerpo_*, pies y cabello NO se tocaron: solo 2-14 días con registro, muy
+// poco para recalibrar con confianza. Revisar de nuevo cuando haya ~3-4
+// semanas continuas de datos en esos ejes.
 
 const PRODUCT_DOSE = {
   '0193747b-4c2f-4f7d-ac97-7565c98b94b6': { textura: 10 },  // Limpiador Oleoso
