@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Tests · pure.js</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background:#F4EFE8; color:#2A2420; padding:24px; max-width:760px; margin:0 auto; }
+  h1 { font-size:20px; margin-bottom:4px; }
+  h2 { font-size:14px; color:#7A5A5A; margin:28px 0 8px; text-transform:uppercase; letter-spacing:1px; }
+  #summary { font-size:16px; font-weight:800; padding:10px 14px; border-radius:10px; margin:12px 0 20px; }
+  #summary.ok { background:#EAF5EA; color:#287848; }
+  #summary.fail { background:#FBE9E7; color:#C43020; }
+  .row { display:flex; gap:10px; padding:6px 10px; border-radius:8px; font-size:13px; align-items:flex-start; }
+  .row.pass { background:#F3F9F3; }
+  .row.fail { background:#FDEEEC; }
+  .icon { flex-shrink:0; }
+  .row.pass .icon { color:#287848; }
+  .row.fail .icon { color:#C43020; }
+  .name { flex:1; }
+  .detail { color:#A09090; font-size:11.5px; margin-top:2px; }
+</style>
+</head>
+<body>
+
+<h1>🧪 Tests · pure.js</h1>
+<div>Abrir esta página en el navegador después de cualquier cambio en <code>pure.js</code> (Regla 6 de ARQUITECTURA.md).</div>
+<div id="summary"></div>
+<div id="results"></div>
+
+<!-- Solo pure.js: esta página prueba funciones puras, sin Supabase ni DOM de la app real. -->
+<script src="pure.js"></script>
+<script>
+let _pass = 0, _fail = 0;
+const _results = document.getElementById('results');
+let _currentGroup = null;
+
+function group(title) {
+  _currentGroup = document.createElement('h2');
+  _currentGroup.textContent = title;
+  _results.appendChild(_currentGroup);
+}
+
+function t(name, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (ok) _pass++; else _fail++;
+  const row = document.createElement('div');
+  row.className = 'row ' + (ok ? 'pass' : 'fail');
+  row.innerHTML = `<span class="icon">${ok ? '✅' : '❌'}</span>
+    <div class="name">${name}${ok ? '' : `<div class="detail">actual: ${JSON.stringify(actual)} — esperado: ${JSON.stringify(expected)}</div>`}</div>`;
+  _results.appendChild(row);
+}
+
+function finish() {
+  const summary = document.getElementById('summary');
+  summary.className = _fail === 0 ? 'ok' : 'fail';
+  summary.textContent = _fail === 0
+    ? `✅ Todo pasa — ${_pass}/${_pass} casos`
+    : `❌ ${_fail} fallo(s) de ${_pass + _fail} casos`;
+}
+</script>
+
+<script>
+// ============================================================================
+// FECHAS
+// ============================================================================
+group('📅 Fechas');
+
+t('toDateStr: formatea fecha local sin corrimiento a UTC',
+  toDateStr(new Date(2026, 0, 5)), '2026-01-05');
+
+t('localDateOfISO: convierte instante UTC a fecha local (mediodía UTC, segura en cualquier huso)',
+  localDateOfISO('2026-01-05T12:00:00Z'), '2026-01-05');
+
+t('eachDateStr: itera inclusive los 3 días del rango',
+  (() => { const out = []; eachDateStr('2026-01-01', '2026-01-03', ds => out.push(ds)); return out; })(),
+  ['2026-01-01', '2026-01-02', '2026-01-03']);
+
+t('eachDateStr: rango invertido (a > b) no itera nada',
+  (() => { const out = []; eachDateStr('2026-01-05', '2026-01-01', ds => out.push(ds)); return out; })(),
+  []);
+
+t('eachDateStr: día de la semana — lunes 2026-01-05 es dow=1 (getUTCDay)',
+  (() => { let d; eachDateStr('2026-01-05', '2026-01-05', (ds, dow) => d = dow); return d; })(),
+  1);
+
+// ============================================================================
+// ESCAPING (regla 2 de ARQUITECTURA: sin esto, un nombre de producto es XSS)
+// ============================================================================
+group('🔒 Escaping');
+
+t('esc: escapa tags HTML', esc('<b>hola</b>'), '&lt;b&gt;hola&lt;/b&gt;');
+t('esc: null se vuelve string vacío', esc(null), '');
+t('esc: escapa comillas simples', esc("O'Reilly"), 'O&#39;Reilly');
+t('esc: producto malicioso tipo XSS queda inerte',
+  esc('<img src=x onerror=alert(1)>'),
+  '&lt;img src=x onerror=alert(1)&gt;');
+
+t('fmtRich: convierte saltos de línea a <br>',
+  fmtRich('linea1\nlinea2'), 'linea1<br>linea2');
+
+t('cssSafe: solo deja letras, números, guion y guion bajo',
+  cssSafe('abc 123!@#_-'), 'abc123_-');
+
+t('jsAttrEsc: escapa backslash y comilla para uso dentro de onclick',
+  jsAttrEsc("it's a \\test"), 'it\\&#39;s a \\\\test');
+
+// ============================================================================
+// tagsOf — normaliza products.tags (a veces string crudo por import CSV/Excel)
+// ============================================================================
+group('🏷️ tagsOf');
+
+t('tagsOf: parsea string JSON crudo',
+  tagsOf({ tags: '[{"cls":"pa4"}]' }), [{ cls: 'pa4' }]);
+t('tagsOf: arreglo real pasa igual',
+  tagsOf({ tags: [{ cls: 'pa4' }] }), [{ cls: 'pa4' }]);
+t('tagsOf: JSON inválido devuelve arreglo vacío (no truena)',
+  tagsOf({ tags: 'no es json' }), []);
+t('tagsOf: sin campo tags devuelve arreglo vacío',
+  tagsOf({}), []);
+
+// ============================================================================
+// adherenceFromDoneDates
+// ============================================================================
+group('📋 adherenceFromDoneDates');
+
+t('adherencia: diaria (scheduleDays null), 2 de 3 días',
+  adherenceFromDoneDates(new Set(['2026-01-01', '2026-01-02']), null, '2026-01-01', '2026-01-03'),
+  { pct: 67, hit: 2, elig: 3, start: '2026-01-01' });
+
+t('adherencia: con schedule_days (lun/mié/vie), cuenta solo esos días',
+  adherenceFromDoneDates(new Set(['2026-01-05', '2026-01-07']), [1, 3, 5], '2026-01-05', '2026-01-11'),
+  { pct: 67, hit: 2, elig: 3, start: '2026-01-05' });
+
+t('adherencia: la ventana empieza en el primer registro, no antes (no castiga el tiempo previo)',
+  adherenceFromDoneDates(new Set(['2026-01-07']), null, '2026-01-01', '2026-01-10'),
+  { pct: 25, hit: 1, elig: 4, start: '2026-01-07' });
+
+t('adherencia: sin ningún registro devuelve null',
+  adherenceFromDoneDates(new Set(), null, '2026-01-01', '2026-01-03'), null);
+
+t('adherencia: primer registro después del fin de la ventana devuelve null',
+  adherenceFromDoneDates(new Set(['2026-01-15']), null, '2026-01-01', '2026-01-10'), null);
+
+// ============================================================================
+// spfScoreOf — protección UVA (ver FASE-B-matriz-activos.md §4)
+// ============================================================================
+group('🛡️ spfScoreOf');
+
+t('spf: PA++++ y sello UVA UE puntúan igual',
+  spfScoreOf({ tags: [{ cls: 'pa4' }] }),
+  spfScoreOf({ tags: [{ cls: 'euuva' }] }));
+
+t('spf: pa4 + euuva no se suman',
+  spfScoreOf({ tags: [{ cls: 'pa4' }, { cls: 'euuva' }] }), 60);
+
+t('spf: PA++++ solo', spfScoreOf({ tags: [{ cls: 'pa4' }] }), 60);
+t('spf: PA+++ solo',  spfScoreOf({ tags: [{ cls: 'pa3' }] }), 43);
+t('spf: PA++ solo',   spfScoreOf({ tags: [{ cls: 'pa2' }] }), 27);
+
+t('spf: sin dato UVA', spfScoreOf({ tags: [] }), 21);
+t('spf: tags cosméticos no puntúan',
+  spfScoreOf({ tags: [{ cls: 'clear' }, { cls: 'best' }] }), 21);
+
+t('spf: UVA400 sobre PA++++',        spfScoreOf({ tags: [{ cls: 'pa4' }, { cls: 'uva400' }] }), 90);
+t('spf: UVA largos sobre PA++++',    spfScoreOf({ tags: [{ cls: 'pa4' }, { cls: 'uvalong' }] }), 75);
+t('spf: uva400 y uvalong no se suman',
+  spfScoreOf({ tags: [{ cls: 'pa4' }, { cls: 'uva400' }, { cls: 'uvalong' }] }), 90);
+
+t('spf: tintado suma 10', spfScoreOf({ tags: [{ cls: 'pa4' }, { cls: 'tinted' }] }), 70);
+
+t('spf: máximo 100',
+  spfScoreOf({ tags: [{ cls: 'pa4' }, { cls: 'uva400' }, { cls: 'tinted' }] }), 100);
+
+t('spf: Anthelios UV AIR (euuva+tinted)',
+  spfScoreOf({ tags: [{ cls: 'euuva' }, { cls: 'tinted' }] }), 70);
+t('spf: Nivea stick europeo (euuva)',
+  spfScoreOf({ tags: [{ cls: 'euuva' }] }), 60);
+
+// ============================================================================
+// DOSIS POR EJE (Fase B) — ver FASE-B-matriz-activos.md §6
+// ============================================================================
+group('💊 doseWeekPct / overExposureDays');
+
+t('dosis: el techo diario recorta el exceso',
+  doseWeekPct([170, 0, 0, 0, 0, 0, 0], 85, 4),
+  doseWeekPct([85, 0, 0, 0, 0, 0, 0], 85, 4));
+
+t('dosis: 4 noches de retinoide = 100%',
+  doseWeekPct([95, 0, 95, 0, 95, 0, 95], 85, 4), 100);
+
+t('dosis: 7 noches no bajan el puntaje',
+  doseWeekPct([95, 95, 95, 95, 95, 95, 95], 85, 4), 100);
+
+t('dosis: aplicación libre diaria de barrera (el caso que motivó Fase B)',
+  doseWeekPct([80, 80, 80, 80, 80, 80, 80], 100, 7), 80);
+
+t('dosis: media semana = ~50%',
+  doseWeekPct([90, 90, 90, 90, 0, 0, 0], 90, 7), 57);
+t('dosis: sin aplicaciones = 0%',
+  doseWeekPct([0, 0, 0, 0, 0, 0, 0], 90, 7), 0);
+
+t('aviso: 4 noches de retinoide no avisa',
+  overExposureDays([1, 0, 1, 0, 1, 0, 1], 4), 0);
+t('aviso: 5 noches tolera 1 de margen',
+  overExposureDays([1, 1, 1, 0, 1, 0, 1], 4), 0);
+t('aviso: 7 noches dispara el aviso',
+  overExposureDays([1, 1, 1, 1, 1, 1, 1], 4), 2);
+t('aviso: textura alta sin irritantes no avisa',
+  overExposureDays([0, 0, 0, 0, 0, 0, 0], 4), 0);
+
+t('dosis: entrada inválida devuelve null', doseWeekPct(null, 85, 4), null);
+t('dosis: sin config devuelve null', doseWeekPct([10], 0, 4), null);
+
+// ── fin ──
+finish();
+</script>
+
+</body>
+</html>
