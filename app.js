@@ -74,6 +74,7 @@ const PRODUCT_CATEGORIES = [
   '🌞 SPF Facial',
   '☀️ SPF Corporal',
   '🧴 Cuerpo',
+  '✋ Manos',
   '🦶 Pies',
   '💋 Labios',
 ];
@@ -770,7 +771,9 @@ async function loadHistory() {
       // cumplir 2 en un día de interior ya vale el 100% de ese día.
       if (ax === 'proteccion') {
         v = v * (IDEAL_SPF_APPS / idealSpfAppsFor(ds));
-      } else if (ax === 'cuerpo_proteccion') {
+      } else if (ax === 'cuerpo_proteccion' || ax === 'manos_proteccion') {
+        // manos_proteccion reusa el mismo ideal que cuerpo (a petición de la
+        // usuaria: "igual que cuerpo") — interior 1 · normal 1 · alta 2 · playa 4.
         const ideal = idealBodySpfAppsFor(ds);
         if (ideal <= 0) return; // día no evaluable (ej. interior en 0)
         v = v * (IDEAL_SPF_APPS / ideal);
@@ -815,7 +818,7 @@ async function loadHistory() {
     return { pct, weekly, overDays, cfg };
   };
   const EJES_CARA = ['proteccion', 'aclarado', 'textura', 'barrera', 'firmeza'];
-  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello', 'manos'];
+  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello', 'manos', 'manos_proteccion'];
   const dosisCara = EJES_CARA.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
   const dosisOtros = EJES_OTROS.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
   // Se define aquí (y no junto al render) porque buildFocusHTML lo usa antes.
@@ -835,7 +838,8 @@ async function loadHistory() {
         cuerpo_barrera: 'Hidratación corporal bien cubierta.',
         pies: 'Dosis queratolítica completa. Si ya no ves grietas, puedes bajar a mantenimiento.',
         cabello: 'Uso constante. El folículo responde lento: dale meses.',
-        manos: 'Dosis despigmentante completa en manos y brazos. Igual que en cara, el ácido kójico y similares tardan meses en aclarar manchas ya formadas — lo importante es sostenerlo.'
+        manos: 'Dosis despigmentante completa en manos y brazos. Igual que en cara, el ácido kójico y similares tardan meses en aclarar manchas ya formadas — lo importante es sostenerlo.',
+        manos_proteccion: 'Reaplicación de SPF en manos completa. Las manos son de las zonas que más rápido muestran manchas nuevas por exposición incidental (manejar, caminar) — sostener esto protege el trabajo que hace tu crema despigmentante.'
       };
       return ALTO[key] || 'Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.';
     }
@@ -844,6 +848,9 @@ async function loadHistory() {
     }
     if (key === 'cuerpo_proteccion') {
       return `Brazos y escote acumulan UVA aunque no tomes sol. El ideal aquí es bajo (${IDEAL_BODY_SPF_BY_SUN.interior} aplicación en día normal, ${IDEAL_BODY_SPF_BY_SUN.playa} en playa): con ponerte protector corporal en la mañana casi cubres el día.`;
+    }
+    if (key === 'manos_proteccion') {
+      return `Mismo ideal que cuerpo (${IDEAL_BODY_SPF_BY_SUN.interior} aplicación en día normal, ${IDEAL_BODY_SPF_BY_SUN.playa} en playa) — usa cualquiera de tus protectores registrados como "(Manos)" cuando reapliques en el dorso de las manos.`;
     }
     if (o.pct >= 60) return `Buen nivel. Para cerrar la brecha, subir la frecuencia rinde más que agregar productos nuevos.`;
     if (o.pct >= 30) return `Estímulo parcial: los productos que tienes alcanzan, falta constancia en los días.`;

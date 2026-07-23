@@ -26,7 +26,18 @@ const DOSE_AXES = {
   pies: { icon: '🦶', label: 'Pies / queratolítico', color: '#8A6A00', grupo: 'pies', techoDiario: 85, diasIdeales: 7 },
   cabello: { icon: '💇', label: 'Cabello', color: '#5B8FA8', grupo: 'cabello', techoDiario: 70, diasIdeales: 3 },
   manos: { icon: '✋', label: 'Manos y brazos / pigmentación', color: '#C47A00', grupo: 'manos', techoDiario: 90, diasIdeales: 7 },
+  manos_proteccion: { icon: '🧴', label: 'Protección manos', color: '#C4818A', grupo: 'manos', techoDiario: 500, diasIdeales: 7 },
 };
+
+// ── EJE 'manos_proteccion' — agregado 2026-07-23 ────────────────────────────
+// Mismo patrón que 'cuerpo_proteccion': techoDiario=500 fijo (IDEAL_SPF_APPS=5
+// aplicaciones x 100 pts) y el ideal diario real se modula por sun_exposure en
+// app.js reusando idealBodySpfAppsFor (interior 1 · normal 1 · alta 2 · playa
+// 4) — así lo pidió la usuaria, "igual que cuerpo". NO lleva número en
+// PRODUCT_DOSE (va null): se toma spfScoreOf(p), igual que proteccion y
+// cuerpo_proteccion — una sola fuente de verdad para la calibración UVA.
+// Requiere que app.js tenga el `else if (ax === 'manos_proteccion')` en el
+// bucle de dosePtsByDate (ver ARQUITECTURA/handoff de la conversación).
 
 // ── EJE 'manos' — agregado 2026-07-23 ───────────────────────────────────────
 // Nuevo, mismo patrón que 'pies': zona del cuerpo con su propio eje porque los
@@ -141,6 +152,23 @@ const PRODUCT_DOSE = {
   'f0797f0c-1ccc-42fa-b3c2-3ba82ecd419a': { firmeza: 60, barrera: 30 },  // Mercilen Golden Peptide Honeycomb Neck Mask — mismo eje que "Neck and Chest Firming Cream" (cuello se trata como cara, ver nota del producto original). Algo más alto que la crema porque el formato parche/oclusivo mejora la entrega del activo.
   'd2fa2faa-9408-41cf-8e86-3d3575ae2ac3': { textura: 40, barrera: 15 },  // Moisturizing Clay Mask (genérico) — mismo eje que "Poremizing Clay Stick Mask" pero potencia más baja: sin INCI verificable y formulación "hidratante" (menos arcilla activa que un clay stick clarificante).
   '17bcd631-39a5-4f79-81c1-c494208c2cb1': { barrera: 10 },  // Mercilen Plant Extract Cleansing Cream — limpiador, puntúa bajo por tiempo de contacto corto (mismo criterio que Limpiador Oleoso: textura=10). El escualano/aceites van a barrera en vez de textura porque no exfolia, solo limpia sin agredir el manto lipídico.
+
+  // ── 14 SPF duplicados como "(Manos)" 2026-07-23 (ver alta-spf-manos-duplicados.sql) ──
+  // Mismos ids que en ese SQL — si cambias el id al correr el INSERT, actualiza aquí también.
+  '4db3009f-bbe9-44d7-b8af-68270c0bd167': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Isdin Fusion Water Color SPF50 (Manos)
+  'efefbb3f-a268-4163-9eaa-2132697105e4': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Heliocare 360 Opti D Gel SPF50 (Manos)
+  '00f87492-1e78-42f2-99b0-f8077f990ac4': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Isdin Fotoprotector Wet Skin SPF50+ (Manos)
+  '1f467bd0-e75d-469d-9dfb-6f99294526ec': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Tocobo Sun Stick Cotton Soft SPF50 (Manos)
+  '8d600de1-b696-4bcc-a38d-c471266c09a7': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Nivea Sun Silky UV Stick SPF50 (Manos)
+  '41e73a9e-788b-40a8-b1d7-21449f0522ad': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Isdin Fusion Water SPF50 (Manos)
+  'ee0d72b3-f639-4bfe-8eae-b8620d71ab09': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Eucerin Pigment Control Tintado SPF50 (Manos)
+  '296dd1c2-648d-43e2-9d5f-7e3d8db1e554': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Probio-Cica Glow Sun Ampoule (Manos)
+  '54fcb159-b00c-4afb-a3d8-71bd45cd3a31': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Hyalu-Cica Water-Fit Sun Serum (Manos)
+  'c4bb9f39-991b-48aa-85ee-79a4a47a7b10': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Black Rice Airyfit Sunscreen (Manos)
+  'f3659011-6e5b-4ea1-8502-63b5e56f2a3a': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Canmake Mermaid Skin Gel SPF50 (Manos)
+  'b2b73756-d9a1-4d40-ac66-93e15dff6db2': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Anthelios UVMune 400 SPF50 (Manos)
+  '99924fdc-cb71-46e9-83ab-d44b576357e2': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // L'Oréal UV Defender SPF50 PA++++ (Manos)
+  'c17786a0-2acb-4a2c-9c0e-5e37bd7a7204': { manos_proteccion: null },  /* proteccion via spfScoreOf */  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural) (Manos)
 };
 
 // ── ACTIVOS IRRITANTES (retinoides y ácidos exfoliantes) ────────────────────
