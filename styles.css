@@ -590,3 +590,16 @@ body {
 .hito-del:active { background: #F4EFE8; }
 .hito-auto { opacity: 0.62; }
 .hito-auto .hito-title { font-weight: 600; }
+
+/* ── HITOS SOBRE EL HEATMAP ────────────────────────────────────────────────
+   Un día con hito lleva un punto. Es lo que permite leer el heatmap de forma
+   causal: ver que una racha cambió justo cuando entró un producto nuevo.
+   El punto va con box-shadow en vez de borde para no alterar el tamaño de la
+   celda ni descuadrar la rejilla. */
+.heat-cell-hito { position: relative; box-shadow: inset 0 0 0 1.5px #7A4A9E; }
+.heat-cell-hito::after { content: ''; position: absolute; top: 1px; right: 1px;
+  width: 3px; height: 3px; border-radius: 50%; background: #7A4A9E; }
+.heat-detail-hito { margin-top: 6px; padding-top: 6px; border-top: 1px solid #EDE4F0;
+  color: #5A3A8A; font-weight: 600; line-height: 1.5; }
+.heat-legend-hito { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  background: #F0ECE7; box-shadow: inset 0 0 0 1.5px #7A4A9E; vertical-align: middle; }

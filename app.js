@@ -643,15 +643,33 @@ async function loadHistory() {
   const el = document.getElementById('history-content');
   el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span><br><br>Loading...</div>';
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
-  const [appsRes, stepsRes, routinesRes, allStepsRes, notesRes] = await Promise.all([
+  const [appsRes, stepsRes, routinesRes, allStepsRes, notesRes, hitosRes] = await Promise.all([
     db.from('product_applications').select('id, product_name, product_id, applied_at, source, routine_step_id')
       .gte('applied_at', localDayBoundsUTC(toDateStr(since90)).startISO)
       .order('applied_at', { ascending: false }),
     db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null),
     db.from('routines').select('id, section_key, schedule_days, sort_order').eq('active', true),
     db.from('routine_steps').select('id, routine_id'),
-    db.from('daily_notes').select('note_date, skin_state, sun_exposure').gte('note_date', toDateStr(since90))
+    db.from('daily_notes').select('note_date, skin_state, sun_exposure').gte('note_date', toDateStr(since90)),
+    // Hitos para marcar el heatmap. Si la tabla aún no existe (migración sin
+    // correr) el error se ignora y el heatmap se pinta igual que siempre.
+    db.from('treatment_events').select('event_date, event_type, title').gte('event_date', toDateStr(since90))
   ]);
+  // ── HITOS POR FECHA ───────────────────────────────────────────────────────
+  // Dos fuentes, igual que la línea de tiempo: eventos capturados a mano e
+  // inicios de producto derivados de products.started_at (ya en memoria).
+  // Es lo que permite leer el heatmap de forma causal: "esta racha mala empezó
+  // la semana que entró la tretinoína".
+  const hitosByDate = {};
+  const pushHito = (ds, txt) => {
+    if (!ds) return;
+    (hitosByDate[ds] = hitosByDate[ds] || []).push(txt);
+  };
+  ((hitosRes && hitosRes.data) || []).forEach(h => {
+    const ic = (typeof hitoType === 'function') ? hitoType(h.event_type).e : '📌';
+    pushHito(h.event_date, `${ic} ${h.title}`);
+  });
+  allProducts.forEach(p => { if (p.started_at) pushHito(p.started_at, `🆕 Empecé ${p.name}`); });
   const apps = appsRes.data || [];
   // Si un producto es paso fijo de una rutina, esa rutina define cuándo "toca".
   const productRoutineInfo = {};
@@ -1125,8 +1143,12 @@ async function loadHistory() {
         const pctTxt = p != null ? `📋 ${Math.round(p * 100)}% de rutina completada` : '📋 sin registros de rutina';
         const skin = skinByDate[ds] ? ` · 🙂 piel ${skinByDate[ds]}/5` : '';
         const sun = sunByDate[ds] ? ` · ☀️ sol: ${sunByDate[ds]}` : '';
-        _heatDayInfo[ds] = `<strong>${DOW_ES[dow]} ${fmtDate(ds)}</strong><br>${pctTxt}${skin}${sun}`;
-        cells.push(`<div class="heat-cell" style="background:${bg}" onclick="showHeatDay('${ds}', this)"></div>`);
+        // Un día con hito lleva marca visible y su texto en el detalle.
+        const hitos = hitosByDate[ds] || [];
+        const hitoTxt = hitos.length
+          ? `<div class="heat-detail-hito">${hitos.map(h => esc(h)).join('<br>')}</div>` : '';
+        _heatDayInfo[ds] = `<strong>${DOW_ES[dow]} ${fmtDate(ds)}</strong><br>${pctTxt}${skin}${sun}${hitoTxt}`;
+        cells.push(`<div class="heat-cell${hitos.length ? ' heat-cell-hito' : ''}" style="background:${bg}" onclick="showHeatDay('${ds}', this)"></div>`);
       });
       return `<div class="heat-col">${cells.join('')}</div>`;
     }).join('');
@@ -1135,7 +1157,7 @@ async function loadHistory() {
   <div class="heat-monthsrow"><div class="heat-daycol-spacer"></div>${monthRowHTML}</div>
   <div class="heat-body">${dayColHTML}<div class="heat-grid">${cols}</div></div>
   <div class="heat-detail" id="heat-day-detail" style="display:none"></div>
-  <div class="heat-legend">menos <span class="box" style="background:#F0ECE7"></span><span class="box" style="background:rgba(40,120,72,0.35)"></span><span class="box" style="background:rgba(40,120,72,0.65)"></span><span class="box" style="background:rgba(40,120,72,1)"></span> más · toca un día para ver el detalle</div>
+  <div class="heat-legend">menos <span class="box" style="background:#F0ECE7"></span><span class="box" style="background:rgba(40,120,72,0.35)"></span><span class="box" style="background:rgba(40,120,72,0.65)"></span><span class="box" style="background:rgba(40,120,72,1)"></span> más · toca un día para ver el detalle${Object.keys(hitosByDate).length ? ' · <span class="heat-legend-hito"></span> día con hito' : ''}</div>
 </div>`;
   })();
   // ── RACHAS (días seguidos, contando hacia atrás desde ayer) ────────────────
