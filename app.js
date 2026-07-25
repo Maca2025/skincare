@@ -175,9 +175,22 @@ async function loadTodaySpfLast() {
   _lastSpfTodayISO = (data && data.length) ? data[0].applied_at : null;
   updateTodaySummary();
 }
+// Estado de la reaplicación, en un solo lugar: lo usan el resumen y el FAB.
+// Se expresa como CUÁNDO TOCA, no como cuánto pasó — un plazo concreto mueve
+// la conducta, un tiempo transcurrido solo informa (mejora #3).
+function spfStatus() {
+  if (!_lastSpfTodayISO) return { state: 'none', label: 'Sin SPF hoy' };
+  const next = new Date(new Date(_lastSpfTodayISO).getTime() + SPF_REMINDER_GAP_H * 3600000);
+  if (next.getTime() - Date.now() <= 0) return { state: 'due', label: 'Reaplicar ahora' };
+  return {
+    state: 'ok',
+    label: 'Próxima ' + next.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  };
+}
 function updateTodaySummary() {
   const el = document.getElementById('today-summary');
   if (!el) return;
+  renderSpfFab();
   const bd = document.getElementById('backdate-input');
   if (bd && bd.value) { el.innerHTML = ''; return; }
   const secs = [
@@ -192,29 +205,47 @@ function updateTodaySummary() {
     const done = body.querySelectorAll('.step.done').length;
     return `<span class="tsum-item${done === total ? ' tsum-ok' : ''}">${s.icon} ${done}/${total}</span>`;
   }).filter(Boolean);
-  let spf;
-  if (!_lastSpfTodayISO) {
-    spf = `<span class="tsum-item tsum-warn">🛡️ sin SPF hoy</span>`;
-  } else {
-    const gapH = (Date.now() - new Date(_lastSpfTodayISO).getTime()) / 3600000;
-    spf = gapH >= SPF_REMINDER_GAP_H
-      ? `<span class="tsum-item tsum-warn">🛡️ hace ${gapH.toFixed(1)}h ⚠️</span>`
-      : `<span class="tsum-item tsum-ok">🛡️ hace ${gapH < 1 ? Math.round(gapH * 60) + ' min' : gapH.toFixed(1) + 'h'}</span>`;
+  const st = spfStatus();
+  const spf = `<span class="tsum-item ${st.state === 'ok' ? 'tsum-ok' : 'tsum-warn'}">🛡️ ${st.label}${st.state === 'ok' ? '' : ' ⚠️'}</span>`;
+  let uv = '';
+  if (_currentUV != null) {
+    const cls = _currentUV >= 8 ? ' tsum-warn' : (_currentUV < 3 ? ' tsum-ok' : '');
+    let txt = `☀️ UV ${Math.round(_currentUV)}`;
+    // El pico solo se anuncia si TODAVÍA está por delante: planear la mañana
+    // sirve, enterarte a las 6pm de que el pico fue a la 1pm no (mejora #4).
+    if (_uvMax != null && _uvMaxHour != null &&
+        _uvMaxHour > new Date().getHours() && Math.round(_uvMax) > Math.round(_currentUV)) {
+      txt += ` → pico ${Math.round(_uvMax)} a las ${_uvMaxHour}h`;
+    }
+    uv = `<span class="tsum-item${cls}">${txt}</span>`;
   }
-  const uv = _currentUV != null
-    ? `<span class="tsum-item${_currentUV >= 8 ? ' tsum-warn' : (_currentUV < 3 ? ' tsum-ok' : '')}">☀️ UV ${Math.round(_currentUV)}</span>`
-    : '';
   el.innerHTML = `<div class="tsum-card">${parts.join('')}${spf}${uv}</div>`;
 }
 // ── ÍNDICE UV EN VIVO (Open-Meteo, gratis y sin key) ─────────────────────────
 // Coordenadas de Guadalajara. Además de mostrarse en el resumen, hace el
 // recordatorio SPF más exigente con UV alto y lo silencia con UV bajo.
+let _uvMax = null, _uvMaxHour = null;
 async function fetchUV() {
   try {
-    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=20.67&longitude=-103.35&current=uv_index');
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=20.67&longitude=-103.35' +
+      '&current=uv_index&hourly=uv_index&forecast_days=1&timezone=auto');
     const j = await r.json();
     _currentUV = (j && j.current && j.current.uv_index != null) ? j.current.uv_index : null;
-  } catch (e) { _currentUV = null; }
+    // Pico del día. DEFENSIVO a propósito: si `hourly` no viene o cambia de
+    // forma, el UV actual sigue funcionando igual que antes y solo se pierde
+    // el pronóstico.
+    _uvMax = null; _uvMaxHour = null;
+    const H = j && j.hourly;
+    if (H && Array.isArray(H.uv_index) && Array.isArray(H.time)) {
+      let best = -1, bestI = -1;
+      H.uv_index.forEach((v, i) => { if (v != null && v > best) { best = v; bestI = i; } });
+      if (bestI >= 0) {
+        _uvMax = best;
+        const m = String(H.time[bestI] || '').match(/T(\d{2}):/);
+        _uvMaxHour = m ? Number(m[1]) : null;
+      }
+    }
+  } catch (e) { _currentUV = null; _uvMax = null; _uvMaxHour = null; }
   updateTodaySummary();
 }
 
@@ -1861,6 +1892,22 @@ async function checkSpfReminder() {
   notifySpf(msg);
 }
 
+// ── BOTÓN FLOTANTE DE REAPLICACIÓN ───────────────────────────────────────────
+// Visible en TODAS las pestañas: la reaplicación es lo que mueve el eje de
+// Protección, y estaba enterrada al fondo de Today (mejora #2). Un toque
+// registra el último protector usado, con deshacer.
+// Se oculta durante backdate: ahí estás viendo otro día, no registrando ahora.
+function renderSpfFab() {
+  const el = document.getElementById('spf-fab');
+  if (!el) return;
+  const bd = document.getElementById('backdate-input');
+  if (bd && bd.value) { el.style.display = 'none'; return; }
+  const st = spfStatus();
+  el.style.display = 'flex';
+  el.className = 'spf-fab spf-fab-' + st.state;
+  el.innerHTML = `<span class="spf-fab-icon">🛡️</span><span class="spf-fab-txt">${esc(st.label)}</span>`;
+}
+
 // ── REGISTRO DESDE LA NOTIFICACIÓN ───────────────────────────────────────────
 // Tocar el aviso de SPF registra tu último protector sin navegar por la app.
 // El service worker manda LOG_SPF (app abierta) o abre con ?log=spf (cerrada).
@@ -1880,7 +1927,7 @@ async function lastSpfApplication() {
   return (data && data.length) ? data[0] : null;
 }
 
-async function logSpfFromPush() {
+async function quickLogSpf() {
   const last = await lastSpfApplication();
   if (!last) { showToast('🛡️ Elige tu protector', ''); openSPFPicker(); return; }
   const gapMin = (Date.now() - new Date(last.applied_at).getTime()) / 60000;
@@ -1906,7 +1953,7 @@ async function handlePushLogParam() {
   const params = new URLSearchParams(location.search);
   if (params.get('log') !== 'spf') return;
   history.replaceState({}, '', location.pathname);
-  await logSpfFromPush();
+  await quickLogSpf();
 }
 
 // ── MODALS ───────────────────────────────────────────────────────────────────
@@ -3220,10 +3267,14 @@ async function init() {
   // App abierta: el SW avisa por postMessage al tocar la notificación.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', e => {
-      if (e.data && e.data.type === 'LOG_SPF') logSpfFromPush();
+      if (e.data && e.data.type === 'LOG_SPF') quickLogSpf();
     });
   }
   handlePushLogParam();
+  // El FAB muestra una hora objetivo, así que hay que refrescarlo aunque no
+  // pase nada: si no, "Próxima 1:40 pm" se queda pegado después de esa hora.
+  renderSpfFab();
+  setInterval(renderSpfFab, 60 * 1000);
 }
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────

@@ -545,3 +545,19 @@ body {
   background: #C47A00; color: white; min-height: 34px; }
 .sync-banner.stuck .sync-btn { border-color: #C43020; background: #C43020; }
 .sync-btn-ghost { background: transparent; color: #C43020; }
+
+/* ── FAB DE REAPLICACIÓN ───────────────────────────────────────────────────
+   Fijo sobre el contenido, en todas las pestañas. El color comunica urgencia:
+   verde = dentro de plazo · ámbar = toca reaplicar · rojo = aún sin SPF hoy.
+   safe-area-inset para que no lo tape la barra de gestos del iPhone. */
+.spf-fab { position: fixed; right: 16px; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 60; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 800; color: white;
+  padding: 13px 18px; border: none; border-radius: 999px; min-height: 48px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.20); }
+.spf-fab:active { transform: scale(0.96); }
+.spf-fab-icon { font-size: 16px; }
+.spf-fab-ok   { background: linear-gradient(135deg, #3A8A7A, #2F7568); }
+.spf-fab-due  { background: linear-gradient(135deg, #D4820A, #C47A00); }
+.spf-fab-none { background: linear-gradient(135deg, #C43020, #A82818); }
+@media (prefers-reduced-motion: reduce) { .spf-fab:active { transform: none; } }
