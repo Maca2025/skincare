@@ -1551,32 +1551,109 @@ async function resetBackdate() {
 // ── OFFLINE QUEUE ────────────────────────────────────────────────────────────
 // Sin señal, un registro ya no se pierde: se encola en localStorage y se
 // reenvía solo al recuperar conexión (o al reabrir la app).
+// Cada entrada envuelve la fila con metadatos de reintento:
+//   { row, attempts, queuedAt, lastError }
+// `row` es lo ÚNICO que se manda a la base — los metadatos jamás se insertan.
+//
+// Se distingue fallo TRANSITORIO (sin señal: se reintenta callado, no cuenta
+// intento) de fallo PERMANENTE (RLS, producto borrado, fila inválida: cuenta
+// intento y al llegar al tope se marca atorado y se AVISA). Antes, una fila
+// que fallaba en serio se quedaba encolada para siempre y en silencio: creías
+// el registro guardado y no estaba en ningún lado.
 const QUEUE_KEY = 'skincare_pending_applications';
-function queuePending(row) {
-  try {
-    const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-    q.push(row);
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-  } catch (e) { /* storage lleno o bloqueado — nada que hacer */ }
+const MAX_SYNC_ATTEMPTS = 3;
+
+function isNetworkError(error) {
+  return !navigator.onLine || /fetch|network/i.test((error && error.message) || '');
 }
+function readQueue() {
+  let raw;
+  try { raw = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch (e) { raw = []; }
+  if (!Array.isArray(raw)) raw = [];
+  // Compatibilidad: las entradas viejas son la fila pelona, sin metadatos.
+  return raw
+    .map(e => (e && e.row) ? e : { row: e, attempts: 0, queuedAt: null, lastError: null })
+    .filter(e => e && e.row && e.row.product_name);
+}
+function writeQueue(q) {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch (e) { /* storage lleno */ }
+  renderSyncBanner();
+}
+function queuePending(row) {
+  const q = readQueue();
+  q.push({ row, attempts: 0, queuedAt: new Date().toISOString(), lastError: null });
+  writeQueue(q);
+}
+let _flushing = false;
 async function flushPending() {
-  let q;
-  try { q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch (e) { q = []; }
-  if (!q.length) return;
+  if (_flushing) return;            // 'online' puede dispararse varias veces seguidas
+  const q = readQueue();
+  if (!q.length) { renderSyncBanner(); return; }
+  _flushing = true;
   const rest = [];
-  for (const row of q) {
-    const { error } = await db.from('product_applications').insert(row);
-    if (error) rest.push(row);
+  let ok = 0, atorados = 0;
+  for (const e of q) {
+    const { error } = await db.from('product_applications').insert(e.row);
+    if (!error) { ok++; continue; }
+    if (isNetworkError(error)) { rest.push(e); continue; }   // sin señal: no penaliza
+    e.attempts = (e.attempts || 0) + 1;
+    e.lastError = error.message || 'error desconocido';
+    if (e.attempts >= MAX_SYNC_ATTEMPTS) atorados++;
+    rest.push(e);
   }
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(rest));
-  if (q.length !== rest.length) {
-    showToast(`📶 ${q.length - rest.length} registro(s) offline sincronizados`, 'success');
+  _flushing = false;
+  writeQueue(rest);
+  if (ok) {
+    showToast(`📶 ${ok} registro(s) offline sincronizados`, 'success');
     historyLoaded = false;
     loadTodayApplications();
     loadTodayRoutines(TODAY_STR);
   }
+  if (atorados) showToast(`⚠️ ${atorados} registro(s) no se pudieron guardar`, 'error');
+}
+// Aviso persistente: mientras la cola tenga algo, se ve en todas las pestañas.
+function renderSyncBanner() {
+  const el = document.getElementById('sync-banner');
+  if (!el) return;
+  const q = readQueue();
+  if (!q.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const stuck = q.filter(e => (e.attempts || 0) >= MAX_SYNC_ATTEMPTS);
+  const nombres = q.slice(0, 3).map(e => esc(e.row.product_name)).join(', ');
+  const mas = q.length > 3 ? ` y ${q.length - 3} más` : '';
+  el.style.display = 'flex';
+  el.className = 'sync-banner' + (stuck.length ? ' stuck' : '');
+  el.innerHTML = stuck.length
+    ? `<div class="sync-banner-txt"><strong>⚠️ ${stuck.length} registro(s) no se pudieron guardar</strong>
+    <div class="sync-banner-sub">${nombres}${mas} · ${esc(stuck[0].lastError || '')}</div></div>
+  <div class="sync-banner-actions">
+    <button class="sync-btn" onclick="retryPending()">Reintentar</button>
+    <button class="sync-btn sync-btn-ghost" onclick="discardStuck()">Descartar</button>
+  </div>`
+    : `<div class="sync-banner-txt"><strong>📡 ${q.length} registro(s) sin sincronizar</strong>
+    <div class="sync-banner-sub">${nombres}${mas}</div></div>
+  <div class="sync-banner-actions">
+    <button class="sync-btn" onclick="retryPending()">Reintentar</button>
+  </div>`;
+}
+async function retryPending() {
+  showToast('⏳ Reintentando...', '');
+  await flushPending();
+  if (!readQueue().length) showToast('✅ Todo sincronizado', 'success');
+}
+// Descartar es destructivo y solo aplica a lo que ya falló en serio.
+async function discardStuck() {
+  const q = readQueue();
+  const stuck = q.filter(e => (e.attempts || 0) >= MAX_SYNC_ATTEMPTS);
+  if (!stuck.length) return;
+  const ok = await confirmSheet(
+    `Se descartarán ${stuck.length} registro(s) que no se pudieron guardar. No se puede deshacer.`,
+    'Descartar');
+  if (!ok) return;
+  writeQueue(q.filter(e => (e.attempts || 0) < MAX_SYNC_ATTEMPTS));
+  showToast('🗑️ Registros descartados', '');
 }
 window.addEventListener('online', flushPending);
+window.addEventListener('offline', renderSyncBanner);
 
 // Devuelve true si el registro quedó guardado (o encolado offline) — los
 // callers usan esto para revertir el checkmark si falló.

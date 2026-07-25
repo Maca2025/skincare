@@ -526,3 +526,22 @@ body {
   .tab-content { max-width: 880px; }
   .gallery-grid { grid-template-columns: repeat(6, 1fr); }
 }
+
+/* ── COLA OFFLINE ──────────────────────────────────────────────────────────
+   Aviso persistente de registros sin sincronizar. Ámbar = pendiente normal
+   (sin señal, se reenvía solo). Rojo = atorado: falló de forma permanente y
+   requiere decisión. Antes esto era invisible y un registro podía perderse
+   en silencio. */
+.sync-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: linear-gradient(135deg, #FFF3E0, #FFEACB); border: 1.5px solid #F0C888;
+  border-radius: 14px; padding: 11px 13px; margin: 0 16px 12px; }
+.sync-banner.stuck { background: linear-gradient(135deg, #FBE9E7, #FBDDD8); border-color: #E0A79E; }
+.sync-banner-txt { flex: 1; min-width: 160px; font-size: 12.5px; color: #7A4A00; line-height: 1.45; }
+.sync-banner.stuck .sync-banner-txt { color: #9A2E1E; }
+.sync-banner-sub { font-size: 11px; opacity: 0.8; margin-top: 3px; word-break: break-word; }
+.sync-banner-actions { display: flex; gap: 6px; }
+.sync-btn { font-family: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  padding: 7px 13px; border-radius: 9px; border: 1.5px solid #C47A00;
+  background: #C47A00; color: white; min-height: 34px; }
+.sync-banner.stuck .sync-btn { border-color: #C43020; background: #C43020; }
+.sync-btn-ghost { background: transparent; color: #C43020; }

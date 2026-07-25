@@ -40,6 +40,9 @@
     <button class="tab-btn" onclick="showTab('stock',this)">🧴 Stock</button>
     <button class="tab-btn" onclick="showTab('routines',this)">⚙️ Rutinas</button>
   </div>
+  <!-- Cola offline: se muestra solo si hay registros sin sincronizar.
+       Va fuera de las pestañas a propósito, para que se vea en todas. -->
+  <div id="sync-banner" class="sync-banner" style="display:none"></div>
   <!-- TODAY -->
   <div id="tab-today" class="tab-content active">
     <div id="today-summary"></div>
