@@ -851,7 +851,16 @@ async function loadHistory() {
   // aunque no venga de un paso de rutina: es justo lo que la adherencia no veía.
   // La matemática (techo diario + ventana semanal) vive en pure.js.
   const dosePtsByDate = {};   // ds → { eje: puntos }
-  const irritantByDate = {};  // ds → 1 si hubo retinoide o ácido exfoliante
+  // ── SOBRE-EXPOSICIÓN A IRRITANTES: SE RASTREA POR ZONA, NO GLOBAL ─────────
+  // Antes era un solo mapa `ds → 1` que TODOS los ejes consultaban contra su
+  // propio `diasIdeales`. Resultado: 5 noches de tretinoína facial hacían que
+  // el eje `cabello` (diasIdeales 3) avisara "1 día de más con retinoide",
+  // cuando ningún producto capilar es irritante. Aplicarte un retinoide en la
+  // cara no dice nada sobre tu pelo.
+  // Ahora el día se marca en la ZONA donde de verdad se aplicó, deducida de los
+  // ejes que toca el producto, y solo el eje de renovación de esa zona avisa.
+  const EJE_IRRITANTE_POR_GRUPO = { cara: 'textura', cuerpo: 'cuerpo_textura' };
+  const irritantByDateGrupo = {};  // ds → { cara: 1, cuerpo: 1 }
   allAppsWithProd.forEach(({ r, rp }) => {
     const dose = rp.id ? PRODUCT_DOSE[rp.id] : null;
     if (!dose) return;
@@ -874,7 +883,16 @@ async function loadHistory() {
       }
       dosePtsByDate[ds][ax] = (dosePtsByDate[ds][ax] || 0) + v;
     });
-    if (typeof IRRITANTES !== 'undefined' && IRRITANTES.has(rp.id)) irritantByDate[ds] = 1;
+    if (typeof IRRITANTES !== 'undefined' && IRRITANTES.has(rp.id)) {
+      // Un producto puede tocar dos zonas (ej. un ácido de cara y cuerpo):
+      // se marcan ambas.
+      Object.keys(dose).forEach(ax => {
+        const g = DOSE_AXES[ax] && DOSE_AXES[ax].grupo;
+        if (!EJE_IRRITANTE_POR_GRUPO[g]) return;
+        if (!irritantByDateGrupo[ds]) irritantByDateGrupo[ds] = {};
+        irritantByDateGrupo[ds][g] = 1;
+      });
+    }
   });
   // Semanas calendario lunes→domingo (mismas columnas que el heatmap).
   const doseWeeks = [];
@@ -908,7 +926,13 @@ async function loadHistory() {
     const vivas = weekly.slice(firstIdx).map(w => w == null ? 0 : w);
     const pct = Math.round(vivas.reduce((a, b) => a + b, 0) / vivas.length);
     const ultimaSemana = doseWeeks[doseWeeks.length - 1] || [];
-    const overDays = overExposureDays(ultimaSemana.map(ds => irritantByDate[ds] || 0), cfg.diasIdeales);
+    // Solo el eje de renovación de cada zona puede avisar: es donde viven los
+    // retinoides y los ácidos. Barrera, aclarado, firmeza, pies, manos y
+    // cabello nunca avisan, porque ningún irritante actúa ahí.
+    const esEjeDeAviso = EJE_IRRITANTE_POR_GRUPO[cfg.grupo] === axKey;
+    const overDays = esEjeDeAviso
+      ? overExposureDays(ultimaSemana.map(ds => (irritantByDateGrupo[ds] || {})[cfg.grupo] || 0), cfg.diasIdeales)
+      : 0;
     return { pct, weekly, overDays, cfg };
   };
   const EJES_CARA = ['proteccion', 'aclarado', 'textura', 'barrera', 'firmeza'];
@@ -2023,6 +2047,233 @@ async function handlePushLogParam() {
   await quickLogSpf();
 }
 
+// ── MAPA DE MANCHAS ──────────────────────────────────────────────────────────
+// Las fotos rastrean ÁREAS; esto rastrea LESIONES. Una consulta no evalúa "la
+// cara", evalúa esta mancha del pómulo y si aquella otra cambió.
+//
+// ⚠️ ALCANCE: sirve para seguir el progreso de un tratamiento. `shade` es
+// apreciación visual de la usuaria, NO una medición, y así se presenta siempre.
+// El estado "Preguntar en consulta" existe para no olvidarlo, no para que la
+// app dictamine nada. Cualquier lesión que cambie, sangre o pique es de
+// dermatoscopia — no agregar aquí nada que se lea como evaluación de riesgo.
+const SPOT_STATUS = {
+  activa:      { e: '🔴', l: 'Activa' },
+  aclarando:   { e: '🟡', l: 'Aclarando' },
+  resuelta:    { e: '🟢', l: 'Resuelta' },
+  vigilancia:  { e: '🩺', l: 'Preguntar en consulta' },
+};
+const SHADE_LEVELS = [
+  { v: 1, e: '○',  l: 'Casi no se ve' },
+  { v: 2, e: '◔',  l: 'Tenue' },
+  { v: 3, e: '◑',  l: 'Media' },
+  { v: 4, e: '◕',  l: 'Marcada' },
+  { v: 5, e: '●',  l: 'Muy marcada' },
+];
+let spotsCache = [], obsCache = {}, _spotPos = { x: null, y: null }, _spotZoneUrl = null;
+let selectedShade = null;
+
+const zoneLabel = k => (PHOTO_TYPES.find(t => t.key === k) || { label: k }).label;
+
+async function loadSpots() {
+  const el = document.getElementById('spots-content');
+  if (!el) return;
+  const [spotsRes, obsRes] = await Promise.all([
+    db.from('skin_spots').select('*').order('zone').order('name'),
+    db.from('spot_observations').select('*').order('observed_at', { ascending: false })
+  ]);
+  if (spotsRes.error) { el.innerHTML = ''; return; }   // migración sin correr
+  spotsCache = spotsRes.data || [];
+  obsCache = {};
+  ((obsRes && obsRes.data) || []).forEach(o => {
+    (obsCache[o.spot_id] = obsCache[o.spot_id] || []).push(o);
+  });
+  const porZona = {};
+  spotsCache.forEach(s => { (porZona[s.zone] = porZona[s.zone] || []).push(s); });
+  const grupos = Object.keys(porZona).sort().map(z =>
+    `<div class="spot-zone-hdr">${esc(zoneLabel(z))}</div>` +
+    porZona[z].map(spotRowHTML).join('')
+  ).join('');
+  el.innerHTML = `<div class="week-card">
+  <h3 style="margin-top:0">🎯 Mis manchas</h3>
+  <div class="spot-intro">Seguimiento de cada mancha por separado. Lo que registras es cómo la ves tú, no una medición — sirve para ver la dirección a lo largo de meses y para llegar a consulta con datos.</div>
+  <button class="mini-action-btn" onclick="openSpotModal()">＋ Agregar mancha</button>
+  ${grupos || '<div class="empty-state">Aún no hay manchas registradas.</div>'}
+</div>`;
+}
+
+function spotRowHTML(s) {
+  const st = SPOT_STATUS[s.status] || SPOT_STATUS.activa;
+  const obs = obsCache[s.id] || [];
+  const tr = spotTrend(obs);
+  const ultima = obs[0];
+  let tendencia = '<span class="spot-trend spot-trend-none">Sin tendencia todavía · registra al menos 2 veces</span>';
+  if (tr) {
+    const cls = tr.direction === 'aclarando' ? 'ok' : (tr.direction === 'oscureciendo' ? 'warn' : 'none');
+    const meses = tr.days >= 60 ? ` en ${Math.round(tr.days / 30)} meses` : ` en ${tr.days} días`;
+    tendencia = `<span class="spot-trend spot-trend-${cls}">${tr.first}/5 → ${tr.last}/5${esc(meses)} · ${esc(tr.direction)}</span>`;
+  }
+  const hoy = ultima ? `Última vez que la miraste: ${fmtDate(ultima.observed_at)} · ${ultima.shade}/5` : 'Sin observaciones';
+  const aviso = s.status === 'vigilancia'
+    ? '<div class="spot-vigilancia">🩺 Marcada para preguntar en tu próxima consulta.</div>' : '';
+  return `<div class="spot-row">
+  <div class="spot-row-top">
+    <div class="spot-name">${esc(st.e)} ${esc(s.name)}</div>
+    <div class="spot-actions">
+      <button class="hito-del" onclick="openObsModal('${s.id}')" title="Registrar cómo se ve">👁️</button>
+      <button class="hito-del" onclick="openSpotModal('${s.id}')" title="Editar">✏️</button>
+      <button class="hito-del" onclick="deleteSpot('${s.id}')" title="Eliminar">🗑️</button>
+    </div>
+  </div>
+  <div class="spot-meta">${esc(st.l)}${s.first_noticed ? ' · desde ' + fmtDate(s.first_noticed) : ''} · ${esc(hoy)}</div>
+  ${tendencia}
+  ${s.notes ? `<div class="spot-notes">${fmtRich(s.notes)}</div>` : ''}
+  ${aviso}
+</div>`;
+}
+
+// ── Colocar la marca sobre la última foto de la zona ────────────────────────
+// Se usa la foto REAL de esa área, no un diagrama genérico: es más fácil
+// ubicar la mancha sobre tu propia cara. Las coordenadas se guardan en % para
+// que no dependan del tamaño con que se muestre la imagen.
+async function loadSpotZonePhoto() {
+  const zone = document.getElementById('sp-zone').value;
+  const img = document.getElementById('sp-map-img');
+  const hint = document.getElementById('sp-map-hint');
+  const wrap = document.getElementById('sp-map-wrap');
+  _spotZoneUrl = null;
+  img.src = ''; wrap.style.display = 'none';
+  hint.textContent = 'Aún no tienes foto de esta zona — la ubicación se puede marcar después.';
+  const { data } = await db.from('progress_photos')
+    .select('photo_url').eq('photo_type', zone)
+    .order('photo_date', { ascending: false }).limit(1);
+  if (!data || !data.length) return;
+  const { data: signed } = await db.storage.from('progress-photos')
+    .createSignedUrls([extractStoragePath(data[0].photo_url)], 3600);
+  if (!signed || !signed[0] || !signed[0].signedUrl) return;
+  _spotZoneUrl = signed[0].signedUrl;
+  img.src = _spotZoneUrl;
+  wrap.style.display = 'block';
+  hint.textContent = 'Toca sobre la foto para marcar dónde está.';
+  renderSpotMarker();
+}
+
+function placeSpotMarker(ev) {
+  if (!_spotZoneUrl) return;
+  const wrap = document.getElementById('sp-map-wrap');
+  const r = wrap.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const x = ((ev.clientX - r.left) / r.width) * 100;
+  const y = ((ev.clientY - r.top) / r.height) * 100;
+  _spotPos = { x: Math.max(0, Math.min(100, +x.toFixed(2))),
+               y: Math.max(0, Math.min(100, +y.toFixed(2))) };
+  renderSpotMarker();
+}
+
+function renderSpotMarker() {
+  const m = document.getElementById('sp-map-marker');
+  if (!m) return;
+  if (_spotPos.x == null || _spotPos.y == null) { m.style.display = 'none'; return; }
+  m.style.left = _spotPos.x + '%';
+  m.style.top  = _spotPos.y + '%';
+  m.style.display = 'block';
+}
+
+function openSpotModal(id) {
+  const s = id ? spotsCache.find(x => x.id === id) : null;
+  document.getElementById('spot-modal-title').textContent = s ? '✏️ Editar mancha' : '＋ Nueva mancha';
+  document.getElementById('sp-id').value = s ? s.id : '';
+  document.getElementById('sp-name').value = s ? s.name : '';
+  document.getElementById('sp-status').value = s ? s.status : 'activa';
+  document.getElementById('sp-first').value = s ? (s.first_noticed || '') : '';
+  document.getElementById('sp-notes').value = s ? (s.notes || '') : '';
+  document.getElementById('sp-zone').innerHTML =
+    PHOTO_TYPES.map(t => `<option value="${t.key}"${s && s.zone === t.key ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
+  _spotPos = s ? { x: s.pos_x, y: s.pos_y } : { x: null, y: null };
+  openModal('spot-modal');
+  loadSpotZonePhoto();
+}
+
+async function saveSpot() {
+  const id = document.getElementById('sp-id').value;
+  const row = {
+    name:   document.getElementById('sp-name').value.trim(),
+    zone:   document.getElementById('sp-zone').value,
+    status: document.getElementById('sp-status').value,
+    first_noticed: document.getElementById('sp-first').value || null,
+    notes:  document.getElementById('sp-notes').value.trim() || null,
+    pos_x:  _spotPos.x, pos_y: _spotPos.y
+  };
+  if (!row.name) { showToast('⚠️ Ponle un nombre', 'error'); return; }
+  const btn = document.getElementById('save-spot-btn');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  const { error } = id
+    ? await db.from('skin_spots').update(row).eq('id', id)
+    : await db.from('skin_spots').insert(row);
+  btn.disabled = false; btn.textContent = 'Guardar mancha';
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  closeModal('spot-modal');
+  showToast(id ? '✅ Mancha actualizada' : '✅ Mancha guardada', 'success');
+  await loadSpots();
+}
+
+async function deleteSpot(id) {
+  const s = spotsCache.find(x => x.id === id);
+  const n = (obsCache[id] || []).length;
+  const ok = await confirmSheet(
+    `¿Eliminar "${s ? s.name : 'esta mancha'}"?` + (n ? ` Se borran también sus ${n} observación(es).` : ''),
+    'Eliminar');
+  if (!ok) return;
+  const { error } = await db.from('skin_spots').delete().eq('id', id);
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  showToast('🗑️ Mancha eliminada', '');
+  await loadSpots();
+}
+
+// ── Observaciones ──────────────────────────────────────────────────────────
+function renderShadeRow() {
+  const el = document.getElementById('ob-shade-row');
+  if (!el) return;
+  el.innerHTML = SHADE_LEVELS.map(s =>
+    `<button class="skin-btn${selectedShade === s.v ? ' on' : ''}" onclick="setShade(${s.v})">
+      <span style="font-size:17px">${s.e}</span><span>${esc(s.l)}</span>
+    </button>`).join('');
+}
+function setShade(v) { selectedShade = v; renderShadeRow(); }
+
+function openObsModal(spotId) {
+  const s = spotsCache.find(x => x.id === spotId);
+  document.getElementById('obs-modal-title').textContent = s ? `👁️ ${s.name}` : 'Registrar cómo se ve';
+  document.getElementById('ob-spot-id').value = spotId;
+  document.getElementById('ob-date').value = TODAY_STR;
+  document.getElementById('ob-notes').value = '';
+  // Si ya hay observación de hoy, se precarga para CORREGIRLA en vez de duplicar
+  // (la base tiene unique (spot_id, observed_at)).
+  const hoy = (obsCache[spotId] || []).find(o => o.observed_at === TODAY_STR);
+  selectedShade = hoy ? hoy.shade : null;
+  if (hoy && hoy.notes) document.getElementById('ob-notes').value = hoy.notes;
+  renderShadeRow();
+  openModal('obs-modal');
+}
+
+async function saveObservation() {
+  const spotId = document.getElementById('ob-spot-id').value;
+  const fecha  = document.getElementById('ob-date').value;
+  if (!fecha) { showToast('⚠️ Elige una fecha', 'error'); return; }
+  if (!selectedShade) { showToast('⚠️ Elige qué tan marcada la ves', 'error'); return; }
+  const btn = document.getElementById('save-obs-btn');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  // upsert por la restricción unique: corregir el mismo día no duplica.
+  const { error } = await db.from('spot_observations').upsert({
+    spot_id: spotId, observed_at: fecha, shade: selectedShade,
+    notes: document.getElementById('ob-notes').value.trim() || null
+  }, { onConflict: 'spot_id,observed_at' });
+  btn.disabled = false; btn.textContent = 'Guardar';
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  closeModal('obs-modal');
+  showToast('✅ Registrado', 'success');
+  await loadSpots();
+}
+
 // ── HITOS DE TRATAMIENTO ─────────────────────────────────────────────────────
 // Responde "qué cambió y cuándo": sin esto ninguna gráfica se puede leer de
 // forma causal. Une DOS fuentes (vista treatment_timeline en la base):
@@ -2541,7 +2792,7 @@ function showTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-  if (name === 'photos')  { renderWeekCalendar(); if (!galleryLoaded) loadPhotoGallery(); }
+  if (name === 'photos')  { renderWeekCalendar(); loadSpots(); if (!galleryLoaded) loadPhotoGallery(); }
   if ((name === 'history' || name === 'log') && !historyLoaded) loadHistory();
   if (name === 'history') loadHitos();
   if (name === 'stock'   && !inventoryLoaded) loadInventory();

@@ -434,6 +434,47 @@ t('ventana y umbral configurables',
   (r => [r.nBefore, r.nAfter])(reactionSignal('2026-01-15',
     _skin('2026-01-15', 7, 2, _skin('2026-01-08', 7, 4)), { windowDays: 7 })), [7, 7]);
 
+
+group('🎯 spotTrend');
+
+// `shade` es apreciación visual de la usuaria (1 = casi no se ve, 5 = muy
+// marcada), NO una medición. La tendencia se lee como dirección, no como
+// cuánto aclaró.
+t('spotTrend: con una sola observación no concluye',
+  spotTrend([{ observed_at: '2026-01-01', shade: 4 }]), null);
+t('spotTrend: sin observaciones devuelve null', spotTrend([]), null);
+t('spotTrend: entrada nula no truena', spotTrend(null), null);
+
+t('spotTrend: detecta aclaramiento entre la primera y la última',
+  (r => [r.direction, r.first, r.last, r.delta, r.n])(spotTrend([
+    { observed_at: '2026-01-01', shade: 5 }, { observed_at: '2026-04-01', shade: 3 }])),
+  ['aclarando', 5, 3, -2, 2]);
+
+t('spotTrend: detecta oscurecimiento',
+  spotTrend([{ observed_at: '2026-01-01', shade: 2 },
+             { observed_at: '2026-03-01', shade: 4 }]).direction, 'oscureciendo');
+
+t('spotTrend: sin cambio dice "igual"',
+  spotTrend([{ observed_at: '2026-01-01', shade: 3 },
+             { observed_at: '2026-03-01', shade: 3 }]).direction, 'igual');
+
+t('spotTrend: ordena aunque lleguen desordenadas',
+  (r => [r.first, r.last])(spotTrend([
+    { observed_at: '2026-04-01', shade: 2 }, { observed_at: '2026-01-01', shade: 5 },
+    { observed_at: '2026-02-01', shade: 4 }])), [5, 2]);
+
+t('spotTrend: cuenta los días entre la primera y la última',
+  spotTrend([{ observed_at: '2026-01-01', shade: 5 },
+             { observed_at: '2026-01-31', shade: 4 }]).days, 30);
+
+t('spotTrend: ignora observaciones sin shade',
+  spotTrend([{ observed_at: '2026-01-01', shade: 5 }, { observed_at: '2026-02-01', shade: null },
+             { observed_at: '2026-03-01', shade: 3 }]).n, 2);
+
+t('spotTrend: si solo queda una válida, no concluye',
+  spotTrend([{ observed_at: '2026-01-01', shade: 5 },
+             { observed_at: '2026-02-01', shade: null }]), null);
+
 // ── fin ──
 finish();
 </script>

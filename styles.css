@@ -631,3 +631,33 @@ body {
    así que alinear es literalmente "buscar que se apague la imagen". */
 #photo-ghost { position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; opacity: 0.5; pointer-events: none; mix-blend-mode: difference; }
+
+/* ── MAPA DE MANCHAS ───────────────────────────────────────────────────────
+   Seguimiento por lesión. Sobrio a propósito: no es una herramienta de
+   evaluación de riesgo y no debe parecerlo. */
+.spot-intro { font-size: 11.5px; color: #7A6E6A; line-height: 1.5; margin-bottom: 10px; }
+.spot-zone-hdr { font-size: 11px; font-weight: 800; color: #A09090; text-transform: uppercase;
+  letter-spacing: 0.6px; margin: 14px 0 6px; }
+.spot-row { border-left: 3px solid #E8DCD4; padding: 9px 0 9px 11px; margin-bottom: 9px; }
+.spot-row-top { display: flex; align-items: flex-start; gap: 8px; }
+.spot-name { flex: 1; font-size: 13px; font-weight: 800; color: #2A2420; word-break: break-word; }
+.spot-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.spot-meta { font-size: 11px; color: #A09090; margin-top: 3px; }
+.spot-notes { font-size: 11.5px; color: #4A3E3A; line-height: 1.5; margin-top: 5px; }
+.spot-trend { display: inline-block; font-size: 11.5px; font-weight: 700; margin-top: 5px;
+  padding: 3px 9px; border-radius: 20px; }
+.spot-trend-ok   { background: #EAF5EA; color: #287848; }
+.spot-trend-warn { background: #FBE9E7; color: #C43020; }
+.spot-trend-none { background: #F4EFE8; color: #A09090; font-weight: 600; }
+.spot-vigilancia { font-size: 11.5px; color: #5A3A8A; background: #EDE8F5; border-radius: 8px;
+  padding: 6px 9px; margin-top: 6px; line-height: 1.45; }
+
+/* Colocar la marca sobre la última foto de la zona */
+.spot-map-wrap { position: relative; display: none; margin-top: 8px; border-radius: 12px;
+  overflow: hidden; cursor: crosshair; touch-action: manipulation; }
+.spot-map-wrap img { display: block; width: 100%; }
+.spot-marker { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border: 2.5px solid #C43020; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
+  pointer-events: none; }
+.spot-marker::after { content: ''; position: absolute; inset: 8px; border-radius: 50%;
+  background: #C43020; }

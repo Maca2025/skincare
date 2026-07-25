@@ -316,3 +316,31 @@ function reactionSignal(startDate, skinByDate, opts) {
     nBefore: before.length, nAfter: after.length
   };
 }
+
+// ── TENDENCIA DE UNA MANCHA ──────────────────────────────────────────────────
+// `shade` es una APRECIACIÓN VISUAL de la usuaria (1 = casi no se ve, 5 = muy
+// marcada), no una medición. La tendencia se calcula sobre ese dato declarado y
+// así debe presentarse siempre: sirve para ver una dirección a lo largo de
+// meses, no para afirmar cuánto aclaró.
+//
+// Conservador a propósito: con menos de 2 observaciones no dice nada, y compara
+// la PRIMERA contra la ÚLTIMA en vez de ajustar una recta — con 3 o 4 puntos
+// subjetivos, una regresión da una falsa sensación de precisión.
+//
+// obs: [{ observed_at, shade }] en cualquier orden.
+// Devuelve null, o { direction, first, last, delta, n, days }.
+function spotTrend(obs) {
+  const v = (obs || [])
+    .filter(o => o && o.shade != null && o.observed_at)
+    .sort((a, b) => String(a.observed_at).localeCompare(String(b.observed_at)));
+  if (v.length < 2) return null;
+  const a = v[0], b = v[v.length - 1];
+  const delta = Number(b.shade) - Number(a.shade);
+  const days = Math.round(
+    (new Date(b.observed_at + 'T12:00:00Z') - new Date(a.observed_at + 'T12:00:00Z')) / 86400000);
+  return {
+    direction: delta < 0 ? 'aclarando' : (delta > 0 ? 'oscureciendo' : 'igual'),
+    first: Number(a.shade), last: Number(b.shade), delta,
+    n: v.length, days
+  };
+}

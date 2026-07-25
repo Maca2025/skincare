@@ -31,6 +31,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - `daily_notes` — nota + `skin_state` (1–5) + `sun_exposure` (interior/normal/alta/playa), key `note_date`.
 - `progress_photos` — `photo_url` guarda SOLO el nombre de archivo; bucket `progress-photos` es PRIVADO → URLs firmadas con `createSignedUrls` (batch, nunca una por una).
 - `push_subscriptions` — suscripciones Web Push (+`last_notified_at` para no duplicar avisos).
+- `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). `zone` usa las mismas claves que `PHOTO_TYPES`; `pos_x`/`pos_y` son PORCENTAJES sobre la última foto de esa zona, no píxeles, para que la marca no dependa del tamaño con que se muestre. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
 - `treatment_events` — hitos de tratamiento que NO son un producto: consultas, procedimientos, cambios de diagnóstico, exposición solar fuera de lo normal. `event_type` va con CHECK. La vista `treatment_timeline` la une con `products.started_at` y lleva `security_invoker = on` (sin eso, la vista saltaría el RLS de las tablas de abajo).
 - **RLS activo en todo** (políticas `authenticated`). La key publishable es pública en el repo — sin RLS los datos quedan expuestos. Cualquier tabla nueva DEBE nacer con RLS.
 
@@ -118,7 +119,16 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     solo lo malo sesga la lectura. **El disclaimer del render no es adorno** — un
     número junto al nombre de un producto se lee como causa aunque no lo sea.
 
-23. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
+23. **El mapa de manchas NO evalúa riesgo.** `shade` (1–5) es apreciación visual
+    de la usuaria, no colorimetría, y `spotTrend` compara primera contra última
+    observación —sin regresión: con 3 o 4 puntos subjetivos, ajustar una recta
+    da falsa precisión—. Sirve para el seguimiento de un TRATAMIENTO. El estado
+    `vigilancia` existe para no olvidar preguntarlo en consulta, **no para que la
+    app dictamine**. No agregar aquí puntajes de riesgo, ABCDE automatizado ni
+    nada que se lea como diagnóstico: una lesión que cambia, sangra o pica es de
+    dermatoscopia.
+
+24. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
 
 ## Al terminar cualquier cambio
 

@@ -161,6 +161,8 @@
         <div class="loading-state"><span class="spinner">⟳</span></div>
       </div>
     </div>
+    <!-- Mapa de manchas: seguimiento individual, aparte de la galería por área -->
+    <div id="spots-content"></div>
     <div id="photo-gallery-content">
       <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando fotos...</div>
     </div>
@@ -498,6 +500,79 @@
   </div>
 </div>
 <!-- Confirm sheet (reemplaza confirm() nativo) -->
+<div class="modal-overlay" id="spot-modal" onclick="closeModal('spot-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="spot-modal-title">＋ Nueva mancha</div>
+      <button class="modal-close" onclick="closeModal('spot-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sp-id">
+      <div class="prod-field">
+        <label class="prod-label">Nombre</label>
+        <input class="prod-input" id="sp-name" type="text" placeholder="Ej: Pómulo derecho, la grande">
+        <div class="field-hint">Un nombre que reconozcas dentro de seis meses.</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Zona</label>
+        <select class="prod-input prod-select" id="sp-zone" onchange="loadSpotZonePhoto()"></select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Ubicación</label>
+        <div class="field-hint" id="sp-map-hint">Toca sobre la foto para marcar dónde está.</div>
+        <div class="spot-map-wrap" id="sp-map-wrap" onclick="placeSpotMarker(event)">
+          <img id="sp-map-img" src="" alt="">
+          <div class="spot-marker" id="sp-map-marker" style="display:none"></div>
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Estado</label>
+        <select class="prod-input prod-select" id="sp-status">
+          <option value="activa">Activa</option>
+          <option value="aclarando">Aclarando</option>
+          <option value="resuelta">Resuelta</option>
+          <option value="vigilancia">Preguntar en consulta</option>
+        </select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Desde cuándo la notas (opcional)</label>
+        <input class="prod-input" id="sp-first" type="date">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Notas (opcional)</label>
+        <textarea class="prod-input prod-ta" id="sp-notes" placeholder="Cómo es, si cambió, qué te dijeron en consulta..."></textarea>
+      </div>
+      <button class="save-btn" id="save-spot-btn" onclick="saveSpot()">Guardar mancha</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="obs-modal" onclick="closeModal('obs-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="obs-modal-title">Registrar cómo se ve</div>
+      <button class="modal-close" onclick="closeModal('obs-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ob-spot-id">
+      <div class="prod-field">
+        <label class="prod-label">Fecha</label>
+        <input class="prod-input" id="ob-date" type="date">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">¿Qué tan marcada la ves hoy?</label>
+        <div class="skin-state-row" id="ob-shade-row"></div>
+        <div class="field-hint">Es tu apreciación a simple vista, no una medición. Sirve para ver la dirección a lo largo de meses.</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Notas (opcional)</label>
+        <textarea class="prod-input prod-ta" id="ob-notes" placeholder="Con qué luz la viste, si notaste algo distinto..."></textarea>
+      </div>
+      <button class="save-btn" id="save-obs-btn" onclick="saveObservation()">Guardar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="hito-modal" onclick="closeModal('hito-modal')">
   <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
     <div class="modal-handle"></div>
