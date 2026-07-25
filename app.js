@@ -2086,7 +2086,7 @@ const SHADE_LEVELS = [
   { v: 4, e: '◕',  l: 'Marcada' },
   { v: 5, e: '●',  l: 'Muy marcada' },
 ];
-let spotsCache = [], obsCache = {}, _spotPos = { x: null, y: null };
+let spotsCache = [], obsCache = {}, zonePhotos = {}, _spotPos = { x: null, y: null };
 // Foto sobre la que se marcaron las coordenadas. NO es "la más reciente de la
 // zona": los % son de UNA foto concreta, y si la referencia cambiara sola el
 // marcador terminaría señalando otro punto de la cara.
@@ -2094,6 +2094,37 @@ let _spotRef = { id: null, url: null, date: null };
 let selectedShade = null;
 
 const zoneLabel = k => (PHOTO_TYPES.find(t => t.key === k) || { label: k }).label;
+
+// ── TIRA DE RECORTES ────────────────────────────────────────────────────────
+// Amplía la MISMA región en cada foto del área y las pone en fila por fecha,
+// para poder comparar una mancha concreta a lo largo de meses.
+//
+// El recorte se hace con CSS puro (`background-size` + `background-position` en
+// %), no con canvas: así no hay que conocer la relación de aspecto de cada foto
+// ni redibujar nada. `background-position: X% Y%` alinea el punto X% de la
+// imagen con el punto X% del contenedor, así que la mancha siempre queda a la
+// vista con el mismo encuadre relativo en todas las fotos.
+//
+// LIMITACIÓN, y es inherente: usa las mismas coordenadas en TODAS las fotos.
+// Solo apunta al mismo sitio si el encuadre fue consistente — para eso está la
+// foto fantasma al capturar. Por lo mismo NO se calcula ningún número de
+// "cuánto aclaró": con luz e iluminación variables sería precisión inventada.
+// Se muestran los recortes con su fecha y la usuaria juzga.
+const SPOT_CROP_ZOOM = 420;   // % del ancho del contenedor: a más zoom, más detalle
+// La URL firmada acaba dentro de un atributo `style`, así que es un dato que
+// entra a innerHTML y le aplica la regla de oro 2. Un URL firmado de Supabase es
+// base64url + JWT: nunca lleva comillas, paréntesis, backslash, punto y coma ni
+// espacios — que son justo los caracteres con los que se podría romper el
+// atributo o inyectar otra declaración CSS. Se eliminan y luego se escapa.
+function cssUrlSafe(u) {
+  return esc(String(u == null ? '' : u).replace(/['"()\\;\s]/g, ''));
+}
+function cropStyle(url, posX, posY) {
+  const x = Math.max(0, Math.min(100, Number(posX)));
+  const y = Math.max(0, Math.min(100, Number(posY)));
+  return `background-image:url('${cssUrlSafe(url)}');background-size:${SPOT_CROP_ZOOM}% auto;`
+       + `background-position:${x}% ${y}%;background-repeat:no-repeat`;
+}
 
 async function loadSpots() {
   const el = document.getElementById('spots-content');
@@ -2111,6 +2142,29 @@ async function loadSpots() {
   ((obsRes && obsRes.data) || []).forEach(o => {
     (obsCache[o.spot_id] = obsCache[o.spot_id] || []).push(o);
   });
+  // Fotos de las zonas que tienen manchas ubicadas, para armar las tiras.
+  // Una sola consulta y UNA sola llamada a createSignedUrls (nunca una por
+  // foto — regla de oro de progress_photos).
+  zonePhotos = {};
+  const zonasConPos = [...new Set(spotsCache
+    .filter(s => s.pos_x != null && s.reference_photo_id).map(s => s.zone))];
+  if (zonasConPos.length) {
+    const { data: fotos } = await db.from('progress_photos')
+      .select('id, photo_type, photo_url, photo_date')
+      .in('photo_type', zonasConPos)
+      .order('photo_date', { ascending: true });
+    const lista = fotos || [];
+    if (lista.length) {
+      const { data: signed } = await db.storage.from('progress-photos')
+        .createSignedUrls(lista.map(f => extractStoragePath(f.photo_url)), 3600);
+      lista.forEach((f, i) => {
+        const u = signed && signed[i] && signed[i].signedUrl;
+        if (!u) return;
+        (zonePhotos[f.photo_type] = zonePhotos[f.photo_type] || [])
+          .push({ id: f.id, url: u, date: f.photo_date });
+      });
+    }
+  }
   const porZona = {};
   spotsCache.forEach(s => { (porZona[s.zone] = porZona[s.zone] || []).push(s); });
   const grupos = Object.keys(porZona).sort().map(z =>
@@ -2143,6 +2197,7 @@ function spotRowHTML(s) {
   // coordenadas quedaron huérfanas y no se pueden interpretar.
   const sinRef = (s.pos_x != null && !s.reference_photo_id)
     ? '<div class="spot-vigilancia">📷 Se borró la foto de referencia de su ubicación — vuelve a marcarla.</div>' : '';
+  const tira = cropStripHTML(s);
   return `<div class="spot-row">
   <div class="spot-row-top">
     <div class="spot-name">${esc(st.e)} ${esc(s.name)}</div>
@@ -2155,9 +2210,26 @@ function spotRowHTML(s) {
   <div class="spot-meta">${esc(st.l)}${s.first_noticed ? ' · desde ' + fmtDate(s.first_noticed) : ''} · ${esc(hoy)}</div>
   ${tendencia}
   ${s.notes ? `<div class="spot-notes">${fmtRich(s.notes)}</div>` : ''}
+  ${tira}
   ${aviso}
   ${sinRef}
 </div>`;
+}
+
+// Tira de recortes de UNA mancha: la misma región en cada foto del área,
+// en orden cronológico. Marca cuál foto es la referencia donde se ubicó.
+function cropStripHTML(s) {
+  if (s.pos_x == null || s.pos_y == null || !s.reference_photo_id) return '';
+  const fotos = zonePhotos[s.zone] || [];
+  if (fotos.length < 2) {
+    return `<div class="crop-hint">La tira de comparación aparece a partir de la segunda foto de esta zona.</div>`;
+  }
+  const items = fotos.map(f => `<div class="crop-item">
+  <div class="crop-img" style="${cropStyle(f.url, s.pos_x, s.pos_y)}"></div>
+  <div class="crop-date">${esc(fmtDate(f.date))}${f.id === s.reference_photo_id ? ' 📌' : ''}</div>
+</div>`).join('');
+  return `<div class="crop-strip">${items}</div>
+<div class="crop-hint">📌 = la foto donde la ubicaste. El recorte usa las mismas coordenadas en todas: si el encuadre cambió entre fotos, puede caer algo desviado.</div>`;
 }
 
 // ── Colocar la marca sobre la última foto de la zona ────────────────────────

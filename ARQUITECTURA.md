@@ -140,7 +140,19 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     llevarse el historial de una lesión; la app detecta la posición huérfana y
     pide volver a marcar.
 
-25. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
+25. **La tira de recortes no mide, muestra.** `cropStripHTML` amplía la misma
+    región (`pos_x`/`pos_y`) en cada foto del área y las alinea por fecha. El
+    recorte es CSS puro (`background-size` + `background-position` en %): no hace
+    falta conocer la relación de aspecto ni usar canvas. **No se calcula ningún
+    número de "cuánto aclaró"** — con luz y encuadre variables sería precisión
+    inventada; la usuaria compara con el ojo. La limitación es inherente y está
+    dicha en la UI: usa las mismas coordenadas en todas las fotos, así que solo
+    apunta al mismo sitio si el encuadre fue consistente (para eso está la foto
+    fantasma). Las URL firmadas pasan por `cssUrlSafe` antes de entrar al
+    atributo `style`: es un dato llegando a innerHTML y le aplica la regla 2.
+    Las fotos se firman **en un solo lote**, nunca una por una.
+
+26. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
 
 ## Al terminar cualquier cambio
 

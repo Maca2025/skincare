@@ -661,3 +661,18 @@ body {
   pointer-events: none; }
 .spot-marker::after { content: ''; position: absolute; inset: 8px; border-radius: 50%;
   background: #C43020; }
+
+/* ── TIRA DE RECORTES DE UNA MANCHA ────────────────────────────────────────
+   La misma región ampliada en cada foto del área, en orden cronológico.
+   El recorte es CSS puro: background-size da el zoom y background-position en %
+   alinea el punto de la mancha, sin necesidad de conocer la relación de aspecto
+   de cada foto ni usar canvas.
+   -webkit-overflow-scrolling para que el desplazamiento lateral se sienta nativo
+   en iPhone. */
+.crop-strip { display: flex; gap: 7px; overflow-x: auto; padding: 8px 0 2px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.crop-item { flex: 0 0 auto; text-align: center; }
+.crop-img { width: 86px; height: 86px; border-radius: 10px; background-color: #F0ECE7;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+.crop-date { font-size: 9.5px; color: #A09090; margin-top: 3px; white-space: nowrap; }
+.crop-hint { font-size: 10.5px; color: #A09090; line-height: 1.45; margin-top: 3px; }
