@@ -1962,6 +1962,111 @@ async function handlePushLogParam() {
   await quickLogSpf();
 }
 
+// ── HITOS DE TRATAMIENTO ─────────────────────────────────────────────────────
+// Responde "qué cambió y cuándo": sin esto ninguna gráfica se puede leer de
+// forma causal. Une DOS fuentes (vista treatment_timeline en la base):
+//   · products.started_at    — cuándo entró cada producto (dato estructurado)
+//   · treatment_events       — hitos que no son un producto
+// Se consultan por separado en vez de usar la vista porque los eventos se
+// editan y borran, y la vista no expone su id.
+const HITO_TYPES = [
+  { v: 'consulta',        e: '🩺', l: 'Consulta' },
+  { v: 'procedimiento',   e: '⚡', l: 'Procedimiento' },
+  { v: 'diagnostico',     e: '📋', l: 'Cambio de diagnóstico' },
+  { v: 'medicacion',      e: '💊', l: 'Medicación' },
+  { v: 'evento_solar',    e: '☀️', l: 'Exposición solar' },
+  { v: 'producto_pausa',  e: '⏸️', l: 'Pausé un producto' },
+  { v: 'producto_ajuste', e: '🎚️', l: 'Ajuste de un producto' },
+  { v: 'otro',            e: '📌', l: 'Otro' },
+];
+const hitoType = v => HITO_TYPES.find(t => t.v === v) || { e: '📌', l: v || 'Otro' };
+let hitosCache = [];
+
+async function loadHitos() {
+  const el = document.getElementById('hitos-content');
+  if (!el) return;
+  const { data, error } = await db.from('treatment_events')
+    .select('*').order('event_date', { ascending: false });
+  if (error) { el.innerHTML = ''; return; }   // tabla aún sin migrar: no estorbar
+  hitosCache = data || [];
+  // Los inicios de producto salen de allProducts: ya está en memoria.
+  const inicios = allProducts
+    .filter(p => p.started_at)
+    .map(p => ({ _auto: true, event_date: p.started_at, event_type: 'producto_inicio',
+                 title: `Empecé ${p.name}`, emoji: p.emoji }));
+  const todos = [...hitosCache.map(h => ({ ...h, _auto: false })), ...inicios]
+    .sort((a, b) => String(b.event_date).localeCompare(String(a.event_date)));
+  const filas = todos.map(h => {
+    const t = h._auto ? { e: h.emoji || '🆕', l: 'Empecé a usarlo' } : hitoType(h.event_type);
+    const acciones = h._auto ? '' :
+      `<button class="hito-del" onclick="openHitoModal('${h.id}')" title="Editar">✏️</button>
+       <button class="hito-del" onclick="deleteHito('${h.id}')" title="Eliminar">🗑️</button>`;
+    return `<div class="hito-row${h._auto ? ' hito-auto' : ''}">
+  <div class="hito-icon">${esc(t.e)}</div>
+  <div class="hito-body">
+    <div class="hito-title">${esc(h.title)}</div>
+    <div class="hito-meta">${fmtDate(h.event_date)} · ${esc(t.l)}</div>
+    ${h.notes ? `<div class="hito-notes">${fmtRich(h.notes)}</div>` : ''}
+  </div>
+  <div class="hito-actions">${acciones}</div>
+</div>`;
+  }).join('');
+  el.innerHTML = `<div class="logs-card">
+  <h3>🗓️ Línea de tiempo del tratamiento</h3>
+  <div class="hito-intro">Marca aquí lo que pueda explicar un cambio en tu piel. Las entradas en gris se generan solas desde la fecha de inicio de cada producto.</div>
+  <button class="mini-action-btn" onclick="openHitoModal()">＋ Agregar hito</button>
+  ${filas || '<div class="empty-state">Aún no hay hitos registrados.</div>'}
+</div>`;
+}
+
+function openHitoModal(id) {
+  const h = id ? hitosCache.find(x => x.id === id) : null;
+  document.getElementById('hito-modal-title').textContent = h ? '✏️ Editar hito' : '＋ Nuevo hito';
+  document.getElementById('hf-id').value = h ? h.id : '';
+  document.getElementById('hf-type').innerHTML =
+    HITO_TYPES.map(t => `<option value="${t.v}"${h && h.event_type === t.v ? ' selected' : ''}>${t.e} ${esc(t.l)}</option>`).join('');
+  document.getElementById('hf-date').value = h ? h.event_date : TODAY_STR;
+  document.getElementById('hf-title').value = h ? h.title : '';
+  document.getElementById('hf-notes').value = h ? (h.notes || '') : '';
+  document.getElementById('hf-product').innerHTML =
+    '<option value="">— Ninguno —</option>' +
+    allProducts.map(p => `<option value="${p.id}"${h && h.product_id === p.id ? ' selected' : ''}>${esc(p.emoji || '')} ${esc(p.name)}</option>`).join('');
+  openModal('hito-modal');
+}
+
+async function saveHito() {
+  const id    = document.getElementById('hf-id').value;
+  const row = {
+    event_type: document.getElementById('hf-type').value,
+    event_date: document.getElementById('hf-date').value,
+    title:      document.getElementById('hf-title').value.trim(),
+    notes:      document.getElementById('hf-notes').value.trim() || null,
+    product_id: document.getElementById('hf-product').value || null
+  };
+  if (!row.title)      { showToast('⚠️ Escribe un título', 'error'); return; }
+  if (!row.event_date) { showToast('⚠️ Elige una fecha', 'error'); return; }
+  const btn = document.getElementById('save-hito-btn');
+  btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  const { error } = id
+    ? await db.from('treatment_events').update(row).eq('id', id)
+    : await db.from('treatment_events').insert(row);
+  btn.disabled = false; btn.textContent = 'Guardar hito';
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  closeModal('hito-modal');
+  showToast(id ? '✅ Hito actualizado' : '✅ Hito guardado', 'success');
+  await loadHitos();
+}
+
+async function deleteHito(id) {
+  const h = hitosCache.find(x => x.id === id);
+  const ok = await confirmSheet(`¿Eliminar "${h ? h.title : 'este hito'}"?`, 'Eliminar');
+  if (!ok) return;
+  const { error } = await db.from('treatment_events').delete().eq('id', id);
+  if (error) { showToast('❌ ' + error.message, 'error'); return; }
+  showToast('🗑️ Hito eliminado', '');
+  await loadHitos();
+}
+
 // ── MODALS ───────────────────────────────────────────────────────────────────
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -2295,6 +2400,7 @@ function showTab(name, btn) {
   btn.classList.add('active');
   if (name === 'photos')  { renderWeekCalendar(); if (!galleryLoaded) loadPhotoGallery(); }
   if ((name === 'history' || name === 'log') && !historyLoaded) loadHistory();
+  if (name === 'history') loadHitos();
   if (name === 'stock'   && !inventoryLoaded) loadInventory();
   if (name === 'routines' && !routinesLoaded) loadRoutines();
 }
@@ -2441,7 +2547,7 @@ function resetPfClinicalFields() {
 }
 function openAddProductModal() {
   editingProductId = null;
-  ['pf-emoji','pf-name','pf-brand','pf-note','pf-how','pf-why','pf-cat-custom','pf-opened','pf-pao'].forEach(id => {
+  ['pf-emoji','pf-name','pf-brand','pf-note','pf-how','pf-why','pf-cat-custom','pf-opened','pf-pao','pf-started'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; if (id === 'pf-cat-custom') el.style.display = 'none'; }
   });
@@ -2464,6 +2570,7 @@ function openEditProductModal(id) {
   document.getElementById('pf-how').value   = p.how_to_apply || '';
   document.getElementById('pf-why').value   = p.why_it_works || '';
   document.getElementById('pf-opened').value = p.opened_at || '';
+  document.getElementById('pf-started').value = p.started_at || '';
   document.getElementById('pf-pao').value    = p.pao_months || '';
   resetPfClinicalFields();
   const roles = (p.clinical_roles && p.clinical_roles.length) ? p.clinical_roles : (p.clinical_role ? [{ finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' }[p.clinical_role]] : []);
@@ -2507,6 +2614,7 @@ async function saveCustomProduct() {
   const clinicalRoles = [...document.querySelectorAll('#pf-clinical-roles input[type="checkbox"]:checked')].map(cb => cb.value);
   const scheduleDays = (pfFreq === 'days' && pfDays.size) ? [...pfDays].sort((a,b) => a-b) : null;
   const openedAt  = document.getElementById('pf-opened').value || null;
+  const startedAt = document.getElementById('pf-started').value || null;
   const paoMonths = parseInt(document.getElementById('pf-pao').value, 10) || null;
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (!cat)  { showToast('⚠️ Elige una categoría', 'error'); return; }
@@ -2517,7 +2625,7 @@ async function saveCustomProduct() {
       emoji, name, brand: brand || null, category: cat,
       note: note || null, how_to_apply: how || null, why_it_works: why || null,
       clinical_roles: clinicalRoles, schedule_days: scheduleDays,
-      opened_at: openedAt, pao_months: paoMonths
+      opened_at: openedAt, pao_months: paoMonths, started_at: startedAt, started_at: startedAt
     }).eq('id', editingProductId).select().single();
     btn.disabled = false; btn.textContent = 'Guardar cambios';
     if (error) { showToast('❌ ' + error.message, 'error'); return; }
@@ -2534,7 +2642,7 @@ async function saveCustomProduct() {
     emoji, name, brand: brand || null, category: cat,
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
     clinical_roles: clinicalRoles, schedule_days: scheduleDays,
-    opened_at: openedAt, pao_months: paoMonths,
+    opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
     tier: 'ok', tags: [], status: 'ok'
   }).select().single();
   btn.disabled = false; btn.textContent = 'Guardar producto';
