@@ -561,3 +561,12 @@ body {
 .spf-fab-due  { background: linear-gradient(135deg, #D4820A, #C47A00); }
 .spf-fab-none { background: linear-gradient(135deg, #C43020, #A82818); }
 @media (prefers-reduced-motion: reduce) { .spf-fab:active { transform: none; } }
+
+/* ── DERIVA DE LA MATRIZ DE DOSIS ──────────────────────────────────────────
+   Avisa cuando hay productos en la base que no existen en PRODUCT_DOSE, y por
+   lo tanto no cuentan para ningún eje de Progreso. */
+.matrix-drift { background: #FFF3E0; border: 1.5px solid #F0C888; border-radius: 14px;
+  padding: 12px 14px; margin-bottom: 12px; font-size: 12.5px; color: #7A4A00; line-height: 1.5; }
+.matrix-drift-sub { margin-top: 4px; font-size: 11.5px; opacity: 0.9; }
+.matrix-drift-sub code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+.matrix-drift-list { margin-top: 7px; font-size: 11.5px; font-weight: 700; word-break: break-word; }

@@ -20,7 +20,13 @@ El progreso medía **obediencia a un plan**, no resultados:
 - **33 de 74 productos no tenían rol clínico** — eran invisibles: la Vitamina C 20%,
   el Glicólico 7%, todos los salicílicos y los 8 productos de firmeza.
 
-Hoy **73 de 74 puntúan** (solo el bálsamo labial queda fuera, igual que antes).
+Hoy **los 92 productos de la matriz puntúan** en al menos un eje.
+
+> ⚠️ **La matriz tiene 92 ids y la base 93 productos.** `PRODUCT_DOSE` es un
+> archivo estático y el catálogo vive en Supabase: cada producto nuevo nace
+> **invisible** para el motor de dosis hasta que se le agrega su fila. Es el
+> mismo fallo que originó la Fase B, por otra puerta. La pestaña Stock ahora
+> avisa cuáles faltan (`renderInventory`).
 
 ---
 
@@ -31,15 +37,31 @@ Hoy **73 de 74 puntúan** (solo el bálsamo labial queda fuera, igual que antes)
 | Eje | Qué mide | `techoDiario` | `diasIdeales` |
 |---|---|---|---|
 | 🛡️ `proteccion` | UVA/UVB/visible | 500 | 7 |
-| 🎯 `aclarado` | inhibición de melanina | 115 | 7 |
-| 🔬 `textura` | turnover, textura y poros | 95 | 4 |
-| 💧 `barrera` | lípidos y humectación | 140 | 7 |
-| 🧬 `firmeza` | síntesis de colágeno y elastina | 115 | 6 |
+| 🎯 `aclarado` | inhibición de melanina | 370 | 7 |
+| 🔬 `textura` | turnover, textura y poros | 265 | 4 |
+| 💧 `barrera` | lípidos y humectación | 460 | 7 |
+| 🧬 `firmeza` | síntesis de colágeno y elastina | 200 | 6 |
 
-### Cuerpo, pies y cabello (6)
+> Estos techos ya son los **recalibrados**: la primera versión (115 / 95 / 140 /
+> 115) dejaba cuatro ejes clavados entre 92% y 100% y la barra no discriminaba.
+> Valores verificados contra `activos-matriz.js`.
 
-`cuerpo_proteccion` · `cuerpo_textura` · `cuerpo_firmeza` · `cuerpo_barrera` ·
-`pies` · `cabello`
+### Cuerpo, pies, cabello y manos (8)
+
+| Eje | `techoDiario` | `diasIdeales` |
+|---|---|---|
+| ☀️ `cuerpo_proteccion` | 500 | 7 |
+| 🫧 `cuerpo_textura` | 80 | 3 |
+| 🧬 `cuerpo_firmeza` | 75 | 5 |
+| 💧 `cuerpo_barrera` | 95 | 7 |
+| 🦶 `pies` | 85 | 7 |
+| 💇 `cabello` | 70 | 3 |
+| ✋ `manos` | 90 | 7 |
+| 🧴 `manos_proteccion` | 500 | 7 |
+
+**13 ejes en total** (5 de cara + 8 de aquí). Los de manos se agregaron después
+de la primera versión de este documento: las manos y los brazos pigmentan por
+UVA incidental y no compartían eje con nada.
 
 **Criterio:** ejes propios, separados de la cara. Una crema corporal de retinol NO
 debe inflar la métrica facial de firmeza — no toca la cara.
@@ -202,7 +224,9 @@ pasarse se topa en 100 y se avisa aparte.
 
 **Recibe días con IRRITANTE, no puntos del eje `textura`.** La niacinamida, el
 azelaico y el NAG suben textura **sin irritar**; contarlos disparaba avisos falsos.
-La lista `IRRITANTES` (13 productos) tiene solo retinoides y ácidos exfoliantes.
+La lista `IRRITANTES` tiene 13 productos: solo retinoides y ácidos exfoliantes.
+Es un `Set` (no un arreglo) y se consulta con `.has(id)` — `app.js` la lee con
+guarda `typeof IRRITANTES !== 'undefined'`.
 
 Tolera 1 día de margen antes de avisar.
 
@@ -244,13 +268,18 @@ Con su mezcla real de productos:
 rutina de un protocolo completo para manchas solares es **reaplicar protector
 durante el día**. No comprar nada, no agregar pasos.
 
+> ⚠️ **Los porcentajes de la tabla de arriba son de la primera medición y ya no
+> son válidos**: se tomaron con los techos viejos y antes de que la reaplicación
+> se volviera de un toque (FAB + registro desde la notificación). Volver a
+> leerlos de la app antes de citarlos en cualquier lado.
+
 ### Pendientes
 
-1. **Recalibrar techos con datos reales.** Los `techoDiario` salieron de una
-   simulación. En la primera pasada casi todo se pegaba en 100% y hubo que
-   subirlos. Con 4 ejes entre 92% y 100%, hoy el único con señal útil es
-   Protección. **Si en un mes siguen clavados arriba, subir los techos** para que
-   la barra vuelva a discriminar.
+1. ~~**Recalibrar techos con datos reales.**~~ **HECHO** — los techos de cara
+   subieron a 370 / 265 / 460 / 200. Queda vigente el criterio: si vuelven a
+   clavarse arriba de 90% varias semanas seguidas, subirlos otra vez. La
+   recalibración automática por percentil de los propios 90 días sigue siendo la
+   mejora pendiente, para no tener que hacerlo a mano.
 2. **Revisar la matriz.** Las potencias son lectura de la composición declarada, no
    verdad clínica. `matriz-activos-revision.csv` trae el razonamiento por producto.
 3. **Fase C (opcional):** superponer `skin_state` y fotos para contrastar estímulo
@@ -263,7 +292,7 @@ durante el día**. No comprar nada, no agregar pasos.
 
 | Archivo | Contenido |
 |---|---|
-| `activos-matriz.js` | `DOSE_AXES`, `PRODUCT_DOSE` (74 productos por id), `IRRITANTES` |
+| `activos-matriz.js` | `DOSE_AXES` (13 ejes), `PRODUCT_DOSE` (92 productos por id), `IRRITANTES` (`Set` de 13) |
 | `pure.js` | `spfScoreOf`, `doseWeekPct`, `overExposureDays` |
 | `app.js` | Cálculo de dosis, render, focus card, ideales por exposición |
 | `tests-spf-agregar.js` · `tests-dosis-agregar.js` | 26 casos para `tests.html` |

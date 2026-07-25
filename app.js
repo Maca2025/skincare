@@ -2345,6 +2345,20 @@ function renderInventory() {
   <div class="inv-sum-card"><div class="inv-sum-val red">${outCount}</div><div class="inv-sum-lbl">❌ Sin stock</div></div>
 </div>`;
   const addBtn = `<button class="add-prod-btn" onclick="openAddProductModal()">＋ Agregar producto</button>`;
+  // ── AVISO DE DERIVA DE LA MATRIZ DE DOSIS ─────────────────────────────────
+  // PRODUCT_DOSE es un archivo estático; el catálogo vive en Supabase. Cada
+  // producto nuevo nace INVISIBLE para el motor de dosis hasta que se le agrega
+  // su fila en activos-matriz.js. Es exactamente el fallo que originó la Fase B
+  // (33 de 74 productos no contaban para nada), reapareciendo por otra puerta.
+  // Se avisa aquí, en Stock, porque es donde se dan de alta los productos.
+  const sinMatriz = (typeof PRODUCT_DOSE !== 'undefined')
+    ? allProducts.filter(p => !PRODUCT_DOSE[p.id])
+    : [];
+  const driftHTML = sinMatriz.length ? `<div class="matrix-drift">
+  <strong>⚠️ ${sinMatriz.length} producto(s) fuera de la matriz de dosis</strong>
+  <div class="matrix-drift-sub">No cuentan para ningún eje de Progreso. Hay que agregarlos a <code>activos-matriz.js</code>:</div>
+  <div class="matrix-drift-list">${sinMatriz.map(p => `${esc(p.emoji || '')} ${esc(p.name)}`).join(' · ')}</div>
+</div>` : '';
   const groups = {};
   for (const item of allProducts) {
     if (!groups[item.category]) groups[item.category] = [];
@@ -2355,7 +2369,7 @@ function renderInventory() {
   <div class="inv-group-hdr">${esc(cat)}</div>
   ${items.map(invItemHTML).join('')}
 </div>`).join('');
-  el.innerHTML = summaryHTML + addBtn + groupsHTML;
+  el.innerHTML = summaryHTML + driftHTML + addBtn + groupsHTML;
 }
 function invItemDetailHTML(item) {
   let html = item.note ? `<div>${fmtRich(item.note)}</div>` : '';
