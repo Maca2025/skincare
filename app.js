@@ -1668,13 +1668,16 @@ async function logApplication(source, routineStepId) {
     source: source || null,
     routine_step_id: routineStepId || null
   };
-  const { error } = await db.from('product_applications').insert(row);
+  // Se pide el id de vuelta para que quien registre pueda DESHACER esa fila
+  // exacta. Sigue devolviendo un valor truthy, así que los callers que solo
+  // preguntan `if (!ok)` no cambian de comportamiento.
+  const { data, error } = await db.from('product_applications').insert(row).select('id').single();
   if (error) {
     if (!navigator.onLine || /fetch|network/i.test(error.message || '')) {
       queuePending(row);
       showToast('📡 Sin conexión — se guardará al reconectar', '');
       historyLoaded = false;
-      return true;
+      return 'queued';
     }
     showToast('❌ ' + error.message, 'error');
     return false;
@@ -1682,7 +1685,7 @@ async function logApplication(source, routineStepId) {
   showToast('✅ ' + name.split(' ').slice(0,3).join(' ') + ' registrado', 'success');
   loadTodayApplications();
   historyLoaded = false;
-  return true;
+  return (data && data.id) ? data.id : true;
 }
 async function loadTodayApplications() {
   loadLastReapp();
@@ -1856,6 +1859,54 @@ async function checkSpfReminder() {
   localStorage.setItem(SPF_NUDGE_TS_KEY, String(_lastSpfNudge));
   const msg = last ? `Han pasado ${gapH.toFixed(1)} h desde tu último SPF facial` : 'Hoy aún no registras SPF facial';
   notifySpf(msg);
+}
+
+// ── REGISTRO DESDE LA NOTIFICACIÓN ───────────────────────────────────────────
+// Tocar el aviso de SPF registra tu último protector sin navegar por la app.
+// El service worker manda LOG_SPF (app abierta) o abre con ?log=spf (cerrada).
+//
+// No adivina: si nunca has registrado un SPF, abre el picker en vez de
+// inventar un producto. Y si ya registraste hace menos de 15 min, avisa en
+// lugar de duplicar — el mismo aviso puede tocarse dos veces.
+const PUSH_LOG_MIN_GAP_MIN = 15;
+
+async function lastSpfApplication() {
+  const spfIds = allProducts.filter(p => p.category === '🌞 SPF Facial').map(p => p.id);
+  if (!spfIds.length) return null;
+  const { data } = await db.from('product_applications')
+    .select('product_name, applied_at')
+    .in('product_id', spfIds)
+    .order('applied_at', { ascending: false }).limit(1);
+  return (data && data.length) ? data[0] : null;
+}
+
+async function logSpfFromPush() {
+  const last = await lastSpfApplication();
+  if (!last) { showToast('🛡️ Elige tu protector', ''); openSPFPicker(); return; }
+  const gapMin = (Date.now() - new Date(last.applied_at).getTime()) / 60000;
+  if (gapMin < PUSH_LOG_MIN_GAP_MIN) {
+    showToast(`🛡️ Ya registraste ${last.product_name} hace ${Math.round(gapMin)} min`, '');
+    return;
+  }
+  selectedProduct = last.product_name;
+  const id = await logApplication('reaplicacion');
+  if (!id) return;
+  if (id === 'queued') return;   // sin conexión: ya avisó la cola, no hay fila que deshacer
+  showUndoToast(`🛡️ ${last.product_name} registrado`, async () => {
+    await db.from('product_applications').delete().eq('id', id);
+    historyLoaded = false;
+    await loadTodayApplications();
+    await loadTodayRoutines(currentViewDateStr());
+  });
+}
+
+// App cerrada: el SW abrió con ?log=spf. Se limpia la URL para que un refresh
+// no vuelva a registrar.
+async function handlePushLogParam() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('log') !== 'spf') return;
+  history.replaceState({}, '', location.pathname);
+  await logSpfFromPush();
 }
 
 // ── MODALS ───────────────────────────────────────────────────────────────────
@@ -3166,6 +3217,13 @@ async function init() {
   checkSpfReminder();
   setInterval(checkSpfReminder, 15 * 60 * 1000);
   checkPhotoReminder();
+  // App abierta: el SW avisa por postMessage al tocar la notificación.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data && e.data.type === 'LOG_SPF') logSpfFromPush();
+    });
+  }
+  handlePushLogParam();
 }
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────

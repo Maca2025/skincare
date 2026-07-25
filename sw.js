@@ -4,7 +4,7 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
-const CACHE = 'skincare-shell-v3';
+const CACHE = 'skincare-shell-v4';
 const SHELL = [
   './',
   './index.html',
@@ -36,11 +36,24 @@ self.addEventListener('push', e => {
     body: data.body, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'spf-reminder'
   }));
 });
+// Tocar la notificación REGISTRA el protector, no solo abre la app.
+//
+// OJO: iOS Safari ignora el arreglo `actions` de showNotification — el botón
+// "Ya lo apliqué" no se renderiza en iPhone. Por eso el registro cuelga del
+// tap en la notificación completa, que sí dispara notificationclick en iOS.
+// Así el flujo pasa de 5 interacciones (abrir → bajar → categoría → producto)
+// a 1 sola. Ver mejora #1: la frecuencia de reaplicación tiene ~6x más palanca
+// sobre el eje Protección que la calidad del protector.
+//
+// Si la app ya está abierta se le avisa por postMessage; si está cerrada se
+// abre con ?log=spf y app.js registra al arrancar.
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) { if ('focus' in c) return c.focus(); }
-    return clients.openWindow('./');
+    for (const c of list) {
+      if ('focus' in c) { c.postMessage({ type: 'LOG_SPF' }); return c.focus(); }
+    }
+    return clients.openWindow('./?log=spf');
   }));
 });
 self.addEventListener('fetch', e => {
