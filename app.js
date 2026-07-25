@@ -100,6 +100,12 @@ async function checkStep(stepId, event) {
   const routineStepId = step.dataset.routineStepId || null;
   const sb = step.closest('.sec-body');
   if (!wasDone) {
+    // Paso con picker: el ✓ NO puede registrar solo, porque el texto visible
+    // es la CATEGORÍA ("SPF Facial", "Hidratantes"), no un producto. Hacerlo
+    // creaba filas sin product_id que además caían en el legacyRegex de SPF y
+    // recibían un score asumido de 60 — protección inventada en el eje que
+    // menos margen tiene. Se abre el picker y se registra al elegir.
+    if (step.dataset.picker) { openPickerForCat(stepId, step.dataset.pickerCat || ''); return; }
     step.classList.add('done');
     if (sb) updateProgress(sb.id);
     const nameEl = step.querySelector('.sc-name');
@@ -2953,11 +2959,17 @@ async function saveNewStep() {
 }
 
 // ── DYNAMIC ROUTINE RENDERING ────────────────────────────────────────────────
+// Abre el picker que corresponda a una categoría. Es la versión FUNCIÓN del
+// despacho: pickerFnForCat/reappPickerFnForCat solo generan la cadena para el
+// onclick, pero checkStep necesita llamarlo de verdad.
+function openPickerForCat(stepId, cat) {
+  if (cat === '🌞 SPF Facial')   return openSPFPicker(stepId);
+  if (cat === '☀️ SPF Corporal') return openBodySPFPicker(stepId);
+  if (MULTI_PICK_CATEGORIES.includes(cat)) return openMultiPickerByCat(stepId, cat);
+  return openGenericPickerByCat(stepId, cat);
+}
 function pickerFnForCat(cat, stepId) {
-  if (cat === '🌞 SPF Facial')   return `openSPFPicker('${stepId}')`;
-  if (cat === '☀️ SPF Corporal') return `openBodySPFPicker('${stepId}')`;
-  if (MULTI_PICK_CATEGORIES.includes(cat)) return `openMultiPickerByCat('${stepId}','${jsAttrEsc(cat)}')`;
-  return `openGenericPickerByCat('${stepId}','${jsAttrEsc(cat)}')`;
+  return `openPickerForCat('${stepId}','${jsAttrEsc(cat)}')`;
 }
 // ── REAPLICACIONES: grid de categorías (generado desde Stock) ────────────────
 const REAPP_EXCLUDE_CATEGORIES = [];
@@ -2968,10 +2980,7 @@ const REAPP_LABELS = {
   '👁️ Contorno Ojos':  '👁️ Ojos',
 };
 function reappPickerFnForCat(cat) {
-  if (cat === '🌞 SPF Facial')   return `openSPFPicker()`;
-  if (cat === '☀️ SPF Corporal') return `openBodySPFPicker()`;
-  if (MULTI_PICK_CATEGORIES.includes(cat)) return `openMultiPickerByCat(null,'${jsAttrEsc(cat)}')`;
-  return `openGenericPickerByCat(null,'${jsAttrEsc(cat)}')`;
+  return `openPickerForCat(null,'${jsAttrEsc(cat)}')`;
 }
 function renderReappCategories() {
   const el = document.getElementById('reapp-categories-wrap');
@@ -3010,7 +3019,7 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
   <div class="sc-picked-change">Toca para cambiar →</div>
 </div>`
       : `<div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>`;
-    return `<div class="step${doneCls}" id="step_${id}" data-routine-step-id="${s.id}" data-picker="1">
+    return `<div class="step${doneCls}" id="step_${id}" data-routine-step-id="${s.id}" data-picker="1" data-picker-cat="${esc(s.picker_category)}">
   <div class="sn" onclick="checkStep('step_${id}',event)">
     <span class="sn-num">${n}</span><span class="sn-check">✓</span>
   </div>
