@@ -2004,13 +2004,57 @@ const HITO_TYPES = [
 const hitoType = v => HITO_TYPES.find(t => t.v === v) || { e: '📌', l: v || 'Otro' };
 let hitosCache = [];
 
+// Ventana de notas que se descarga: 120 días, para que un producto empezado
+// hace 90 todavía tenga sus 14 días PREVIOS dentro del rango.
+const REACCION_DIAS_NOTAS = 120;
+
+// Construye el aviso de coincidencias. Se separa del render para que el texto
+// —que es la parte delicada— quede en un solo lugar.
+function buildReaccionesHTML(skinByDate) {
+  const conFecha = allProducts.filter(p => p.started_at);
+  const señales = [];
+  conFecha.forEach(p => {
+    const r = reactionSignal(p.started_at, skinByDate);
+    if (!r) return;
+    // ¿Empezó algo más casi al mismo tiempo? Si sí, NO se puede atribuir a uno.
+    const juntos = conFecha.filter(q => q.id !== p.id &&
+      Math.abs((new Date(q.started_at + 'T12:00:00Z') - new Date(p.started_at + 'T12:00:00Z')) / 86400000) <= 7);
+    señales.push({ p, r, juntos });
+  });
+  if (!señales.length) return '';
+  señales.sort((a, b) => Math.abs(b.r.delta) - Math.abs(a.r.delta));
+  const filas = señales.map(({ p, r, juntos }) => {
+    const peor = r.direction === 'peor';
+    const compañía = juntos.length
+      ? `<div class="reac-caveat">En esos mismos días también empezaste ${juntos.map(q => esc(q.name)).join(', ')} — no se puede atribuir a uno solo.</div>`
+      : '';
+    return `<div class="reac-row ${peor ? 'reac-peor' : 'reac-mejor'}">
+  <div class="reac-title">${esc(p.emoji || '')} ${esc(p.name)} · desde ${fmtDate(p.started_at)}</div>
+  <div class="reac-nums">Tu piel promedió <strong>${r.after}/5</strong> en los 14 días siguientes, contra <strong>${r.before}/5</strong> en los 14 previos (${r.delta > 0 ? '+' : ''}${r.delta}).</div>
+  <div class="reac-n">${r.nBefore} días con registro antes · ${r.nAfter} después</div>
+  ${compañía}
+</div>`;
+  }).join('');
+  return `<div class="logs-card">
+  <h3>🔬 Coincidencias que vale la pena mirar</h3>
+  ${filas}
+  <div class="reac-disclaimer">Esto es una <strong>coincidencia en el tiempo, no una causa demostrada</strong>. Tu piel cambia por clima, hormonas, sueño y varios productos a la vez, y aquí no hay forma de separarlos. Sirve para notar algo y llevarlo a tu próxima consulta, no para concluir por tu cuenta que un producto te hace daño.</div>
+</div>`;
+}
+
 async function loadHitos() {
   const el = document.getElementById('hitos-content');
   if (!el) return;
-  const { data, error } = await db.from('treatment_events')
-    .select('*').order('event_date', { ascending: false });
+  const desde = toDateStr(new Date(Date.now() - REACCION_DIAS_NOTAS * 86400000));
+  const [{ data, error }, notasRes] = await Promise.all([
+    db.from('treatment_events').select('*').order('event_date', { ascending: false }),
+    db.from('daily_notes').select('note_date, skin_state').gte('note_date', desde)
+  ]);
   if (error) { el.innerHTML = ''; return; }   // tabla aún sin migrar: no estorbar
   hitosCache = data || [];
+  const skinByDate = {};
+  ((notasRes && notasRes.data) || []).forEach(r => { if (r.skin_state) skinByDate[r.note_date] = r.skin_state; });
+  const reaccionesHTML = buildReaccionesHTML(skinByDate);
   // Los inicios de producto salen de allProducts: ya está en memoria.
   const inicios = allProducts
     .filter(p => p.started_at)
@@ -2033,7 +2077,7 @@ async function loadHitos() {
   <div class="hito-actions">${acciones}</div>
 </div>`;
   }).join('');
-  el.innerHTML = `<div class="logs-card">
+  el.innerHTML = reaccionesHTML + `<div class="logs-card">
   <h3>🗓️ Línea de tiempo del tratamiento</h3>
   <div class="hito-intro">Marca aquí lo que pueda explicar un cambio en tu piel. Las entradas en gris se generan solas desde la fecha de inicio de cada producto.</div>
   <button class="mini-action-btn" onclick="openHitoModal()">＋ Agregar hito</button>

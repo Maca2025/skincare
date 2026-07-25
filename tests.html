@@ -333,6 +333,64 @@ t('hidratación: producto sin categoría no rompe el índice',
     'am', '🧴 X'),
   '🧴 X');
 
+// ============================================================================
+// REACCIÓN A PRODUCTO NUEVO — coincidencia temporal, NO causa
+// ============================================================================
+group('🔬 reactionSignal');
+
+// Helper: llena un rango de fechas con el mismo valor de piel.
+const _skin = (desde, dias, val, base) => {
+  const o = base || {};
+  for (let i = 0; i < dias; i++) o[shiftDateStr(desde, i)] = val;
+  return o;
+};
+
+t('shiftDateStr: suma días',        shiftDateStr('2026-01-15', 5), '2026-01-20');
+t('shiftDateStr: resta días',       shiftDateStr('2026-01-15', -5), '2026-01-10');
+t('shiftDateStr: cruza fin de mes', shiftDateStr('2026-01-31', 1), '2026-02-01');
+t('shiftDateStr: cruza fin de año', shiftDateStr('2025-12-31', 1), '2026-01-01');
+t('shiftDateStr: año bisiesto',     shiftDateStr('2028-02-28', 1), '2028-02-29');
+
+// Piel en 4/5 los 14 días previos, en 2/5 los 14 siguientes.
+const empeora = _skin('2026-01-15', 14, 2, _skin('2026-01-01', 14, 4));
+t('detecta empeoramiento tras introducir el producto',
+  (r => [r.direction, r.before, r.after, r.delta])(reactionSignal('2026-01-15', empeora)),
+  ['peor', 4, 2, -2]);
+
+const mejora = _skin('2026-01-15', 14, 4.5, _skin('2026-01-01', 14, 3));
+t('detecta mejoría también (no solo lo malo)',
+  reactionSignal('2026-01-15', mejora).direction, 'mejor');
+
+t('sin cambio relevante devuelve null',
+  reactionSignal('2026-01-15', _skin('2026-01-15', 14, 4, _skin('2026-01-01', 14, 4))), null);
+
+t('un cambio por debajo del umbral no reporta',
+  reactionSignal('2026-01-15', _skin('2026-01-15', 14, 3.5, _skin('2026-01-01', 14, 4))), null);
+
+// ── EVIDENCIA INSUFICIENTE: lo que evita las falsas alarmas ────────────────
+t('con pocos días ANTES no concluye nada',
+  reactionSignal('2026-01-15', _skin('2026-01-15', 14, 2, _skin('2026-01-13', 2, 4))), null);
+
+t('con pocos días DESPUÉS no concluye nada',
+  reactionSignal('2026-01-15', _skin('2026-01-15', 2, 2, _skin('2026-01-01', 14, 4))), null);
+
+t('sin ningún registro de piel devuelve null',
+  reactionSignal('2026-01-15', {}), null);
+
+t('sin fecha de inicio devuelve null',
+  reactionSignal(null, empeora), null);
+
+t('cuenta solo los días CON registro, no el rango completo',
+  (r => [r.nBefore, r.nAfter])(reactionSignal('2026-01-15', empeora)), [14, 14]);
+
+t('el día de inicio cuenta como DESPUÉS',
+  (r => r.nAfter)(reactionSignal('2026-01-15',
+    _skin('2026-01-15', 4, 1, _skin('2026-01-01', 14, 5)))), 4);
+
+t('ventana y umbral configurables',
+  (r => [r.nBefore, r.nAfter])(reactionSignal('2026-01-15',
+    _skin('2026-01-15', 7, 2, _skin('2026-01-08', 7, 4)), { windowDays: 7 })), [7, 7]);
+
 // ── fin ──
 finish();
 </script>

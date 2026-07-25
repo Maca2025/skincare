@@ -252,3 +252,58 @@ function resolveStepHydration(step, hydration, sectionKey, displayLabel) {
   }
   return null;
 }
+
+// ── DETECCIÓN DE REACCIÓN A PRODUCTO NUEVO ───────────────────────────────────
+// Compara el estado de piel ANTES y DESPUÉS de introducir un producto
+// (products.started_at vs daily_notes.skin_state).
+//
+// ESTO ES UNA COINCIDENCIA TEMPORAL, NO UNA CAUSA. Un solo caso, sin control y
+// con la piel cambiando por mil razones (clima, hormonas, sueño, otros
+// productos) no demuestra nada. Sirve para NOTAR algo que se te pasó y llevarlo
+// a consulta — no para decidir sola que un producto te hace daño.
+//
+// Por eso el modelo es deliberadamente conservador:
+//   · exige un mínimo de días CON registro en cada ventana (sin eso, dos días
+//     malos sueltos "detectan" una reacción que no existe);
+//   · exige una diferencia mínima, para no reportar ruido;
+//   · devuelve null en cuanto falte cualquiera de las dos cosas.
+//
+// Desplaza una fecha YYYY-MM-DD n días. Trabaja a mediodía UTC, igual que
+// eachDateStr, para que el horario de verano no corra el día.
+function shiftDateStr(ds, n) {
+  const d = new Date(ds + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+// startDate  — products.started_at (YYYY-MM-DD)
+// skinByDate — { 'YYYY-MM-DD': 1..5 }
+// opts       — { windowDays=14, minDays=4, minDelta=0.7 }
+// Devuelve null si no hay evidencia suficiente, o { direction, before, after,
+// delta, nBefore, nAfter }. `direction` es 'peor' o 'mejor': se reportan las
+// dos, porque enseñar solo lo malo sesga la lectura.
+function reactionSignal(startDate, skinByDate, opts) {
+  const o = opts || {};
+  const win      = o.windowDays != null ? o.windowDays : 14;
+  const minDays  = o.minDays    != null ? o.minDays    : 4;
+  const minDelta = o.minDelta   != null ? o.minDelta   : 0.7;
+  if (!startDate || !skinByDate) return null;
+  const collect = (a, b) => {
+    const v = [];
+    eachDateStr(a, b, ds => { const s = skinByDate[ds]; if (s != null) v.push(Number(s)); });
+    return v;
+  };
+  const before = collect(shiftDateStr(startDate, -win), shiftDateStr(startDate, -1));
+  const after  = collect(startDate, shiftDateStr(startDate, win - 1));
+  if (before.length < minDays || after.length < minDays) return null;
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const mb = mean(before), ma = mean(after);
+  const delta = ma - mb;
+  if (Math.abs(delta) < minDelta) return null;
+  const r1 = x => Math.round(x * 10) / 10;
+  return {
+    direction: delta < 0 ? 'peor' : 'mejor',
+    before: r1(mb), after: r1(ma), delta: r1(delta),
+    nBefore: before.length, nAfter: after.length
+  };
+}

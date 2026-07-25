@@ -603,3 +603,17 @@ body {
   color: #5A3A8A; font-weight: 600; line-height: 1.5; }
 .heat-legend-hito { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
   background: #F0ECE7; box-shadow: inset 0 0 0 1.5px #7A4A9E; vertical-align: middle; }
+
+/* ── COINCIDENCIAS TRAS INTRODUCIR UN PRODUCTO ─────────────────────────────
+   Deliberadamente sobrio: no es un diagnóstico. El disclaimer NO es adorno —
+   sin él, un número puesto junto a un producto se lee como causa. */
+.reac-row { border-left: 3px solid #C4818A; padding: 9px 0 9px 11px; margin-bottom: 10px; }
+.reac-row.reac-peor  { border-left-color: #C43020; }
+.reac-row.reac-mejor { border-left-color: #3A8A7A; }
+.reac-title { font-size: 12.5px; font-weight: 800; color: #2A2420; }
+.reac-nums { font-size: 12px; color: #4A3E3A; line-height: 1.55; margin-top: 3px; }
+.reac-n { font-size: 10.5px; color: #A09090; margin-top: 3px; }
+.reac-caveat { font-size: 11.5px; color: #7A4A00; background: #FFF3E0; border-radius: 8px;
+  padding: 6px 9px; margin-top: 6px; line-height: 1.45; }
+.reac-disclaimer { font-size: 11px; color: #7A6E6A; line-height: 1.55; margin-top: 10px;
+  padding-top: 9px; border-top: 1px solid #F0E8E4; }
