@@ -2643,14 +2643,6 @@ function searchKeyOf(p) {
   return esc([p.name, p.brand, p.category, ...tagsOf(p).map(t => t.label)]
     .filter(Boolean).join(' ').toLowerCase());
 }
-function spfItemHTML(p, selectFnName) {
-  const logName = p.logged_as || `${p.emoji} ${p.name}`;
-  return `<div class="spf-item tier-${cssSafe(p.tier)}" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="${selectFnName}(this.dataset.name)">
-  <div class="spf-item-name">${esc(p.emoji)} ${esc(p.name)}</div>
-  <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
-  <div class="spf-item-note">${fmtRich(p.note || '')}</div>
-</div>`;
-}
 // Con 93 productos, varias categorías pasan de una pantalla. El buscador solo
 // aparece cuando la lista lo amerita: en una lista de 3 estorba (mejora #7).
 const PICKER_SEARCH_MIN = 6;
@@ -2682,88 +2674,80 @@ function filterPicker(input) {
     vacio.style.display = 'none';
   }
 }
-function openSPFPicker(stepId = null) {
-  currentPickerStepId = stepId;
-  const body = document.getElementById('spf-picker-body');
-  const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
-  <strong>⚠️ NO NEGOCIABLE para manchas solares.</strong> El UV es la causa directa de los sunspots — sin SPF diario, los despigmentantes aclaran mientras el sol vuelve a pigmentar.
-</div>`;
-  const products = allProducts.filter(p => p.category === '🌞 SPF Facial' && p.status !== 'out');
-  body.innerHTML = warnBox + pickerSearchHTML(products.length) +
-    products.map(p => spfItemHTML(p, 'selectSPF')).join('') +
-`<button class="spf-guide-btn" onclick="event.stopPropagation(); closeModal('spf-modal'); openCompare()">📊 Ver comparativa técnica →</button>`;
-  openModal('spf-modal');
-}
-// Elegir desde cualquier picker: cierra modal, marca el paso, registra — y si
-// el registro falla, revierte el checkmark (rollback).
-async function pickAndLog(name, modalId) {
-  const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
-  const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
-  const stepElId = currentPickerStepId;
-  closeModal(modalId);
-  markPickerStepDone(name);
-  selectedProduct = name;
-  const ok = await logApplication(source, routineStepId);
-  if (!ok && stepElId) {
-    const step = document.getElementById(stepElId);
-    if (step) {
-      step.classList.remove('done');
-      const sb = step.closest('.sec-body');
-      if (sb) updateProgress(sb.id);
-    }
-  }
-}
-async function selectSPF(name) { await pickAndLog(name, 'spf-modal'); }
-function openBodySPFPicker(stepId = null) {
-  currentPickerStepId = stepId;
-  const body = document.getElementById('body-spf-picker-body');
-  const warnBox = `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
-  <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — el mismo mecanismo que los sunspots de la cara. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
-</div>`;
-  const products = allProducts.filter(p => p.category === '☀️ SPF Corporal' && p.status !== 'out');
-  body.innerHTML = warnBox + pickerSearchHTML(products.length) +
-    products.map(p => spfItemHTML(p, 'selectBodySPF')).join('');
-  openModal('body-spf-modal');
-}
-async function selectBodySPF(name) { await pickAndLog(name, 'body-spf-modal'); }
-async function selectFromGenericPicker(name) { await pickAndLog(name, 'product-picker-modal'); }
-function openGenericPickerByCat(stepId, cat) {
-  currentPickerStepId = stepId;
-  document.getElementById('product-picker-title').textContent = cat;
-  const body = document.getElementById('product-picker-body');
-  const items = allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out');
-  body.innerHTML = pickerSearchHTML(items.length) +
-    items.map(p => spfItemHTML(p, 'selectFromGenericPicker')).join('');
-  openModal('product-picker-modal');
-}
-
 // ── MULTI PICKER ─────────────────────────────────────────────────────────────
-// Categorías donde un mismo paso admite VARIOS productos a la vez (eliges
-// los que quieras cada día y se registra cada uno por separado). Para volver
-// multi otra categoría, solo agrégala aquí.
-const MULTI_PICK_CATEGORIES = ['💦 Toners', '✨ Serums AM'];
+// TODO paso que se resuelve por CATEGORÍA (picker_category) abre este picker:
+// eliges uno o varios productos y se registra UNA fila por cada uno, todas con
+// el mismo routine_step_id (la hidratación las concatena con " · ").
+// Antes existía una lista blanca (MULTI_PICK_CATEGORIES = Toners + Serums AM) y
+// tres pickers distintos; se unificaron porque cualquier categoría puede
+// llevarse en capas. No reintroducir la lista blanca.
+//
+// PICKER_MODALS: lo ÚNICO que cambia por categoría es en qué modal se pinta,
+// qué aviso clínico lleva arriba y si tiene botón extra abajo. Todo lo demás
+// (selección múltiple, buscador, registro) es idéntico.
+const PICKER_MODALS = {
+  '🌞 SPF Facial': {
+    modal: 'spf-modal', body: 'spf-picker-body',
+    // El SPF facial no filtra no_reapp: reaplicar es justo el punto.
+    filter: p => p.status !== 'out',
+    warn: `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
+  <strong>⚠️ NO NEGOCIABLE para manchas solares.</strong> El UV es la causa directa de los sunspots — sin SPF diario, los despigmentantes aclaran mientras el sol vuelve a pigmentar.
+</div>`,
+    footer: `<button class="spf-guide-btn" onclick="event.stopPropagation(); closeModal('spf-modal'); openCompare()">📊 Ver comparativa técnica →</button>`
+  },
+  '☀️ SPF Corporal': {
+    modal: 'body-spf-modal', body: 'body-spf-picker-body',
+    filter: p => p.status !== 'out',
+    warn: `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
+  <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — el mismo mecanismo que los sunspots de la cara. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
+</div>`
+  }
+};
+const PICKER_MODAL_DEFAULT = {
+  modal: 'product-picker-modal', body: 'product-picker-body', title: 'product-picker-title',
+  filter: p => !p.no_reapp && p.status !== 'out'
+};
+function pickerModalOf(cat) {
+  return Object.assign({}, PICKER_MODAL_DEFAULT, PICKER_MODALS[cat] || {});
+}
 // Hora local que separa AM de PM al deducir a qué sección pertenece un registro
 // que NO trae routine_step_id (reaplicaciones y registros sueltos). Evita que
 // un toner de la mañana marque el paso "Toners" de la rutina de noche.
 const AM_PM_CUTOFF_HOUR = 15;
 let multiPickSelected = new Set();
-function openMultiPickerByCat(stepId, cat) {
-  currentPickerStepId = stepId;
-  multiPickSelected = new Set();
-  document.getElementById('product-picker-title').textContent = cat + ' · elige uno o varios';
-  const body = document.getElementById('product-picker-body');
-  const items = allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out');
-  body.innerHTML = pickerSearchHTML(items.length) + (items.length ? items.map(p => {
-    const logName = p.logged_as || `${p.emoji} ${p.name}`;
-    return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
+let multiPickModalId = 'product-picker-modal';
+function multiPickItemHTML(p) {
+  const logName = p.logged_as || `${p.emoji} ${p.name}`;
+  return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
   <div class="spf-item-name"><span class="multi-pick-check">○</span> ${esc(p.emoji)} ${esc(p.name)}</div>
   <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
   <div class="spf-item-note">${fmtRich(p.note || '')}</div>
 </div>`;
-  }).join('') : '<div class="empty-state">No hay productos de esta categoría en Stock todavía.</div>') +
-  `<button class="save-btn" id="multi-pick-btn" onclick="confirmMultiPick()" disabled style="margin-top:6px;margin-bottom:0">Aplicar seleccionados</button>`;
-  openModal('product-picker-modal');
 }
+function openMultiPickerByCat(stepId, cat) {
+  const cfg = pickerModalOf(cat);
+  currentPickerStepId = stepId;
+  multiPickSelected = new Set();
+  multiPickModalId = cfg.modal;
+  if (cfg.title) {
+    const t = document.getElementById(cfg.title);
+    if (t) t.textContent = cat;
+  }
+  const body = document.getElementById(cfg.body);
+  if (!body) { showToast('❌ Picker no disponible', 'error'); return; }
+  const items = allProducts.filter(p => p.category === cat && cfg.filter(p));
+  const hint = `<div class="multi-pick-hint">Toca los que aplicaste — puedes elegir varios.</div>`;
+  body.innerHTML = (cfg.warn || '') + hint + pickerSearchHTML(items.length) +
+    (items.length
+      ? items.map(multiPickItemHTML).join('')
+      : '<div class="empty-state">No hay productos de esta categoría en Stock todavía.</div>') +
+    `<button class="save-btn" id="multi-pick-btn" onclick="confirmMultiPick()" disabled style="margin-top:6px;margin-bottom:0">Aplicar seleccionados</button>` +
+    (cfg.footer || '');
+  openModal(cfg.modal);
+}
+// Único wrapper que sobrevive: lo llama el recordatorio de reaplicar SPF, que
+// abre el picker sin paso de rutina asociado.
+function openSPFPicker(stepId = null) { openMultiPickerByCat(stepId, '🌞 SPF Facial'); }
 function toggleMultiPick(el) {
   const name = el.dataset.name;
   const check = el.querySelector('.multi-pick-check');
@@ -2791,7 +2775,7 @@ async function confirmMultiPick() {
   const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
   const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
   const stepElId = currentPickerStepId;
-  closeModal('product-picker-modal');
+  closeModal(multiPickModalId);
   markPickerStepDone(names.join(' · '));
   let okCount = 0;
   for (const name of names) {
@@ -3638,11 +3622,10 @@ async function saveNewStep() {
 // Abre el picker que corresponda a una categoría. Es la versión FUNCIÓN del
 // despacho: pickerFnForCat/reappPickerFnForCat solo generan la cadena para el
 // onclick, pero checkStep necesita llamarlo de verdad.
+// Todas las categorías son multi-selección; PICKER_MODALS decide en qué modal
+// se pinta cada una (SPF cara / SPF cuerpo tienen el suyo con su aviso).
 function openPickerForCat(stepId, cat) {
-  if (cat === '🌞 SPF Facial')   return openSPFPicker(stepId);
-  if (cat === '☀️ SPF Corporal') return openBodySPFPicker(stepId);
-  if (MULTI_PICK_CATEGORIES.includes(cat)) return openMultiPickerByCat(stepId, cat);
-  return openGenericPickerByCat(stepId, cat);
+  return openMultiPickerByCat(stepId, cat);
 }
 function pickerFnForCat(cat, stepId) {
   return `openPickerForCat('${stepId}','${jsAttrEsc(cat)}')`;

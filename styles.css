@@ -202,7 +202,8 @@ body {
 .spf-item-note { font-size: 11px; color: #7A6E6A; line-height: 1.5; }
 .spf-guide-btn { display: block; width: 100%; margin-top: 6px; padding: 13px; background: none; border: 1.5px solid #EAE4E0; border-radius: 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: #7A6E6A; cursor: pointer; text-align: center; transition: all 0.2s; }
 .spf-guide-btn:hover { border-color: #C4818A; color: #C4818A; }
-/* MULTI PICKER (ej. Toners — varios productos por paso) */
+/* MULTI PICKER (TODA categoría admite varios productos por paso) */
+.multi-pick-hint { font-size: 11px; color: #7A6E6A; font-style: italic; margin-bottom: 8px; }
 .spf-item.multi-pick { border: 1.5px solid transparent; }
 .spf-item.multi-pick.multi-on { border-color: #C4818A; background: #FBEAF0; }
 .multi-pick-check { color: #C4818A; font-weight: 800; margin-right: 4px; }
