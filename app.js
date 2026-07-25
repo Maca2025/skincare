@@ -2056,6 +2056,23 @@ async function handlePushLogParam() {
 // El estado "Preguntar en consulta" existe para no olvidarlo, no para que la
 // app dictamine nada. Cualquier lesión que cambie, sangre o pique es de
 // dermatoscopia — no agregar aquí nada que se lea como evaluación de riesgo.
+// Una tabla nueva puede fallar por dos razones muy distintas: la migración no
+// se corrió, o SÍ se corrió pero PostgREST todavía no la expone (su caché de
+// esquema no se entera de tablas nuevas hasta que se le avisa). Ocultar el
+// error en silencio hacía imposible distinguirlas — que es exactamente el
+// problema que tuvimos.
+function tablaNoVisible(e) {
+  const txt = ((e && e.message) || '') + ' ' + ((e && e.code) || '');
+  return /schema cache|does not exist|PGRST205|42P01|relation .* does not exist/i.test(txt);
+}
+function bloqueErrorTabla(titulo, e, archivoSql) {
+  const msg = tablaNoVisible(e)
+    ? `Falta correr <code>${esc(archivoSql)}</code>, o la API todavía no ve las tablas nuevas.<br>
+       En Supabase → SQL Editor: <code>notify pgrst, 'reload schema';</code>`
+    : esc((e && e.message) || 'No se pudo cargar.');
+  return `<div class="week-card"><h3 style="margin-top:0">${esc(titulo)}</h3>
+  <div class="empty-state" style="text-align:left">${msg}</div></div>`;
+}
 const SPOT_STATUS = {
   activa:      { e: '🔴', l: 'Activa' },
   aclarando:   { e: '🟡', l: 'Aclarando' },
@@ -2069,7 +2086,11 @@ const SHADE_LEVELS = [
   { v: 4, e: '◕',  l: 'Marcada' },
   { v: 5, e: '●',  l: 'Muy marcada' },
 ];
-let spotsCache = [], obsCache = {}, _spotPos = { x: null, y: null }, _spotZoneUrl = null;
+let spotsCache = [], obsCache = {}, _spotPos = { x: null, y: null };
+// Foto sobre la que se marcaron las coordenadas. NO es "la más reciente de la
+// zona": los % son de UNA foto concreta, y si la referencia cambiara sola el
+// marcador terminaría señalando otro punto de la cara.
+let _spotRef = { id: null, url: null, date: null };
 let selectedShade = null;
 
 const zoneLabel = k => (PHOTO_TYPES.find(t => t.key === k) || { label: k }).label;
@@ -2081,7 +2102,10 @@ async function loadSpots() {
     db.from('skin_spots').select('*').order('zone').order('name'),
     db.from('spot_observations').select('*').order('observed_at', { ascending: false })
   ]);
-  if (spotsRes.error) { el.innerHTML = ''; return; }   // migración sin correr
+  if (spotsRes.error) {
+    el.innerHTML = bloqueErrorTabla('🎯 Mis manchas', spotsRes.error, 'migracion-manchas.sql');
+    return;
+  }
   spotsCache = spotsRes.data || [];
   obsCache = {};
   ((obsRes && obsRes.data) || []).forEach(o => {
@@ -2115,6 +2139,10 @@ function spotRowHTML(s) {
   const hoy = ultima ? `Última vez que la miraste: ${fmtDate(ultima.observed_at)} · ${ultima.shade}/5` : 'Sin observaciones';
   const aviso = s.status === 'vigilancia'
     ? '<div class="spot-vigilancia">🩺 Marcada para preguntar en tu próxima consulta.</div>' : '';
+  // pos sin referencia = se borró la foto sobre la que se marcó. Las
+  // coordenadas quedaron huérfanas y no se pueden interpretar.
+  const sinRef = (s.pos_x != null && !s.reference_photo_id)
+    ? '<div class="spot-vigilancia">📷 Se borró la foto de referencia de su ubicación — vuelve a marcarla.</div>' : '';
   return `<div class="spot-row">
   <div class="spot-row-top">
     <div class="spot-name">${esc(st.e)} ${esc(s.name)}</div>
@@ -2128,6 +2156,7 @@ function spotRowHTML(s) {
   ${tendencia}
   ${s.notes ? `<div class="spot-notes">${fmtRich(s.notes)}</div>` : ''}
   ${aviso}
+  ${sinRef}
 </div>`;
 }
 
@@ -2135,30 +2164,82 @@ function spotRowHTML(s) {
 // Se usa la foto REAL de esa área, no un diagrama genérico: es más fácil
 // ubicar la mancha sobre tu propia cara. Las coordenadas se guardan en % para
 // que no dependan del tamaño con que se muestre la imagen.
-async function loadSpotZonePhoto() {
+async function fetchSignedPhoto(row) {
+  if (!row) return null;
+  const { data: signed } = await db.storage.from('progress-photos')
+    .createSignedUrls([extractStoragePath(row.photo_url)], 3600);
+  const url = signed && signed[0] && signed[0].signedUrl;
+  return url ? { id: row.id, url, date: row.photo_date } : null;
+}
+
+// Carga la foto sobre la que se marca la ubicación.
+//   · Mancha existente con referencia → ESA foto, siempre la misma.
+//   · Mancha nueva, o `forzarUltima`  → la más reciente de la zona.
+// Cambiar de referencia BORRA la posición: unas coordenadas marcadas sobre otro
+// encuadre no significan nada, y arrastrarlas sería peor que perderlas.
+async function loadSpotZonePhoto(forzarUltima) {
   const zone = document.getElementById('sp-zone').value;
-  const img = document.getElementById('sp-map-img');
+  const img  = document.getElementById('sp-map-img');
   const hint = document.getElementById('sp-map-hint');
   const wrap = document.getElementById('sp-map-wrap');
-  _spotZoneUrl = null;
+  const btn  = document.getElementById('sp-remark-btn');
   img.src = ''; wrap.style.display = 'none';
-  hint.textContent = 'Aún no tienes foto de esta zona — la ubicación se puede marcar después.';
-  const { data } = await db.from('progress_photos')
-    .select('photo_url').eq('photo_type', zone)
-    .order('photo_date', { ascending: false }).limit(1);
-  if (!data || !data.length) return;
-  const { data: signed } = await db.storage.from('progress-photos')
-    .createSignedUrls([extractStoragePath(data[0].photo_url)], 3600);
-  if (!signed || !signed[0] || !signed[0].signedUrl) return;
-  _spotZoneUrl = signed[0].signedUrl;
-  img.src = _spotZoneUrl;
+  if (btn) btn.style.display = 'none';
+  let row = null;
+  if (!forzarUltima && _spotRef.id) {
+    const { data } = await db.from('progress_photos')
+      .select('id, photo_url, photo_date').eq('id', _spotRef.id).limit(1);
+    row = data && data[0];
+    if (!row) hint.textContent = 'La foto de referencia ya no existe — vuelve a marcar sobre una actual.';
+  }
+  const usandoUltima = !row;
+  if (!row) {
+    const { data } = await db.from('progress_photos')
+      .select('id, photo_url, photo_date').eq('photo_type', zone)
+      .order('photo_date', { ascending: false }).limit(1);
+    row = data && data[0];
+  }
+  if (!row) {
+    _spotRef = { id: null, url: null, date: null };
+    hint.textContent = 'Aún no tienes foto de esta zona — la ubicación se puede marcar después.';
+    return;
+  }
+  const p = await fetchSignedPhoto(row);
+  if (!p) { hint.textContent = 'No se pudo cargar la foto de referencia.'; return; }
+  // Si la referencia cambió, las coordenadas viejas dejan de tener sentido.
+  if (_spotRef.id && _spotRef.id !== p.id) _spotPos = { x: null, y: null };
+  _spotRef = p;
+  img.src = p.url;
   wrap.style.display = 'block';
-  hint.textContent = 'Toca sobre la foto para marcar dónde está.';
+  hint.textContent = usandoUltima
+    ? `Toca sobre la foto para marcar dónde está. Referencia: foto del ${fmtDate(p.date)}.`
+    : `Ubicación anclada a la foto del ${fmtDate(p.date)}. Toca para ajustarla.`;
+  if (btn && !usandoUltima) btn.style.display = 'flex';
+  renderSpotMarker();
+}
+
+// Cambiar de zona invalida la referencia: es otra foto y otro encuadre.
+function onSpotZoneChange() {
+  _spotRef = { id: null, url: null, date: null };
+  _spotPos = { x: null, y: null };
+  loadSpotZonePhoto(true);
+}
+
+// Re-anclar a la foto más reciente. Es explícito a propósito: la referencia
+// nunca debe actualizarse en silencio, porque invalida la posición marcada.
+async function remarkOnLatest() {
+  const ok = await confirmSheet(
+    'Se va a usar tu foto más reciente de esta zona como nueva referencia. Tendrás que volver a marcar dónde está la mancha.',
+    'Cambiar referencia');
+  if (!ok) return;
+  _spotPos = { x: null, y: null };
+  _spotRef = { id: null, url: null, date: null };
+  await loadSpotZonePhoto(true);
   renderSpotMarker();
 }
 
 function placeSpotMarker(ev) {
-  if (!_spotZoneUrl) return;
+  if (!_spotRef.url) return;
   const wrap = document.getElementById('sp-map-wrap');
   const r = wrap.getBoundingClientRect();
   if (!r.width || !r.height) return;
@@ -2189,6 +2270,7 @@ function openSpotModal(id) {
   document.getElementById('sp-zone').innerHTML =
     PHOTO_TYPES.map(t => `<option value="${t.key}"${s && s.zone === t.key ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
   _spotPos = s ? { x: s.pos_x, y: s.pos_y } : { x: null, y: null };
+  _spotRef = { id: s ? (s.reference_photo_id || null) : null, url: null, date: null };
   openModal('spot-modal');
   loadSpotZonePhoto();
 }
@@ -2201,7 +2283,10 @@ async function saveSpot() {
     status: document.getElementById('sp-status').value,
     first_noticed: document.getElementById('sp-first').value || null,
     notes:  document.getElementById('sp-notes').value.trim() || null,
-    pos_x:  _spotPos.x, pos_y: _spotPos.y
+    pos_x:  _spotPos.x, pos_y: _spotPos.y,
+    // La posición no viaja sin su foto: guardarla sola es lo que producía la
+    // deriva del marcador.
+    reference_photo_id: (_spotPos.x != null && _spotRef.id) ? _spotRef.id : null
   };
   if (!row.name) { showToast('⚠️ Ponle un nombre', 'error'); return; }
   const btn = document.getElementById('save-spot-btn');
@@ -2340,7 +2425,10 @@ async function loadHitos() {
     db.from('treatment_events').select('*').order('event_date', { ascending: false }),
     db.from('daily_notes').select('note_date, skin_state').gte('note_date', desde)
   ]);
-  if (error) { el.innerHTML = ''; return; }   // tabla aún sin migrar: no estorbar
+  if (error) {
+    el.innerHTML = bloqueErrorTabla('🗓️ Línea de tiempo del tratamiento', error, 'migracion-hitos-tratamiento.sql');
+    return;
+  }
   hitosCache = data || [];
   const skinByDate = {};
   ((notasRes && notasRes.data) || []).forEach(r => { if (r.skin_state) skinByDate[r.note_date] = r.skin_state; });

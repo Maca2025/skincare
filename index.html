@@ -516,7 +516,7 @@
       </div>
       <div class="prod-field">
         <label class="prod-label">Zona</label>
-        <select class="prod-input prod-select" id="sp-zone" onchange="loadSpotZonePhoto()"></select>
+        <select class="prod-input prod-select" id="sp-zone" onchange="onSpotZoneChange()"></select>
       </div>
       <div class="prod-field">
         <label class="prod-label">Ubicación</label>
@@ -525,6 +525,8 @@
           <img id="sp-map-img" src="" alt="">
           <div class="spot-marker" id="sp-map-marker" style="display:none"></div>
         </div>
+        <button class="mini-action-btn" id="sp-remark-btn" style="display:none;margin-top:8px"
+          onclick="remarkOnLatest()">🔄 Volver a marcar sobre la foto más reciente</button>
       </div>
       <div class="prod-field">
         <label class="prod-label">Estado</label>

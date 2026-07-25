@@ -31,7 +31,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - `daily_notes` — nota + `skin_state` (1–5) + `sun_exposure` (interior/normal/alta/playa), key `note_date`.
 - `progress_photos` — `photo_url` guarda SOLO el nombre de archivo; bucket `progress-photos` es PRIVADO → URLs firmadas con `createSignedUrls` (batch, nunca una por una).
 - `push_subscriptions` — suscripciones Web Push (+`last_notified_at` para no duplicar avisos).
-- `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). `zone` usa las mismas claves que `PHOTO_TYPES`; `pos_x`/`pos_y` son PORCENTAJES sobre la última foto de esa zona, no píxeles, para que la marca no dependa del tamaño con que se muestre. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
+- `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). `zone` usa las mismas claves que `PHOTO_TYPES`; `pos_x`/`pos_y` son PORCENTAJES **de la foto apuntada por `reference_photo_id`**, no de la zona en abstracto. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
 - `treatment_events` — hitos de tratamiento que NO son un producto: consultas, procedimientos, cambios de diagnóstico, exposición solar fuera de lo normal. `event_type` va con CHECK. La vista `treatment_timeline` la une con `products.started_at` y lleva `security_invoker = on` (sin eso, la vista saltaría el RLS de las tablas de abajo).
 - **RLS activo en todo** (políticas `authenticated`). La key publishable es pública en el repo — sin RLS los datos quedan expuestos. Cualquier tabla nueva DEBE nacer con RLS.
 
@@ -128,7 +128,19 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     nada que se lea como diagnóstico: una lesión que cambia, sangra o pica es de
     dermatoscopia.
 
-24. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
+24. **La posición de una mancha NO viaja sin su foto.** `pos_x`/`pos_y` son % de
+    la foto en `reference_photo_id`, no de la zona. La primera versión mostraba
+    siempre la foto más reciente del área: la referencia cambiaba sola con cada
+    foto nueva y el marcador acababa señalando otro punto de la cara, porque los
+    ángulos varían entre tomas. Reglas que se derivan y no hay que romper:
+    cambiar de referencia **borra** la posición (unas coordenadas de otro
+    encuadre no significan nada), re-anclar es una acción **explícita** de la
+    usuaria (`remarkOnLatest`), cambiar de zona invalida la referencia, y
+    `reference_photo_id` es `ON DELETE SET NULL` — borrar una foto no puede
+    llevarse el historial de una lesión; la app detecta la posición huérfana y
+    pide volver a marcar.
+
+25. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
 
 ## Al terminar cualquier cambio
 
