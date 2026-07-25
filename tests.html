@@ -333,6 +333,49 @@ t('hidratación: producto sin categoría no rompe el índice',
     'am', '🧴 X'),
   '🧴 X');
 
+// ── ORIGEN DE LA APLICACIÓN: una reaplicación NO marca pasos de rutina ─────
+const _appReap = { product_id: 'p-spf', product_name: '🌞 Anthelios',
+                   applied_at: '2026-07-20T14:00:00', source: 'reaplicacion' };
+const _stepSpf = { id: 'sSPF', product_id: 'p-spf' };
+const _stepCat = { id: 'sCat', picker_category: '🌞 SPF Facial' };
+
+t('reaplicación NO marca el paso fijo del mismo producto',
+  resolveStepHydration(_stepSpf, buildHydration([_appReap], _prods, _CUT), 'am', '🌞 Anthelios'),
+  null);
+
+t('reaplicación NO marca el paso por categoría',
+  resolveStepHydration(_stepCat, buildHydration([_appReap], _prods, _CUT), 'am', '🌞 SPF Facial'),
+  null);
+
+t('reaplicación con routine_step_id SÍ marca (se eligió desde el paso)',
+  resolveStepHydration({ id: 'sX' },
+    buildHydration([{ ...(_appReap), routine_step_id: 'sX' }], _prods, _CUT), 'am', '🌞 Anthelios'),
+  '🌞 Anthelios');
+
+t('un registro de rutina sin step id sigue hidratando (dato viejo)',
+  resolveStepHydration(_stepSpf,
+    buildHydration([{ ..._appReap, source: 'rutina' }], _prods, _CUT), 'am', '🌞 Anthelios'),
+  '🌞 Anthelios');
+
+t('un registro sin source (anterior al cambio) sigue hidratando',
+  resolveStepHydration(_stepSpf,
+    buildHydration([{ ..._appReap, source: null }], _prods, _CUT), 'am', '🌞 Anthelios'),
+  '🌞 Anthelios');
+
+t('rutina y reaplicación el mismo día: gana la de rutina, no se anulan',
+  resolveStepHydration(_stepSpf, buildHydration([
+    { ..._appReap, source: 'rutina', product_name: '🌞 De rutina' },
+    _appReap
+  ], _prods, _CUT), 'am', '🌞 Anthelios'),
+  '🌞 De rutina');
+
+t('reaplicación de cuerpo tampoco marca el paso de cuerpo',
+  resolveStepHydration({ id: 'sB', picker_category: '🦶 Pies' },
+    buildHydration([{ product_id: 'p-urea', product_name: '🦶 Urea',
+                      applied_at: '2026-07-20T09:00:00', source: 'reaplicacion' }], _prods, _CUT),
+    'feet', '🦶 Pies'),
+  null);
+
 // ============================================================================
 // REACCIÓN A PRODUCTO NUEVO — coincidencia temporal, NO causa
 // ============================================================================

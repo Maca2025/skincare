@@ -207,6 +207,15 @@ function buildHydration(apps, productsById, cutoffHour) {
       h.byStepId.set(r.routine_step_id, prev ? prev + ' · ' + label : label);
       return;
     }
+    // Una REAPLICACIÓN no es un paso de rutina, y no debe marcar ninguno.
+    // Los fallbacks de abajo existen para hidratar registros VIEJOS que nacieron
+    // sin routine_step_id (regla 4), no para que un registro nuevo invada la
+    // rutina. Sin este corte, reaplicar protector a media tarde palomeaba solo
+    // el paso de SPF de la rutina AM — y al desmarcarlo volvía, porque
+    // unlogRoutineStep solo borra filas con source='rutina'.
+    // Se compara contra 'reaplicacion' EXACTO y no contra !== 'rutina': los
+    // registros antiguos traen source null o vacío y sí deben seguir hidratando.
+    if (r.source === 'reaplicacion') return;
     const hour = new Date(r.applied_at).getHours();
     const sections = [hour < cutoffHour ? 'am' : 'pm', 'body', 'feet'];
     const prod = r.product_id ? prods[r.product_id] : null;

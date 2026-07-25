@@ -39,7 +39,8 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 1. **Fechas:** día calendario = fecha LOCAL. Usar `toDateStr()` / `localDateOfISO()` / `localDayBoundsUTC()` de pure.js. **NUNCA** `toISOString().split('T')[0]` (corre el día a UTC). Iteración de rangos con `eachDateStr()` (mediodía UTC). Métricas de Progreso cortan al **cierre de ayer** (`ENDS`).
 2. **Escaping:** TODO texto de la base o de la usuaria pasa por `esc()` (o `fmtRich()` para multilínea, `jsAttrEsc()` en argumentos dentro de onclick, `cssSafe()` en clases CSS) antes de entrar a innerHTML. Sin excepciones — un producto llamado `<img onerror=...>` es XSS.
 3. **UI optimista con rollback:** marcar/desmarcar pasos, chips de stock, pickers — el visual cambia primero, pero si Supabase falla se REVIERTE. Desmarcar un paso **BORRA** sus filas de `product_applications` de ese día (si no, el % de adherencia se infla).
-4. **Hidratación de checkmarks** (qué paso ya se hizo hoy): prioridad `routine_step_id` exacto → `product_id` → categoría → nombre. Los últimos tres son fallbacks para datos viejos — no quitarlos, no promoverlos. **Vive en `pure.js`** (`buildHydration` / `resolveStepHydration`) con 14 casos en `tests.html`: era la parte más frágil del código y la única sin pruebas. Si la tocas, corre los tests.
+4. **Hidratación de checkmarks** (qué paso ya se hizo hoy): prioridad `routine_step_id` exacto → `product_id` → categoría → nombre. Los últimos tres son fallbacks para datos viejos — no quitarlos, no promoverlos. **Vive en `pure.js`** (`buildHydration` / `resolveStepHydration`) con 21 casos en `tests.html`: era la parte más frágil del código y la única sin pruebas. Si la tocas, corre los tests.
+   **Los fallbacks NO aplican a `source='reaplicacion'`.** Se respeta el origen: una reaplicación no es un paso de rutina y no debe palomear ninguno, aunque el producto sí sea paso fijo de la rutina de ese día. Antes, reaplicar protector a media tarde marcaba solo el paso de SPF de la rutina AM — y al desmarcarlo volvía, porque `unlogRoutineStep` solo borra filas con `source='rutina'`. El corte compara contra `'reaplicacion'` EXACTO, no contra `!== 'rutina'`: los registros antiguos traen `source` null o vacío y sí deben seguir hidratando.
 5. **Nada de listas duplicadas:** los selects de categoría, botones de reaplicación y la tabla comparativa SPF se **generan** de `PRODUCT_CATEGORIES` / `allProducts` / `products.tags`. Nunca hardcodear una lista que duplique lo que ya está en la base (ese patrón causó los bugs de "categoría faltante").
 6. **pure.js se mantiene puro** y cada cambio ahí actualiza `tests.html`. La matemática de adherencia y `spfScoreOf` viven ahí. Pesos SPF actuales (sunspots): base 25, pa4 +30, uva400 +35, uvalong +20 (excluyente con uva400), tinted +10.
 7. **Config en constantes, no regada:** `PRODUCT_CATEGORIES` (lista maestra de categorías — coincidencia EXACTA con emoji), `PM_ROTATION` (rotación de noches), `MULTI_PICK_CATEGORIES` (hoy: Toners y Serums AM — pasos que admiten varios productos a la vez), `ROLE_CONFIG`/`clinical_roles` (roles: despigmentacion, regeneracion_celular, barrera, spf_facial, textura_poros).
@@ -82,6 +83,17 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 13. **Los ideales de SPF se modulan por `sun_exposure`.** Cara: interior 2 · normal 3 · alta 4 · playa 5 (default 3). Cuerpo: interior 1 · normal 1 · alta 2 · playa 4 — **ideal propio**, porque la piel corporal va cubierta y nadie reaplica 5 veces al día. Con el ideal de la cara, ese eje marcaba 4% y medía una expectativa irreal.
 
 14. **La matemática de dosis vive en `pure.js`** (`doseWeekPct`, `overExposureDays`) con sus tests. Dos invariantes que no se pueden quitar: **techo diario** (aplicar dos veces no vale el doble) y **ventana semanal** (las noches de descanso del retinoide NO son falla). Sin ellos el modelo premia sobre-aplicar y vuelve a castigar la desviación.
+
+15b. **El aviso de sobre-exposición se rastrea POR ZONA, no global.** Los días
+    con irritante se marcan en la zona donde se aplicó (`cara` / `cuerpo`,
+    deducida del `grupo` de los ejes que toca el producto en `PRODUCT_DOSE`), y
+    **solo el eje de renovación de esa zona avisa** — `EJE_IRRITANTE_POR_GRUPO`
+    = `{cara: 'textura', cuerpo: 'cuerpo_textura'}`. Antes era un solo mapa
+    global que cada eje comparaba contra su propio `diasIdeales`: 5 noches de
+    tretinoína facial hacían que **`cabello`** (diasIdeales 3) avisara "1 día de
+    más con retinoide", sin que exista un solo producto capilar irritante. Si se
+    agregan ejes o zonas, actualizar ese mapa — un eje que no esté ahí
+    simplemente nunca avisa, que es el comportamiento seguro.
 
 15. **Pasarse del ideal avisa, no penaliza.** `overExposureDays` recibe **días con irritante** (lista `IRRITANTES`: solo retinoides y ácidos exfoliantes), nunca los puntos del eje `textura` — la niacinamida y el azelaico suben textura sin irritar y disparaban avisos falsos.
 
