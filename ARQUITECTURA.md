@@ -12,7 +12,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 |---|---|
 | `index.html` | Markup: tabs, secciones, TODOS los modales. Sin lógica. |
 | `styles.css` | Todo el CSS. |
-| `pure.js` | **Solo funciones puras** (fechas, escaping, adherencia, `spfScoreOf`, `doseWeekPct`, `overExposureDays`, `buildHydration`, `resolveStepHydration`). Sin DOM, sin Supabase. Compartido con `tests.html`. |
+| `pure.js` | **Solo funciones puras** (fechas, escaping, adherencia, `spfScoreOf`, `doseWeekPct`, `overExposureDays`, `buildHydration`, `resolveStepHydration`, `shiftDateStr`, `reactionSignal`). Sin DOM, sin Supabase. Compartido con `tests.html`. |
 | `activos-matriz.js` | Config de Fase B: `DOSE_AXES`, `PRODUCT_DOSE` (93 productos por id), `IRRITANTES`. Solo datos, sin lógica. Se carga ENTRE `pure.js` y `app.js`. |
 | `app.js` | Toda la lógica. Script clásico (no módulos), funciones globales llamadas desde `onclick` en HTML. Se carga DESPUÉS de pure.js y activos-matriz.js. |
 | `sw.js` | Service worker: cache network-first del shell + handlers de Web Push. |
@@ -56,6 +56,17 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - **Adherencia por producto:** contra su propio calendario — prioridad `schedule_days` manual → calendario de la rutina donde es paso fijo → diario. **Es vista SECUNDARIA** desde Fase B (ver regla 11).
 - **Protección solar en Progreso:** sistema de puntos por calidad × aplicaciones, no promedio simple — la rotación de protectores no castiga. El ideal diario **se modula por `sun_exposure`** (ver regla 12).
 - **Reporte dermatóloga:** `openDermReport()` usa `lastReportData` (seteado por `loadHistory`) — requiere que Progreso haya cargado.
+- **Hitos:** `loadHitos()` vive en su propio contenedor (`#hitos-content`), aparte
+  de `loadHistory` — que tiene el orden de declaración de la regla 17 y no
+  conviene tocar. Une `treatment_events` con los `started_at` de `allProducts`.
+  Los días con hito marcan su celda en el heatmap y salen en el detalle del día.
+- **Foto fantasma:** al elegir área se precarga la última foto de ESA área con
+  URL firmada y se superpone translúcida (`mix-blend-mode: difference`: lo que
+  coincide se ve negro, así que alinear es "apagar" la imagen). Si no hay foto
+  previa cae a la silueta genérica. `updateGuideBtn()` debe llamarse en TODOS los
+  caminos de `loadGhostPhoto`, o el botón ofrece superponer algo que no existe.
+- **Buscador en pickers:** aparece solo con ≥6 productos (`PICKER_SEARCH_MIN`).
+  Filtra sobre `data-search` (nombre + marca + categoría + etiquetas).
 - **UV en vivo:** Open-Meteo sin key, coordenadas GDL hardcodeadas en `fetchUV()`. Además del UV actual trae el **pico del día** (`hourly=uv_index`), que solo se anuncia si todavía está por delante. El parseo es defensivo: si `hourly` falta o cambia de forma, el UV actual sigue funcionando.
 - **Reaplicación en un toque:** `quickLogSpf()` registra el último protector usado y la usan tanto el FAB (`#spf-fab`, fijo en todas las pestañas) como el tap en la notificación. Tres protecciones que no hay que quitar: no adivina si no hay historial (abre el picker), no duplica dentro de 15 min (`PUSH_LOG_MIN_GAP_MIN`), y ofrece deshacer por id.
 - **Cuenta regresiva:** `spfStatus()` es la ÚNICA fuente del estado de reaplicación — la usan el chip del resumen y el FAB, así que no pueden desincronizarse. Se expresa como hora objetivo ("Próxima 1:40 pm"), no como tiempo transcurrido. Se refresca cada minuto o la hora se queda pegada.
@@ -86,7 +97,16 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 
 21. **Todo paso de rutina debería tener `product_id` o `picker_category`.** Un paso de texto libre que sí es un producto genera registros huérfanos para siempre (pasó con "Salicylic Acid Gel 2%" en Pies). Los únicos pasos que legítimamente no llevan ninguno de los dos son los informativos.
 
-22. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
+22. **La detección de reacción NO afirma causalidad.** `reactionSignal` compara
+    `skin_state` 14 días antes vs 14 después de `products.started_at`. Exige
+    mínimo 4 días CON registro en cada ventana y una diferencia de 0.7 puntos;
+    si falta cualquiera de las dos, devuelve `null` y no se muestra nada. Detecta
+    **co-introducción** (otro producto en ±7 días) y lo dice, porque ahí no se
+    puede atribuir a uno solo. Reporta mejorías además de empeoramientos: enseñar
+    solo lo malo sesga la lectura. **El disclaimer del render no es adorno** — un
+    número junto al nombre de un producto se lee como causa aunque no lo sea.
+
+23. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
 
 ## Al terminar cualquier cambio
 
@@ -95,4 +115,4 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 3. Si tocaste sw.js → subir versión de CACHE.
 4. Si agregaste columnas → entregar migración SQL idempotente aparte.
 5. Los archivos que se deployan siempre juntos: `index.html`, `styles.css`, `app.js` (+ `sw.js`/`pure.js`/`activos-matriz.js` si cambiaron).
-6. `tests.html` tiene **61 casos** e incluye ya los de `tests-spf-agregar.js`, `tests-dosis-agregar.js` y `tests-hidratacion-agregar.js` — esos tres archivos son el historial de lo que se fue agregando, no una lista pendiente.
+6. `tests.html` tiene **77 casos** e incluye ya los de `tests-spf-agregar.js`, `tests-dosis-agregar.js` y `tests-hidratacion-agregar.js` — esos tres archivos son el historial de lo que se fue agregando, no una lista pendiente.

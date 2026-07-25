@@ -368,6 +368,37 @@ function selectPhotoType(btn, key) {
   btn.classList.add('selected');
   selectedPhotoType = key;
   updateUploadBtn();
+  loadGhostPhoto(key);
+}
+
+// ── FOTO FANTASMA ────────────────────────────────────────────────────────────
+// Superpone la última foto de la MISMA área sobre el preview, translúcida.
+// La silueta genérica que había antes no sirve para alinear: cada área tiene
+// su propio encuadre. Sin esto, una comparación "antes/después" mide tanto el
+// ángulo y la luz como el pigmento — y sobre eso se toman decisiones clínicas.
+let _ghostUrl = null;
+async function loadGhostPhoto(typeKey) {
+  _ghostUrl = null;
+  const g = document.getElementById('photo-ghost');
+  if (g) { g.style.display = 'none'; g.src = ''; }
+  updateGuideBtn();   // en TODOS los caminos: al cambiar a un área sin foto
+                      // previa, el botón no puede seguir ofreciendo superponer
+  if (!typeKey) return;
+  const { data } = await db.from('progress_photos')
+    .select('photo_url').eq('photo_type', typeKey)
+    .order('photo_date', { ascending: false }).limit(1);
+  if (!data || !data.length) return;
+  const path = extractStoragePath(data[0].photo_url);
+  const { data: signed } = await db.storage.from('progress-photos').createSignedUrls([path], 3600);
+  if (signed && signed[0] && signed[0].signedUrl) _ghostUrl = signed[0].signedUrl;
+  updateGuideBtn();
+}
+// El botón dice qué va a mostrar: la foto real si existe, o la silueta si es
+// la primera vez que fotografías esa área.
+function updateGuideBtn() {
+  const btn = document.getElementById('photo-guide-btn');
+  if (!btn) return;
+  btn.textContent = _ghostUrl ? '👻 Superponer foto anterior' : '⊙ Mostrar guía de encuadre';
 }
 function updateUploadBtn() {
   const hasPhoto = document.getElementById('photo-input').files.length > 0;
@@ -381,13 +412,21 @@ function previewPhoto(input) {
   img.src = URL.createObjectURL(input.files[0]);
   document.getElementById('photo-preview-wrap').style.display = 'block';
   const gb = document.getElementById('photo-guide-btn');
-  if (gb) gb.style.display = 'flex';
+  if (gb) { gb.style.display = 'flex'; updateGuideBtn(); }
   updateUploadBtn();
 }
 // Overlay de silueta sobre el preview — para verificar que el ángulo/encuadre
 // coincida con las fotos anteriores antes de subirla (si no coincide, retoma).
 function togglePhotoGuide() {
+  const ghost = document.getElementById('photo-ghost');
   const ov = document.getElementById('photo-guide-overlay');
+  if (_ghostUrl && ghost) {          // hay foto previa: se superpone la real
+    const on = ghost.style.display !== 'none';
+    if (!on) ghost.src = _ghostUrl;
+    ghost.style.display = on ? 'none' : 'block';
+    if (ov) ov.style.display = 'none';
+    return;
+  }
   if (ov) ov.style.display = ov.style.display === 'none' ? 'block' : 'none';
 }
 // Aviso suave si ya pasó una semana sin foto de progreso (una vez por sesión).
@@ -2188,13 +2227,49 @@ function showStepProduct(step, productName) {
 }
 
 // ── PICKERS ──────────────────────────────────────────────────────────────────
+// Texto sobre el que busca el filtro del picker: nombre, marca y etiquetas.
+function searchKeyOf(p) {
+  return esc([p.name, p.brand, p.category, ...tagsOf(p).map(t => t.label)]
+    .filter(Boolean).join(' ').toLowerCase());
+}
 function spfItemHTML(p, selectFnName) {
   const logName = p.logged_as || `${p.emoji} ${p.name}`;
-  return `<div class="spf-item tier-${cssSafe(p.tier)}" data-name="${esc(logName)}" onclick="${selectFnName}(this.dataset.name)">
+  return `<div class="spf-item tier-${cssSafe(p.tier)}" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="${selectFnName}(this.dataset.name)">
   <div class="spf-item-name">${esc(p.emoji)} ${esc(p.name)}</div>
   <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
   <div class="spf-item-note">${fmtRich(p.note || '')}</div>
 </div>`;
+}
+// Con 93 productos, varias categorías pasan de una pantalla. El buscador solo
+// aparece cuando la lista lo amerita: en una lista de 3 estorba (mejora #7).
+const PICKER_SEARCH_MIN = 6;
+function pickerSearchHTML(n) {
+  return n >= PICKER_SEARCH_MIN
+    ? `<input class="picker-search" type="search" placeholder="🔍 Buscar entre ${n} productos..." oninput="filterPicker(this)" autocomplete="off">`
+    : '';
+}
+function filterPicker(input) {
+  const q = input.value.trim().toLowerCase();
+  const body = input.closest('.modal-body');
+  if (!body) return;
+  let visibles = 0;
+  body.querySelectorAll('.spf-item').forEach(el => {
+    const ok = !q || (el.dataset.search || '').includes(q);
+    el.style.display = ok ? '' : 'none';
+    if (ok) visibles++;
+  });
+  let vacio = body.querySelector('.picker-empty');
+  if (!visibles) {
+    if (!vacio) {
+      vacio = document.createElement('div');
+      vacio.className = 'picker-empty empty-state';
+      input.insertAdjacentElement('afterend', vacio);
+    }
+    vacio.textContent = `Ningún producto coincide con "${q}".`;
+    vacio.style.display = '';
+  } else if (vacio) {
+    vacio.style.display = 'none';
+  }
 }
 function openSPFPicker(stepId = null) {
   currentPickerStepId = stepId;
@@ -2203,7 +2278,8 @@ function openSPFPicker(stepId = null) {
   <strong>⚠️ NO NEGOCIABLE para manchas solares.</strong> El UV es la causa directa de los sunspots — sin SPF diario, los despigmentantes aclaran mientras el sol vuelve a pigmentar.
 </div>`;
   const products = allProducts.filter(p => p.category === '🌞 SPF Facial' && p.status !== 'out');
-  body.innerHTML = warnBox + products.map(p => spfItemHTML(p, 'selectSPF')).join('') +
+  body.innerHTML = warnBox + pickerSearchHTML(products.length) +
+    products.map(p => spfItemHTML(p, 'selectSPF')).join('') +
 `<button class="spf-guide-btn" onclick="event.stopPropagation(); closeModal('spf-modal'); openCompare()">📊 Ver comparativa técnica →</button>`;
   openModal('spf-modal');
 }
@@ -2234,7 +2310,8 @@ function openBodySPFPicker(stepId = null) {
   <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — el mismo mecanismo que los sunspots de la cara. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
 </div>`;
   const products = allProducts.filter(p => p.category === '☀️ SPF Corporal' && p.status !== 'out');
-  body.innerHTML = warnBox + products.map(p => spfItemHTML(p, 'selectBodySPF')).join('');
+  body.innerHTML = warnBox + pickerSearchHTML(products.length) +
+    products.map(p => spfItemHTML(p, 'selectBodySPF')).join('');
   openModal('body-spf-modal');
 }
 async function selectBodySPF(name) { await pickAndLog(name, 'body-spf-modal'); }
@@ -2243,9 +2320,9 @@ function openGenericPickerByCat(stepId, cat) {
   currentPickerStepId = stepId;
   document.getElementById('product-picker-title').textContent = cat;
   const body = document.getElementById('product-picker-body');
-  body.innerHTML = allProducts
-    .filter(p => p.category === cat && !p.no_reapp && p.status !== 'out')
-    .map(p => spfItemHTML(p, 'selectFromGenericPicker')).join('');
+  const items = allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out');
+  body.innerHTML = pickerSearchHTML(items.length) +
+    items.map(p => spfItemHTML(p, 'selectFromGenericPicker')).join('');
   openModal('product-picker-modal');
 }
 
@@ -2265,9 +2342,9 @@ function openMultiPickerByCat(stepId, cat) {
   document.getElementById('product-picker-title').textContent = cat + ' · elige uno o varios';
   const body = document.getElementById('product-picker-body');
   const items = allProducts.filter(p => p.category === cat && !p.no_reapp && p.status !== 'out');
-  body.innerHTML = (items.length ? items.map(p => {
+  body.innerHTML = pickerSearchHTML(items.length) + (items.length ? items.map(p => {
     const logName = p.logged_as || `${p.emoji} ${p.name}`;
-    return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" onclick="toggleMultiPick(this)">
+    return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
   <div class="spf-item-name"><span class="multi-pick-check">○</span> ${esc(p.emoji)} ${esc(p.name)}</div>
   <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
   <div class="spf-item-note">${fmtRich(p.note || '')}</div>

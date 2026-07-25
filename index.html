@@ -141,6 +141,9 @@
       </div>
       <div class="photo-preview-wrap" id="photo-preview-wrap">
         <img id="photo-preview" src="" alt="Preview">
+        <!-- Foto anterior de la MISMA área, superpuesta translúcida, para que
+             el encuadre coincida. Una silueta genérica no alinea nada. -->
+        <img id="photo-ghost" src="" alt="" style="display:none">
         <svg id="photo-guide-overlay" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid meet"
           style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0.55">
           <ellipse cx="50" cy="55" rx="26" ry="34" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-dasharray="4 3"/>
