@@ -1094,7 +1094,7 @@ async function loadHistory() {
     const detail = (o.detail || []).filter(x => x.p.name !== 'Registros antiguos');
     if (detail.length) {
       const worstProduct = detail.reduce((a, b) => (b.adh.pct < a.adh.pct ? b : a));
-      return `El que más se te dificulta es ${esc(worstProduct.p.emoji || '')} ${esc(worstProduct.p.name)} (${worstProduct.adh.pct}%) — reforzarlo es tu mayor oportunidad aquí.`;
+      return `El que más se te dificulta es ${prodLabelHTML(worstProduct.p)} (${worstProduct.adh.pct}%) — reforzarlo es tu mayor oportunidad aquí.`;
     }
     return `Estás en ${o.pct}% — sigue registrando para ver más detalle.`;
   };
@@ -1387,7 +1387,7 @@ function renderHistorial() {
   const catOptions = '<option value="">— Todos los tipos —</option>' +
     cats.map(c => `<option value="${esc(c)}"${c === histCatFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
   const prodOptions = '<option value="">— Todos los productos —</option>' +
-    names.map(n => `<option value="${esc(n)}"${n === histFilter ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    names.map(n => `<option value="${esc(n)}"${n === histFilter ? ' selected' : ''}>${esc(loggedLabelText(n))}</option>`).join('');
   const filtered = histFilter ? byCat.filter(r => r.product_name === histFilter) : byCat;
   logEl.innerHTML = `<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>
 <button class="mini-action-btn" onclick="exportBackup()">⬇️ Exportar respaldo (JSON + CSV)</button>
@@ -1403,7 +1403,7 @@ function openEditApplication(id) {
   const sel = document.getElementById('ea-product');
   sel.innerHTML = allProducts.map(p => {
     const logName = p.logged_as || `${p.emoji} ${p.name}`;
-    return `<option value="${p.id}"${logName === r.product_name ? ' selected' : ''}>${esc(logName)}</option>`;
+    return `<option value="${p.id}"${logName === r.product_name ? ' selected' : ''}>${esc(prodLabelText(p))}</option>`;
   }).join('');
   const d = new Date(r.applied_at);
   const pad = n => String(n).padStart(2, '0');
@@ -1550,7 +1550,7 @@ function buildHistorialByDay(appsData) {
   const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
   const fmtTime = iso => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const entryHTML = r => `<div class="reapp-entry">
-  <span class="reapp-entry-product">${esc(r.product_name)}</span>
+  <span class="reapp-entry-product">${loggedLabelHTML(r.product_name)}</span>
   <span class="reapp-entry-right">
     <span class="reapp-entry-time">${fmtTime(r.applied_at)}</span>
     <button class="reapp-entry-del" onclick="openEditApplication('${r.id}')" title="Editar registro">✏️</button>
@@ -1621,14 +1621,68 @@ async function quickLog(name) {
 function stepProductOf(s) {
   return (s && s.product_id) ? allProducts.find(p => p.id === s.product_id) : null;
 }
-function productIdForLoggedName(name) {
+// Un registro guarda un STRING (product_name), no el id. Esta es la ÚNICA
+// resolución string → producto; todo lo que necesite marca, categoría o id de
+// un registro pasa por aquí (si se duplica, se desincroniza).
+function productByLoggedName(name) {
   if (!name) return null;
-  const p = allProducts.find(p =>
-    (p.logged_as && p.logged_as === name) ||
-    (`${p.emoji} ${p.name}` === name) ||
-    (p.name === name)
-  );
+  const n = String(name).trim();
+  return allProducts.find(p =>
+    (p.logged_as && p.logged_as === n) ||
+    (`${p.emoji} ${p.name}` === n) ||
+    (p.name === n)
+  ) || null;
+}
+function productIdForLoggedName(name) {
+  const p = productByLoggedName(name);
   return p ? p.id : null;
+}
+
+// ── ETIQUETA DE PRODUCTO: MARCA + NOMBRE ─────────────────────────────────────
+// En pantalla un producto SIEMPRE se lee "emoji · marca · nombre", con la marca
+// delante en azul acero itálico light (.p-brand) y el nombre con la tipografía
+// del contenedor. Una sola función para no acabar con seis variantes del mismo
+// formato (regla 5 de ARQUITECTURA.md).
+//
+// OJO: esto es solo PRESENTACIÓN. Lo que se guarda en product_applications
+// sigue siendo `logged_as` o "emoji nombre" — meter la marca ahí rompería la
+// hidratación de checkmarks y el histórico ya registrado.
+function prodLabelHTML(p, opts) {
+  if (!p) return '';
+  const o = opts || {};
+  const emoji = o.emoji === false ? '' : (p.emoji || '');
+  const brand = (p.brand || '').trim();
+  return [
+    emoji ? esc(emoji) : '',
+    brand ? `<span class="p-brand">${esc(brand)}</span>` : '',
+    esc(p.name || '')
+  ].filter(Boolean).join(' ');
+}
+// Versión plana: <option>, toasts y cualquier sitio que use textContent, donde
+// no se puede pintar el <span> de la marca.
+function prodLabelText(p, opts) {
+  if (!p) return '';
+  const o = opts || {};
+  const emoji = o.emoji === false ? '' : (p.emoji || '');
+  return [emoji, (p.brand || '').trim(), p.name || ''].filter(Boolean).join(' ');
+}
+// Etiqueta de un registro ya guardado. Un mismo paso puede tener VARIOS
+// productos (multi-picker): la hidratación los concatena con " · ", así que se
+// resuelve parte por parte. Si el producto ya no existe en Stock, se muestra el
+// texto guardado tal cual — nunca se pierde el registro.
+function loggedLabelHTML(name) {
+  return String(name == null ? '' : name).split(' · ').map(part => {
+    const t = part.trim();
+    const p = productByLoggedName(t);
+    return p ? prodLabelHTML(p) : esc(t);
+  }).filter(Boolean).join(' · ');
+}
+function loggedLabelText(name) {
+  return String(name == null ? '' : name).split(' · ').map(part => {
+    const t = part.trim();
+    const p = productByLoggedName(t);
+    return p ? prodLabelText(p) : t;
+  }).filter(Boolean).join(' · ');
 }
 
 // ── BACKDATE ─────────────────────────────────────────────────────────────────
@@ -1740,7 +1794,8 @@ function renderSyncBanner() {
   const q = readQueue();
   if (!q.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const stuck = q.filter(e => (e.attempts || 0) >= MAX_SYNC_ATTEMPTS);
-  const nombres = q.slice(0, 3).map(e => esc(e.row.product_name)).join(', ');
+  // Va a innerHTML: loggedLabelHTML escapa y además pinta la marca.
+  const nombres = q.slice(0, 3).map(e => loggedLabelHTML(e.row.product_name)).join(', ');
   const mas = q.length > 3 ? ` y ${q.length - 3} más` : '';
   el.style.display = 'flex';
   el.className = 'sync-banner' + (stuck.length ? ' stuck' : '');
@@ -1826,7 +1881,7 @@ async function loadTodayApplications() {
       const t = new Date(r.applied_at);
       const time = t.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
       return `<div class="reapp-entry">
-  <span class="reapp-entry-product">${esc(r.product_name)}</span>
+  <span class="reapp-entry-product">${loggedLabelHTML(r.product_name)}</span>
   <span class="reapp-entry-time">${time}</span>
 </div>`;
     }).join('');
@@ -2023,14 +2078,14 @@ async function quickLogSpf() {
   if (!last) { showToast('🛡️ Elige tu protector', ''); openSPFPicker(); return; }
   const gapMin = (Date.now() - new Date(last.applied_at).getTime()) / 60000;
   if (gapMin < PUSH_LOG_MIN_GAP_MIN) {
-    showToast(`🛡️ Ya registraste ${last.product_name} hace ${Math.round(gapMin)} min`, '');
+    showToast(`🛡️ Ya registraste ${loggedLabelText(last.product_name)} hace ${Math.round(gapMin)} min`, '');
     return;
   }
   selectedProduct = last.product_name;
   const id = await logApplication('reaplicacion');
   if (!id) return;
   if (id === 'queued') return;   // sin conexión: ya avisó la cola, no hay fila que deshacer
-  showUndoToast(`🛡️ ${last.product_name} registrado`, async () => {
+  showUndoToast(`🛡️ ${loggedLabelText(last.product_name)} registrado`, async () => {
     await db.from('product_applications').delete().eq('id', id);
     historyLoaded = false;
     await loadTodayApplications();
@@ -2473,10 +2528,10 @@ function buildReaccionesHTML(skinByDate) {
   const filas = señales.map(({ p, r, juntos }) => {
     const peor = r.direction === 'peor';
     const compañía = juntos.length
-      ? `<div class="reac-caveat">En esos mismos días también empezaste ${juntos.map(q => esc(q.name)).join(', ')} — no se puede atribuir a uno solo.</div>`
+      ? `<div class="reac-caveat">En esos mismos días también empezaste ${juntos.map(q => prodLabelHTML(q, { emoji: false })).join(', ')} — no se puede atribuir a uno solo.</div>`
       : '';
     return `<div class="reac-row ${peor ? 'reac-peor' : 'reac-mejor'}">
-  <div class="reac-title">${esc(p.emoji || '')} ${esc(p.name)} · desde ${fmtDate(p.started_at)}</div>
+  <div class="reac-title">${prodLabelHTML(p)} · desde ${fmtDate(p.started_at)}</div>
   <div class="reac-nums">Tu piel promedió <strong>${r.after}/5</strong> en los 14 días siguientes, contra <strong>${r.before}/5</strong> en los 14 previos (${r.delta > 0 ? '+' : ''}${r.delta}).</div>
   <div class="reac-n">${r.nBefore} días con registro antes · ${r.nAfter} después</div>
   ${compañía}
@@ -2546,7 +2601,7 @@ function openHitoModal(id) {
   document.getElementById('hf-notes').value = h ? (h.notes || '') : '';
   document.getElementById('hf-product').innerHTML =
     '<option value="">— Ninguno —</option>' +
-    allProducts.map(p => `<option value="${p.id}"${h && h.product_id === p.id ? ' selected' : ''}>${esc(p.emoji || '')} ${esc(p.name)}</option>`).join('');
+    allProducts.map(p => `<option value="${p.id}"${h && h.product_id === p.id ? ' selected' : ''}>${esc(prodLabelText(p))}</option>`).join('');
   openModal('hito-modal');
 }
 
@@ -2622,11 +2677,11 @@ function markPickerStepDone(productName) {
 function showStepProduct(step, productName) {
   const sc = step.querySelector('.sc');
   if (!sc) return;
-  const prod = allProducts.find(p => (p.logged_as || `${p.emoji} ${p.name}`) === productName);
+  const prod = productByLoggedName(productName);
   const why = (prod && prod.why_it_works)
     ? `<div class="sc-picked-why">💡 ${fmtRich(prod.why_it_works)}</div>` : '';
   const html = `<div class="sc-picked">
-  <div class="sc-picked-name">✓ ${esc(productName)}</div>
+  <div class="sc-picked-name">✓ ${loggedLabelHTML(productName)}</div>
   ${why}
   <div class="sc-picked-change">Toca para cambiar →</div>
 </div>`;
@@ -2719,7 +2774,7 @@ let multiPickModalId = 'product-picker-modal';
 function multiPickItemHTML(p) {
   const logName = p.logged_as || `${p.emoji} ${p.name}`;
   return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
-  <div class="spf-item-name"><span class="multi-pick-check">○</span> ${esc(p.emoji)} ${esc(p.name)}</div>
+  <div class="spf-item-name"><span class="multi-pick-check">○</span> ${prodLabelHTML(p)}</div>
   <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
   <div class="spf-item-note">${fmtRich(p.note || '')}</div>
 </div>`;
@@ -2852,7 +2907,9 @@ function compareRowsFromProducts() {
   return allProducts.filter(isSpf).map(p => {
     const cls = new Set(tagsOf(p).map(t => t.cls));
     const row = {
+      // label ya viene con marca + nombre; `name` se conserva plano para ordenar.
       name: `${p.emoji || ''} ${p.name}`.trim(),
+      label: prodLabelHTML(p),
       area: areaOf(p),
       tier: tierRank[p.tier] != null ? p.tier : 'ok',
       uvb: 1,
@@ -2884,7 +2941,7 @@ function openCompare() {
   ${COMPARE_COLS.map(c => `<th onclick="showColInfo('${c.id}')" style="text-align:center;padding:6px 3px;font-size:10px;font-weight:700;color:#7A5A5A;cursor:pointer;white-space:pre-line;min-width:36px;user-select:none" title="${esc(c.title)}">${c.label}<br><span style="color:#C4818A;font-size:9px">ⓘ</span></th>`).join('')}
 </tr>`;
   const tbody = rows.map(r => `<tr style="border-bottom:1px solid #F8F4F0">
-  <td style="padding:7px 8px 7px 4px;font-size:11px;font-weight:600;color:#2A2420;white-space:nowrap">${tierDot(r)}${esc(r.name)}${areaTag(r.area)}</td>
+  <td style="padding:7px 8px 7px 4px;font-size:11px;font-weight:600;color:#2A2420;white-space:nowrap">${tierDot(r)}${r.label || esc(r.name)}${areaTag(r.area)}</td>
   ${COMPARE_COLS.map(c => chk(r[c.id])).join('')}
 </tr>`).join('');
   body.innerHTML = `
@@ -3001,7 +3058,7 @@ function renderInventory() {
   const driftHTML = sinMatriz.length ? `<div class="matrix-drift">
   <strong>⚠️ ${sinMatriz.length} producto(s) fuera de la matriz de dosis</strong>
   <div class="matrix-drift-sub">No cuentan para ningún eje de Progreso. Hay que agregarlos a <code>activos-matriz.js</code>:</div>
-  <div class="matrix-drift-list">${sinMatriz.map(p => `${esc(p.emoji || '')} ${esc(p.name)}`).join(' · ')}</div>
+  <div class="matrix-drift-list">${sinMatriz.map(p => prodLabelHTML(p)).join(' · ')}</div>
 </div>` : '';
   const groups = {};
   for (const item of allProducts) {
@@ -3558,7 +3615,7 @@ function onStepCatChange() {
   const sel = document.getElementById('sf-product');
   const prods = allProducts.filter(p => p.category === cat);
   sel.innerHTML = '<option value="">— Sin fijar · rotar cada día —</option>' +
-    prods.map(p => `<option value="${p.id}">${esc(p.emoji)} ${esc(p.name)}</option>`).join('');
+    prods.map(p => `<option value="${p.id}">${esc(prodLabelText(p))}</option>`).join('');
   pf.style.display = 'block';
 }
 function openAddStepModal(routineId) {
@@ -3667,14 +3724,14 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
   const warn = s.warn ? `<div class="det-warn">${fmtRich(s.warn)}</div>` : '';
   // ¿Este paso exacto ya se aplicó ese día? La cadena de prioridades
   // (routine_step_id → product_id → categoría → nombre) vive en pure.js
-  // con sus tests: reglas 4 y 18 de ARQUITECTURA.md.
+  // con sus tests: reglas 4 y 19 de ARQUITECTURA.md.
   const appliedName = resolveStepHydration(s, todayHydration, sectionKey, `${dEmoji} ${dName}`.trim());
   const doneCls = appliedName ? ' done' : '';
   if (s.picker_category) {
     const pickerFn = pickerFnForCat(s.picker_category, `step_${id}`);
     const pickedBlock = appliedName
       ? `<div class="sc-picked">
-  <div class="sc-picked-name">✓ ${esc(appliedName)}</div>
+  <div class="sc-picked-name">✓ ${loggedLabelHTML(appliedName)}</div>
   <div class="sc-picked-change">Toca para cambiar →</div>
 </div>`
       : `<div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>`;
@@ -3861,7 +3918,7 @@ async function loadTodayRoutines(dateStr) {
   // El índice de hidratación se construye en pure.js (buildHydration), donde
   // sí tiene tests. Segmenta los fallbacks por sección: sin eso, un toner de
   // la mañana marcaba también el paso "Toners" de la rutina de NOCHE, porque
-  // ambos comparten picker_category (regla 18 de ARQUITECTURA.md).
+  // ambos comparten picker_category (regla 19 de ARQUITECTURA.md).
   const hydration = buildHydration(appsForHydration, _prodByIdForHydration, AM_PM_CUTOFF_HOUR);
   // AM
   const amBadge = r => ov.am ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('am')">🔄 ${esc(r.emoji||'')} ${esc(r.name)} · toca para volver</span>` : '';

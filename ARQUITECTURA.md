@@ -44,22 +44,24 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
    **Los fallbacks NO aplican a `source='reaplicacion'`.** Se respeta el origen: una reaplicación no es un paso de rutina y no debe palomear ninguno, aunque el producto sí sea paso fijo de la rutina de ese día. Antes, reaplicar protector a media tarde marcaba solo el paso de SPF de la rutina AM — y al desmarcarlo volvía, porque `unlogRoutineStep` solo borra filas con `source='rutina'`. El corte compara contra `'reaplicacion'` EXACTO, no contra `!== 'rutina'`: los registros antiguos traen `source` null o vacío y sí deben seguir hidratando.
 5. **Nada de listas duplicadas:** los selects de categoría, botones de reaplicación y la tabla comparativa SPF se **generan** de `PRODUCT_CATEGORIES` / `allProducts` / `products.tags`. Nunca hardcodear una lista que duplique lo que ya está en la base (ese patrón causó los bugs de "categoría faltante").
 6. **pure.js se mantiene puro** y cada cambio ahí actualiza `tests.html`. La matemática de adherencia y `spfScoreOf` viven ahí. Pesos SPF actuales (sunspots): base 25, pa4 +30, uva400 +35, uvalong +20 (excluyente con uva400), tinted +10.
-7. **Config en constantes, no regada:** `PRODUCT_CATEGORIES` (lista maestra de categorías — coincidencia EXACTA con emoji), `PM_ROTATION` (rotación de noches), `PICKER_MODALS` (qué modal/aviso usa cada categoría en el picker; **todas** son multi-selección — ya no existe lista blanca de categorías multi), `ROLE_CONFIG`/`clinical_roles` (roles: despigmentacion, regeneracion_celular, barrera, spf_facial, textura_poros).
+7. **Config en constantes, no regada:** `PRODUCT_CATEGORIES` (lista maestra de categorías — coincidencia EXACTA con emoji), `PM_ROTATION` (rotación de noches), `PICKER_MODALS` (qué modal y qué aviso usa cada categoría en el picker; **todas** son multi-selección — ya no existe lista blanca), `ROLE_CONFIG`/`clinical_roles` (roles: despigmentacion, regeneracion_celular, barrera, spf_facial, textura_poros).
 8. **PWA:** sw.js es network-first y SOLO intercepta same-origin GET (jamás Supabase/CDN). Al cambiar sw.js, subir versión de `CACHE` (hoy `skincare-shell-v4`). localStorage es solo para cola y preferencias — **nunca** para datos.
    **Cola offline:** cada entrada es `{ row, attempts, queuedAt, lastError }`. `row` es lo ÚNICO que se inserta — si los metadatos se colaran al `insert`, cada reenvío fallaría. Se distingue fallo TRANSITORIO (sin señal: se reintenta callado, no cuenta intento) de PERMANENTE (RLS, producto borrado: cuenta intento y a los 3 se marca atorado). El banner `#sync-banner` se ve en todas las pestañas mientras haya algo pendiente, con Reintentar y Descartar. Antes una fila que fallaba en serio se quedaba encolada para siempre y en silencio.
 9. **Notificaciones:** en iOS solo funcionan vía `registration.showNotification` con la PWA instalada — `new Notification()` NO existe en iOS. El push real lo manda la Edge Function `spf_push` (cron cada 15 min; la función misma filtra horario 10am–7pm GDL y gap de 2 h). Con push activo, el aviso local se desactiva (`PUSH_ENABLED_KEY`) para no duplicar. La llave VAPID pública vive en app.js (correcto); la privada SOLO en secrets de Supabase — **jamás en el repo**.
    **iOS ignora el arreglo `actions`** de `showNotification`: el botón "Ya lo apliqué" NO se renderiza en iPhone. Por eso el registro cuelga del tap en la notificación completa, que sí dispara `notificationclick`. El SW hace `postMessage({type:'LOG_SPF'})` si la app está abierta, o abre `./?log=spf` si está cerrada; `app.js` registra y limpia la URL para que un refresh no duplique. No agregar `actions` esperando que funcionen en iOS.
 10. **Renombrar productos:** el vínculo robusto es `product_id`; los registros viejos por nombre dependen de los fallbacks. Si se renombra masivamente, correr de nuevo el backfill de `supabase-hardening.sql`.
 
+11. **Nombre de producto en pantalla = marca + nombre.** Un producto SIEMPRE se pinta con `prodLabelHTML(p)` — o `prodLabelText(p)` donde solo cabe texto plano (`<option>`, toasts, `textContent`). La marca va delante, dentro de `<span class="p-brand">` (azul acero `#4A6FA5`, itálica, weight 300, hereda el tamaño del contenedor). Un registro ya guardado se pinta con `loggedLabelHTML(product_name)`, que resuelve string → producto con `productByLoggedName` y parte por `" · "` (un paso multi-picker guarda varios). **Es solo presentación:** lo que se ESCRIBE en `product_applications` sigue siendo `logged_as` o `"emoji nombre"` — meter la marca ahí rompería la hidratación de checkmarks y todo el histórico ya registrado. Si el producto ya no está en Stock, se muestra el texto guardado escapado en vez de perder el registro. Stock, el editor de rutinas y la línea del paso conservan su marca en su propia línea (`.inv-brand` / `.rout-step-brand` / `.sc-brand`), con el mismo azul.
+
 ## Flujos no obvios
 
 - **Backdate** ("Registrar para"): re-renderiza Today con los datos de ESE día; logs y borrados respetan la fecha elegida. El resumen de hoy se oculta durante backdate.
-- **Multi-picker (TODO paso con `picker_category`)**: un solo picker, `openMultiPickerByCat`, para cualquier categoría — incluidos SPF Facial y Corporal. Registra UNA fila por producto seleccionado, todas con el mismo `routine_step_id`; la hidratación concatena nombres con " · ". Reabrir el picker de un paso ya marcado **añade** registros (no reconcilia): así es como una reaplicación de SPF sigue sumando aplicaciones del día (reglas 12–13). Desmarcar el paso sí borra todas sus filas de ese día.
-- **Adherencia por producto:** contra su propio calendario — prioridad `schedule_days` manual → calendario de la rutina donde es paso fijo → diario. **Es vista SECUNDARIA** desde Fase B (ver regla 11).
-- **Protección solar en Progreso:** sistema de puntos por calidad × aplicaciones, no promedio simple — la rotación de protectores no castiga. El ideal diario **se modula por `sun_exposure`** (ver regla 12).
+- **Multi-picker (TODO paso con `picker_category`)**: un solo picker, `openMultiPickerByCat`, para cualquier categoría — incluidos SPF Facial y Corporal. Registra UNA fila por producto seleccionado, todas con el mismo `routine_step_id`; la hidratación concatena nombres con " · ". Reabrir el picker de un paso ya marcado **añade** registros (no reconcilia): así una reaplicación de SPF sigue sumando aplicaciones del día (reglas 13–14). Desmarcar el paso sí borra todas sus filas de ese día.
+- **Adherencia por producto:** contra su propio calendario — prioridad `schedule_days` manual → calendario de la rutina donde es paso fijo → diario. **Es vista SECUNDARIA** desde Fase B (ver regla 12).
+- **Protección solar en Progreso:** sistema de puntos por calidad × aplicaciones, no promedio simple — la rotación de protectores no castiga. El ideal diario **se modula por `sun_exposure`** (ver regla 13).
 - **Reporte dermatóloga:** `openDermReport()` usa `lastReportData` (seteado por `loadHistory`) — requiere que Progreso haya cargado.
 - **Hitos:** `loadHitos()` vive en su propio contenedor (`#hitos-content`), aparte
-  de `loadHistory` — que tiene el orden de declaración de la regla 17 y no
+  de `loadHistory` — que tiene el orden de declaración de la regla 18 y no
   conviene tocar. Une `treatment_events` con los `started_at` de `allProducts`.
   Los días con hito marcan su celda en el heatmap y salen en el detalle del día.
 - **Foto fantasma:** al elegir área se precarga la última foto de ESA área con
@@ -77,13 +79,13 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 
 > Detalle completo, rúbricas y razonamiento en **`FASE-B-matriz-activos.md`**. Léelo antes de tocar el motor de dosis.
 
-11. **El progreso mide DOSIS, no obediencia.** "Estímulo entregado" es la vista primaria; la adherencia a rutinas vive colapsada abajo. Una aplicación cuenta completa **aunque no venga de un paso de rutina** — ese era justo el problema que Fase B resolvió (33 de 74 productos eran invisibles). No volver a hacer que el progreso dependa de `routine_step_id`.
+12. **El progreso mide DOSIS, no obediencia.** "Estímulo entregado" es la vista primaria; la adherencia a rutinas vive colapsada abajo. Una aplicación cuenta completa **aunque no venga de un paso de rutina** — ese era justo el problema que Fase B resolvió (33 de 74 productos eran invisibles). No volver a hacer que el progreso dependa de `routine_step_id`.
 
-12. **`spfScoreOf` NO suma etiquetas.** Son 3 componentes independientes: magnitud UVA (0–60), espectro (0–30), luz visible (0–10). **`pa4` y `euuva` son EQUIVALENTES** — PA++++ (PPD≥16) y el sello UVA europeo (UVA-PF ≥ SPF/3 = 16.7 en SPF50) miden lo mismo con métodos distintos. Nunca sumarlos. La falta de etiqueta PA **no** significa falta de protección: es otra normativa. Los pesos están calibrados a **lentigos**; si el diagnóstico cambia a melasma, subir luz visible a ~20 y bajar magnitud.
+13. **`spfScoreOf` NO suma etiquetas.** Son 3 componentes independientes: magnitud UVA (0–60), espectro (0–30), luz visible (0–10). **`pa4` y `euuva` son EQUIVALENTES** — PA++++ (PPD≥16) y el sello UVA europeo (UVA-PF ≥ SPF/3 = 16.7 en SPF50) miden lo mismo con métodos distintos. Nunca sumarlos. La falta de etiqueta PA **no** significa falta de protección: es otra normativa. Los pesos están calibrados a **lentigos**; si el diagnóstico cambia a melasma, subir luz visible a ~20 y bajar magnitud.
 
-13. **Los ideales de SPF se modulan por `sun_exposure`.** Cara: interior 2 · normal 3 · alta 4 · playa 5 (default 3). Cuerpo: interior 1 · normal 1 · alta 2 · playa 4 — **ideal propio**, porque la piel corporal va cubierta y nadie reaplica 5 veces al día. Con el ideal de la cara, ese eje marcaba 4% y medía una expectativa irreal.
+14. **Los ideales de SPF se modulan por `sun_exposure`.** Cara: interior 2 · normal 3 · alta 4 · playa 5 (default 3). Cuerpo: interior 1 · normal 1 · alta 2 · playa 4 — **ideal propio**, porque la piel corporal va cubierta y nadie reaplica 5 veces al día. Con el ideal de la cara, ese eje marcaba 4% y medía una expectativa irreal.
 
-14. **La matemática de dosis vive en `pure.js`** (`doseWeekPct`, `overExposureDays`) con sus tests. Dos invariantes que no se pueden quitar: **techo diario** (aplicar dos veces no vale el doble) y **ventana semanal** (las noches de descanso del retinoide NO son falla). Sin ellos el modelo premia sobre-aplicar y vuelve a castigar la desviación.
+15. **La matemática de dosis vive en `pure.js`** (`doseWeekPct`, `overExposureDays`) con sus tests. Dos invariantes que no se pueden quitar: **techo diario** (aplicar dos veces no vale el doble) y **ventana semanal** (las noches de descanso del retinoide NO son falla). Sin ellos el modelo premia sobre-aplicar y vuelve a castigar la desviación.
 
 15b. **El aviso de sobre-exposición se rastrea POR ZONA, no global.** Los días
     con irritante se marcan en la zona donde se aplicó (`cara` / `cuerpo`,
@@ -96,21 +98,21 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     agregan ejes o zonas, actualizar ese mapa — un eje que no esté ahí
     simplemente nunca avisa, que es el comportamiento seguro.
 
-15. **Pasarse del ideal avisa, no penaliza.** `overExposureDays` recibe **días con irritante** (lista `IRRITANTES`: solo retinoides y ácidos exfoliantes), nunca los puntos del eje `textura` — la niacinamida y el azelaico suben textura sin irritar y disparaban avisos falsos.
+16. **Pasarse del ideal avisa, no penaliza.** `overExposureDays` recibe **días con irritante** (lista `IRRITANTES`: solo retinoides y ácidos exfoliantes), nunca los puntos del eje `textura` — la niacinamida y el azelaico suben textura sin irritar y disparaban avisos falsos.
 
-16. **`proteccion` no lleva número en `PRODUCT_DOSE`** (va `null`): se toma `spfScoreOf`. Una sola fuente de verdad para la calibración UVA — no duplicarla en la matriz.
+17. **`proteccion` no lleva número en `PRODUCT_DOSE`** (va `null`): se toma `spfScoreOf`. Una sola fuente de verdad para la calibración UVA — no duplicarla en la matriz.
 
-17. **Orden de declaración en `loadHistory` — no reordenar.** `doseDiag` se declara junto a `dosisCara` porque `buildFocusHTML` lo usa antes (siendo `const`, moverlo abajo revienta el render por zona muerta temporal). `skinByDate`/`sunByDate` se construyen arriba, junto al cálculo de SPF que los necesita.
+18. **Orden de declaración en `loadHistory` — no reordenar.** `doseDiag` se declara junto a `dosisCara` porque `buildFocusHTML` lo usa antes (siendo `const`, moverlo abajo revienta el render por zona muerta temporal). `skinByDate`/`sunByDate` se construyen arriba, junto al cálculo de SPF que los necesita.
 
-18. **Hidratación de checkmarks: los fallbacks van SEGMENTADOS POR SECCIÓN.** Un registro sin `routine_step_id` se asigna a AM o PM según la hora (`AM_PM_CUTOFF_HOUR`). Sin esto, un toner de la mañana marcaba también el paso "Toners" de la rutina de noche, porque ambos comparten `picker_category`. Cuerpo y pies matchean siempre (sus categorías no chocan con las de cara). Cubierto por tests desde que la lógica se movió a `pure.js`.
+19. **Hidratación de checkmarks: los fallbacks van SEGMENTADOS POR SECCIÓN.** Un registro sin `routine_step_id` se asigna a AM o PM según la hora (`AM_PM_CUTOFF_HOUR`). Sin esto, un toner de la mañana marcaba también el paso "Toners" de la rutina de noche, porque ambos comparten `picker_category`. Cuerpo y pies matchean siempre (sus categorías no chocan con las de cara). Cubierto por tests desde que la lógica se movió a `pure.js`.
 
-19. **El ✓ de un paso con picker NO registra: abre el picker.** El texto visible de esos pasos es la CATEGORÍA ("SPF Facial", "Hidratantes"), no un producto. Cuando el ✓ registraba ese texto, creaba filas sin `product_id` que además caían en `ROLE_CONFIG.spf_facial.legacyRegex` y recibían un **score asumido de 60** — protección inventada en el eje con menos margen. `checkStep` detecta `data-picker` y llama a `openPickerForCat`. Los pasos informativos (Agua Tibia, Cotton Socks) SÍ siguen registrando: su palomita se hidrata desde `product_applications` y sin fila se desmarcarían al recargar.
+20. **El ✓ de un paso con picker NO registra: abre el picker.** El texto visible de esos pasos es la CATEGORÍA ("SPF Facial", "Hidratantes"), no un producto. Cuando el ✓ registraba ese texto, creaba filas sin `product_id` que además caían en `ROLE_CONFIG.spf_facial.legacyRegex` y recibían un **score asumido de 60** — protección inventada en el eje con menos margen. `checkStep` detecta `data-picker` y llama a `openPickerForCat`. Los pasos informativos (Agua Tibia, Cotton Socks) SÍ siguen registrando: su palomita se hidrata desde `product_applications` y sin fila se desmarcarían al recargar.
 
-20. **`logApplication` devuelve el id insertado** (o `'queued'` sin conexión, o `false` si falló). Sirve para deshacer ESA fila exacta en vez de "la última con ese nombre". Sigue siendo truthy en éxito, así que los callers que solo hacen `if (!ok)` no cambian.
+21. **`logApplication` devuelve el id insertado** (o `'queued'` sin conexión, o `false` si falló). Sirve para deshacer ESA fila exacta en vez de "la última con ese nombre". Sigue siendo truthy en éxito, así que los callers que solo hacen `if (!ok)` no cambian.
 
-21. **Todo paso de rutina debería tener `product_id` o `picker_category`.** Un paso de texto libre que sí es un producto genera registros huérfanos para siempre (pasó con "Salicylic Acid Gel 2%" en Pies). Los únicos pasos que legítimamente no llevan ninguno de los dos son los informativos.
+22. **Todo paso de rutina debería tener `product_id` o `picker_category`.** Un paso de texto libre que sí es un producto genera registros huérfanos para siempre (pasó con "Salicylic Acid Gel 2%" en Pies). Los únicos pasos que legítimamente no llevan ninguno de los dos son los informativos.
 
-22. **La detección de reacción NO afirma causalidad.** `reactionSignal` compara
+23. **La detección de reacción NO afirma causalidad.** `reactionSignal` compara
     `skin_state` 14 días antes vs 14 después de `products.started_at`. Exige
     mínimo 4 días CON registro en cada ventana y una diferencia de 0.7 puntos;
     si falta cualquiera de las dos, devuelve `null` y no se muestra nada. Detecta
@@ -119,7 +121,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     solo lo malo sesga la lectura. **El disclaimer del render no es adorno** — un
     número junto al nombre de un producto se lee como causa aunque no lo sea.
 
-23. **El mapa de manchas NO evalúa riesgo.** `shade` (1–5) es apreciación visual
+24. **El mapa de manchas NO evalúa riesgo.** `shade` (1–5) es apreciación visual
     de la usuaria, no colorimetría, y `spotTrend` compara primera contra última
     observación —sin regresión: con 3 o 4 puntos subjetivos, ajustar una recta
     da falsa precisión—. Sirve para el seguimiento de un TRATAMIENTO. El estado
@@ -128,7 +130,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     nada que se lea como diagnóstico: una lesión que cambia, sangra o pica es de
     dermatoscopia.
 
-24. **La posición de una mancha NO viaja sin su foto.** `pos_x`/`pos_y` son % de
+25. **La posición de una mancha NO viaja sin su foto.** `pos_x`/`pos_y` son % de
     la foto en `reference_photo_id`, no de la zona. La primera versión mostraba
     siempre la foto más reciente del área: la referencia cambiaba sola con cada
     foto nueva y el marcador acababa señalando otro punto de la cara, porque los
@@ -140,7 +142,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     llevarse el historial de una lesión; la app detecta la posición huérfana y
     pide volver a marcar.
 
-25. **La tira de recortes no mide, muestra.** `cropStripHTML` amplía la misma
+26. **La tira de recortes no mide, muestra.** `cropStripHTML` amplía la misma
     región (`pos_x`/`pos_y`) en cada foto del área y las alinea por fecha. El
     recorte es CSS puro (`background-size` + `background-position` en %): no hace
     falta conocer la relación de aspecto ni usar canvas. **No se calcula ningún
@@ -152,7 +154,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     atributo `style`: es un dato llegando a innerHTML y le aplica la regla 2.
     Las fotos se firman **en un solo lote**, nunca una por una.
 
-26. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
+27. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
 
 ## Al terminar cualquier cambio
 

@@ -54,7 +54,7 @@ body {
 .sc { flex: 1; min-width: 0; cursor: pointer; }
 .sc-top { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .sc-name { font-weight: 600; font-size: 13px; color: #2A2420; transition: color 0.2s; }
-.sc-brand { font-size: 11px; color: #A09090; margin-top: 2px; }
+.sc-brand { font-size: 11px; margin-top: 2px; }
 .sc-detail { display: none; margin-top: 10px; padding: 12px; background: #FDFAF8; border-radius: 10px; border-left: 3px solid #C4818A; font-size: 12px; line-height: 1.75; color: #4A3E3A; }
 .sc-detail.open { display: block; }
 .det-title { font-size: 10px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; color: #C4818A; margin-bottom: 6px; }
@@ -202,6 +202,16 @@ body {
 .spf-item-note { font-size: 11px; color: #7A6E6A; line-height: 1.5; }
 .spf-guide-btn { display: block; width: 100%; margin-top: 6px; padding: 13px; background: none; border: 1.5px solid #EAE4E0; border-radius: 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: #7A6E6A; cursor: pointer; text-align: center; transition: all 0.2s; }
 .spf-guide-btn:hover { border-color: #C4818A; color: #C4818A; }
+/* MARCA DEL PRODUCTO
+   Se antepone al nombre en TODA la app (prodLabelHTML en app.js).
+   Azul acero, itálica y light para que se lea como un matiz del nombre y no
+   compita con él. Hereda el tamaño del contenedor a propósito: así funciona
+   igual en un título de 15px que en una fila de tabla de 11px. */
+.p-brand { color: #4A6FA5; font-style: italic; font-weight: 300; }
+/* Las tres vistas que ya traían la marca en su propia línea la conservan ahí,
+   pero con el mismo tratamiento de color. */
+.sc-brand, .inv-brand, .rout-step-brand { color: #4A6FA5; font-style: italic; font-weight: 300; }
+
 /* MULTI PICKER (TODA categoría admite varios productos por paso) */
 .multi-pick-hint { font-size: 11px; color: #7A6E6A; font-style: italic; margin-bottom: 8px; }
 .spf-item.multi-pick { border: 1.5px solid transparent; }
@@ -263,7 +273,7 @@ body {
 .inv-emoji { font-size: 18px; flex-shrink: 0; }
 .inv-info { flex: 1; min-width: 0; }
 .inv-name { font-size: 13px; font-weight: 600; color: #2A2420; }
-.inv-brand { font-size: 11px; color: #A09090; margin-top: 2px; }
+.inv-brand { font-size: 11px; margin-top: 2px; }
 .inv-chips { display: flex; gap: 4px; flex-shrink: 0; }
 .inv-chip { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; border: 1.5px solid #EDEAE8; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s; color: #C8C0C0; background: transparent; }
 .inv-chip.active-ok  { background: #EAF5EA; color: #3A8A3A; border-color: #3A8A3A; }
@@ -319,7 +329,7 @@ body {
 .rout-step-num { width: 24px; height: 24px; background: #C4818A; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: white; flex-shrink: 0; }
 .rout-step-info { flex: 1; min-width: 0; }
 .rout-step-name { font-size: 13px; font-weight: 600; color: #2A2420; }
-.rout-step-brand { font-size: 11px; color: #A09090; margin-top: 1px; }
+.rout-step-brand { font-size: 11px; margin-top: 1px; }
 .rout-step-picker { font-size: 10px; color: #C4818A; margin-top: 2px; font-style: italic; }
 .rout-step-actions { display: flex; gap: 2px; flex-shrink: 0; align-items: center; }
 .rout-move-btn { background: none; border: 1px solid #EAE4E0; border-radius: 6px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; color: #9A8888; }

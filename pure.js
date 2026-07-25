@@ -184,7 +184,7 @@ function overExposureDays(irritantDays, diasIdeales) {
 // Los fallbacks (producto / categoría / nombre) se guardan SEGMENTADOS POR
 // SECCIÓN con el prefijo "am|", "pm|", "body|" o "feet|". Sin eso, un toner
 // aplicado en la mañana sin routine_step_id marcaba también el paso "Toners"
-// de la rutina de NOCHE, porque ambos comparten picker_category (regla 18).
+// de la rutina de NOCHE, porque ambos comparten picker_category (regla 19).
 //
 // Cara: solo la sección que corresponde a la hora del registro.
 // Cuerpo y pies: siempre, porque sus categorías no chocan con las de cara.
