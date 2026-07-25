@@ -211,6 +211,128 @@ t('aviso: textura alta sin irritantes no avisa',
 t('dosis: entrada inválida devuelve null', doseWeekPct(null, 85, 4), null);
 t('dosis: sin config devuelve null', doseWeekPct([10], 0, 4), null);
 
+// ============================================================================
+// HIDRATACIÓN DE PALOMITAS — reglas 4 y 18 de ARQUITECTURA.md
+// ============================================================================
+group('💧 buildHydration / resolveStepHydration');
+
+// Fixtures compartidos
+const _CUT = 15; // AM_PM_CUTOFF_HOUR
+const _prods = {
+  'p-toner':  { id: 'p-toner',  category: '💦 Toners' },
+  'p-spf':    { id: 'p-spf',    category: '🌞 SPF Facial' },
+  'p-urea':   { id: 'p-urea',   category: '🦶 Pies' }
+};
+
+// ── PRIORIDAD 1: routine_step_id exacto ────────────────────────────────────
+t('hidratación: el paso con routine_step_id se marca',
+  resolveStepHydration(
+    { id: 's1' },
+    buildHydration([{ routine_step_id: 's1', product_name: '🌞 Anthelios', applied_at: '2026-07-20T09:00:00' }], _prods, _CUT),
+    'am', '🌞 Anthelios'),
+  '🌞 Anthelios');
+
+t('hidratación: un paso distinto NO se marca',
+  resolveStepHydration(
+    { id: 's2' },
+    buildHydration([{ routine_step_id: 's1', product_name: '🌞 Anthelios', applied_at: '2026-07-20T09:00:00' }], _prods, _CUT),
+    'am', '🌞 Anthelios'),
+  null);
+
+// ── MULTI-PICKER: varias aplicaciones en un mismo paso se concatenan ────────
+t('hidratación: multi-picker concatena nombres con " · "',
+  resolveStepHydration(
+    { id: 's1' },
+    buildHydration([
+      { routine_step_id: 's1', product_name: '💦 Toner A', applied_at: '2026-07-20T09:00:00' },
+      { routine_step_id: 's1', product_name: '💦 Toner B', applied_at: '2026-07-20T09:05:00' }
+    ], _prods, _CUT),
+    'am', '💦 Toners'),
+  '💦 Toner A · 💦 Toner B');
+
+// ── REGLA 18: SEGMENTACIÓN POR SECCIÓN (el bug que motivó la regla) ─────────
+// Un toner aplicado en la MAÑANA sin routine_step_id no debe marcar el paso
+// "Toners" de la rutina de NOCHE, aunque compartan picker_category.
+const _tonerAM = buildHydration(
+  [{ product_id: 'p-toner', product_name: '💦 Toner A', applied_at: '2026-07-20T09:00:00' }],
+  _prods, _CUT);
+
+t('regla 18: toner de la mañana SÍ marca el paso AM',
+  resolveStepHydration({ id: 'sAM', picker_category: '💦 Toners' }, _tonerAM, 'am', '💦 Toners'),
+  '💦 Toner A');
+
+t('regla 18: toner de la mañana NO marca el paso PM (era el bug)',
+  resolveStepHydration({ id: 'sPM', picker_category: '💦 Toners' }, _tonerAM, 'pm', '💦 Toners'),
+  null);
+
+const _tonerPM = buildHydration(
+  [{ product_id: 'p-toner', product_name: '💦 Toner A', applied_at: '2026-07-20T20:00:00' }],
+  _prods, _CUT);
+
+t('regla 18: toner de la noche marca PM y no AM',
+  [resolveStepHydration({ id: 'x', picker_category: '💦 Toners' }, _tonerPM, 'pm', '💦 Toners'),
+   resolveStepHydration({ id: 'y', picker_category: '💦 Toners' }, _tonerPM, 'am', '💦 Toners')],
+  ['💦 Toner A', null]);
+
+t('corte AM/PM: las 15:00 en punto ya cuentan como PM',
+  [resolveStepHydration({ id: 'x', picker_category: '💦 Toners' },
+     buildHydration([{ product_id: 'p-toner', product_name: '💦 T', applied_at: '2026-07-20T15:00:00' }], _prods, _CUT),
+     'pm', '💦 Toners'),
+   resolveStepHydration({ id: 'x', picker_category: '💦 Toners' },
+     buildHydration([{ product_id: 'p-toner', product_name: '💦 T', applied_at: '2026-07-20T14:59:00' }], _prods, _CUT),
+     'am', '💦 Toners')],
+  ['💦 T', '💦 T']);
+
+// ── CUERPO Y PIES: siempre matchean, sin importar la hora ──────────────────
+t('cuerpo/pies: un registro de la mañana marca el paso de pies igual',
+  resolveStepHydration(
+    { id: 'sf', picker_category: '🦶 Pies' },
+    buildHydration([{ product_id: 'p-urea', product_name: '🦶 Urea 40%', applied_at: '2026-07-20T09:00:00' }], _prods, _CUT),
+    'feet', '🦶 Pies'),
+  '🦶 Urea 40%');
+
+// ── PRIORIDAD 2: product_id ────────────────────────────────────────────────
+t('hidratación: paso fijo se marca por product_id',
+  resolveStepHydration(
+    { id: 's9', product_id: 'p-spf' },
+    buildHydration([{ product_id: 'p-spf', product_name: '🌞 Anthelios', applied_at: '2026-07-20T09:00:00' }], _prods, _CUT),
+    'am', '🌞 Anthelios'),
+  '🌞 Anthelios');
+
+// ── PRIORIDAD 4: nombre, SOLO para pasos informativos ──────────────────────
+// Es lo que hace que "Agua Tibia" siga palomeado después de recargar.
+t('informativo: un paso sin product_id ni picker_category se marca por nombre',
+  resolveStepHydration(
+    { id: 'si' },
+    buildHydration([{ product_name: '📝 Agua Tibia, no caliente', applied_at: '2026-07-20T08:00:00' }], _prods, _CUT),
+    'body', '📝 Agua Tibia, no caliente'),
+  '📝 Agua Tibia, no caliente');
+
+t('un paso CON picker_category no cae al fallback por nombre',
+  resolveStepHydration(
+    { id: 'sp', picker_category: '💦 Toners' },
+    buildHydration([{ product_name: '💦 Toners', applied_at: '2026-07-20T09:00:00' }], _prods, _CUT),
+    'am', '💦 Toners'),
+  null);
+
+// ── BORDES ─────────────────────────────────────────────────────────────────
+t('hidratación: día sin registros no marca nada',
+  resolveStepHydration({ id: 's1', picker_category: '💦 Toners' },
+    buildHydration([], _prods, _CUT), 'am', '💦 Toners'),
+  null);
+
+t('hidratación: entradas nulas no truenan',
+  [resolveStepHydration(null, buildHydration([], {}, _CUT), 'am', ''),
+   resolveStepHydration({ id: 's' }, null, 'am', '')],
+  [null, null]);
+
+t('hidratación: producto sin categoría no rompe el índice',
+  resolveStepHydration(
+    { id: 's', product_id: 'p-desconocido' },
+    buildHydration([{ product_id: 'p-desconocido', product_name: '🧴 X', applied_at: '2026-07-20T09:00:00' }], _prods, _CUT),
+    'am', '🧴 X'),
+  '🧴 X');
+
 // ── fin ──
 finish();
 </script>

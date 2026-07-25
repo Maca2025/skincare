@@ -165,3 +165,90 @@ function overExposureDays(irritantDays, diasIdeales) {
   const activos = irritantDays.filter(p => (p || 0) > 0).length;
   return Math.max(0, activos - (diasIdeales + 1));
 }
+// ============================================================================
+// AGREGAR AL FINAL DE pure.js
+// ============================================================================
+// Extracción de la lógica de hidratación de palomitas, que hasta ahora vivía
+// dentro de loadTodayRoutines() (mezclada con Supabase) y de dbStepHTML()
+// (mezclada con DOM). No cambia comportamiento: es el mismo código, movido.
+//
+// POR QUÉ SE EXTRAE: las reglas de oro 4 y 18 de ARQUITECTURA.md documentan dos
+// bugs ya vividos que viven exactamente aquí — la cadena de fallbacks y la
+// segmentación por sección. Eran la parte más frágil del código y la única sin
+// una sola prueba, porque no se podía ejecutar sin levantar la app entera.
+// ============================================================================
+
+// Construye el índice de "qué se aplicó ese día", que decide qué pasos
+// aparecen palomeados.
+//
+// Los fallbacks (producto / categoría / nombre) se guardan SEGMENTADOS POR
+// SECCIÓN con el prefijo "am|", "pm|", "body|" o "feet|". Sin eso, un toner
+// aplicado en la mañana sin routine_step_id marcaba también el paso "Toners"
+// de la rutina de NOCHE, porque ambos comparten picker_category (regla 18).
+//
+// Cara: solo la sección que corresponde a la hora del registro.
+// Cuerpo y pies: siempre, porque sus categorías no chocan con las de cara.
+//
+//   apps          — filas de product_applications de ese día
+//   productsById  — objeto { [product_id]: producto } para leer la categoría
+//   cutoffHour    — hora local que separa AM de PM (AM_PM_CUTOFF_HOUR)
+function buildHydration(apps, productsById, cutoffHour) {
+  const h = {
+    byStepId: new Map(), byProductId: new Map(),
+    byCategory: new Map(), byName: new Map()
+  };
+  const prods = productsById || {};
+  (apps || []).forEach(r => {
+    const label = r.product_name;
+    if (r.routine_step_id) {
+      // Un paso multi (ej. Toners) puede tener VARIAS aplicaciones el mismo
+      // día — se concatenan para mostrarlas todas en el paso.
+      const prev = h.byStepId.get(r.routine_step_id);
+      h.byStepId.set(r.routine_step_id, prev ? prev + ' · ' + label : label);
+      return;
+    }
+    const hour = new Date(r.applied_at).getHours();
+    const sections = [hour < cutoffHour ? 'am' : 'pm', 'body', 'feet'];
+    const prod = r.product_id ? prods[r.product_id] : null;
+    sections.forEach(sec => {
+      if (r.product_id) h.byProductId.set(sec + '|' + r.product_id, label);
+      if (prod && prod.category) h.byCategory.set(sec + '|' + prod.category, label);
+      h.byName.set(sec + '|' + label, label);
+    });
+  });
+  return h;
+}
+
+// ¿Este paso exacto ya se aplicó ese día? Devuelve el nombre registrado, o null.
+//
+// PRIORIDAD (regla 4 — no quitar los fallbacks, no promoverlos):
+//   1. routine_step_id exacto  ← el vínculo confiable
+//   2. product_id              ← histórico previo a routine_step_id
+//   3. picker_category         ← histórico
+//   4. nombre visible          ← solo para pasos informativos, que no tienen
+//                                ni product_id ni picker_category (Agua Tibia,
+//                                Cotton Socks). Es lo que hace que su palomita
+//                                sobreviva a un recargar.
+//
+//   step         — fila de routine_steps (usa id, product_id, picker_category)
+//   hydration    — lo que devuelve buildHydration()
+//   sectionKey   — 'am' | 'pm' | 'body' | 'feet'
+//   displayLabel — el texto visible del paso ("emoji nombre"), para el caso 4
+function resolveStepHydration(step, hydration, sectionKey, displayLabel) {
+  if (!step || !hydration) return null;
+  const sec = (sectionKey || 'am') + '|';
+  if (hydration.byStepId && hydration.byStepId.has(step.id)) {
+    return hydration.byStepId.get(step.id);
+  }
+  if (step.product_id && hydration.byProductId.has(sec + step.product_id)) {
+    return hydration.byProductId.get(sec + step.product_id);
+  }
+  if (step.picker_category && hydration.byCategory.has(sec + step.picker_category)) {
+    return hydration.byCategory.get(sec + step.picker_category);
+  }
+  if (!step.picker_category && !step.product_id) {
+    const expected = String(displayLabel == null ? '' : displayLabel).trim();
+    if (hydration.byName.has(sec + expected)) return hydration.byName.get(sec + expected);
+  }
+  return null;
+}

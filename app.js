@@ -2822,24 +2822,10 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
   const _whyTxt = (_prod && _prod.why_it_works) ? _prod.why_it_works : s.why_it_works;
   const why  = _whyTxt ? `<div class="det-why">💡 ${fmtRich(_whyTxt)}</div>` : '';
   const warn = s.warn ? `<div class="det-warn">${fmtRich(s.warn)}</div>` : '';
-  // ¿Este paso exacto ya se aplicó ese día? Prioridad 1: routine_step_id.
-  // Prioridades 2/3/4: heurísticos viejos, solo para historial previo.
-  let appliedName = null;
-  if (todayHydration) {
-    // Los fallbacks van prefijados por sección para no invadir otra rutina del
-    // mismo día (ver construcción de `hydration`).
-    const sec = (sectionKey || 'am') + '|';
-    if (todayHydration.byStepId && todayHydration.byStepId.has(s.id)) {
-      appliedName = todayHydration.byStepId.get(s.id);
-    } else if (s.product_id && todayHydration.byProductId.has(sec + s.product_id)) {
-      appliedName = todayHydration.byProductId.get(sec + s.product_id);
-    } else if (s.picker_category && todayHydration.byCategory.has(sec + s.picker_category)) {
-      appliedName = todayHydration.byCategory.get(sec + s.picker_category);
-    } else if (!s.picker_category && !s.product_id) {
-      const expected = `${dEmoji} ${dName}`.trim();
-      if (todayHydration.byName.has(sec + expected)) appliedName = todayHydration.byName.get(sec + expected);
-    }
-  }
+  // ¿Este paso exacto ya se aplicó ese día? La cadena de prioridades
+  // (routine_step_id → product_id → categoría → nombre) vive en pure.js
+  // con sus tests: reglas 4 y 18 de ARQUITECTURA.md.
+  const appliedName = resolveStepHydration(s, todayHydration, sectionKey, `${dEmoji} ${dName}`.trim());
   const doneCls = appliedName ? ' done' : '';
   if (s.picker_category) {
     const pickerFn = pickerFnForCat(s.picker_category, `step_${id}`);
@@ -3029,31 +3015,11 @@ async function loadTodayRoutines(dateStr) {
     .order('applied_at', { ascending: true });
   const _prodByIdForHydration = {};
   allProducts.forEach(p => { _prodByIdForHydration[p.id] = p; });
-  const hydration = { byStepId: new Map(), byProductId: new Map(), byCategory: new Map(), byName: new Map() };
-  // Los fallbacks (producto/categoría/nombre) se guardan SEGMENTADOS POR SECCIÓN.
-  // Si no lo estuvieran, un toner aplicado en la mañana (sin routine_step_id)
-  // marcaría también el paso "Toners" de la rutina de NOCHE, porque ambos pasos
-  // comparten picker_category. La sección se deduce de la hora del registro.
-  (appsForHydration || []).forEach(r => {
-    const label = r.product_name;
-    if (r.routine_step_id) {
-      // Un paso multi (ej. Toners) puede tener VARIAS aplicaciones el mismo
-      // día — se concatenan para mostrarlas todas en el paso.
-      const prev = hydration.byStepId.get(r.routine_step_id);
-      hydration.byStepId.set(r.routine_step_id, prev ? prev + ' · ' + label : label);
-      return;
-    }
-    // Cara: solo la sección que corresponde a la hora. Cuerpo/pies siempre,
-    // porque sus categorías no chocan con las de cara (no hay ambigüedad).
-    const _h = new Date(r.applied_at).getHours();
-    const sections = [_h < AM_PM_CUTOFF_HOUR ? 'am' : 'pm', 'body', 'feet'];
-    const prod = r.product_id ? _prodByIdForHydration[r.product_id] : null;
-    sections.forEach(sec => {
-      if (r.product_id) hydration.byProductId.set(sec + '|' + r.product_id, label);
-      if (prod && prod.category) hydration.byCategory.set(sec + '|' + prod.category, label);
-      hydration.byName.set(sec + '|' + label, label);
-    });
-  });
+  // El índice de hidratación se construye en pure.js (buildHydration), donde
+  // sí tiene tests. Segmenta los fallbacks por sección: sin eso, un toner de
+  // la mañana marcaba también el paso "Toners" de la rutina de NOCHE, porque
+  // ambos comparten picker_category (regla 18 de ARQUITECTURA.md).
+  const hydration = buildHydration(appsForHydration, _prodByIdForHydration, AM_PM_CUTOFF_HOUR);
   // AM
   const amBadge = r => ov.am ? ` <span class="sec-override-badge" onclick="event.stopPropagation();clearRoutineOverride('am')">🔄 ${esc(r.emoji||'')} ${esc(r.name)} · toca para volver</span>` : '';
   if (amR) {
