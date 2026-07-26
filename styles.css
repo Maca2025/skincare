@@ -581,6 +581,38 @@ body {
 .matrix-drift-sub { margin-top: 4px; font-size: 11.5px; opacity: 0.9; }
 .matrix-drift-sub code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 .matrix-drift-list { margin-top: 7px; font-size: 11.5px; font-weight: 700; word-break: break-word; }
+/* Una línea por producto en vez de todo corrido separado por puntos: con el id
+   a un lado, el texto seguido se volvía ilegible. */
+.matrix-drift-item { padding: 3px 0; }
+.matrix-drift-item code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px;
+  font-size: 10px; font-weight: 400; opacity: 0.75; user-select: all; }
+
+/* ── FILTROS DE STOCK ──────────────────────────────────────────────────────
+   Tres selects nativos, no un desplegable propio: en móvil el picker del
+   sistema es más cómodo y accesible que cualquier menú custom, y con ~13
+   categorías y ~40 marcas un menú a mano obligaría a scroll interno. */
+.inv-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.inv-filter-sel { flex: 1 1 30%; min-width: 0; padding: 8px 26px 8px 10px;
+  border: 1.5px solid #EAE4E0; border-radius: 12px; background: white;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; color: #6A5A5A;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s;
+  /* appearance:none + flecha propia — Safari iOS ignora el ancho si no. */
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23B0A4A4' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 9px center;
+  /* El texto de la opción puede ser largo ("🔬 Renovación, textura y poros"):
+     se recorta en vez de romper la fila. */
+  text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+.inv-filter-sel.on { background-color: #FBEAF0; color: #C4818A; border-color: #C4818A; font-weight: 700; }
+.inv-filter-clear { flex: 1 1 100%; padding: 7px; border: 1.5px solid #EAE4E0;
+  border-radius: 12px; background: white; font-family: inherit; font-size: 11.5px;
+  font-weight: 600; color: #9A8888; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: all 0.15s; }
+.inv-filter-clear:hover { background: #FDF8F8; color: #C4818A; border-color: #C4818A; }
+.inv-filter-meta { font-size: 11px; color: #9A8888; padding: 0 4px 10px; }
+.inv-filter-meta strong { color: #C4818A; }
+.inv-empty { background: white; border-radius: 14px; padding: 24px 16px; text-align: center;
+  font-size: 12.5px; color: #9A8888; box-shadow: 0 1px 6px rgba(0,0,0,0.06); line-height: 2.2; }
 
 /* ── LÍNEA DE TIEMPO DE TRATAMIENTO ────────────────────────────────────────
    Hitos que explican cambios en la piel. Las filas en gris (.hito-auto) se

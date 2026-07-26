@@ -859,11 +859,28 @@ async function loadHistory() {
   // cara no dice nada sobre tu pelo.
   // Ahora el día se marca en la ZONA donde de verdad se aplicó, deducida de los
   // ejes que toca el producto, y solo el eje de renovación de esa zona avisa.
-  const EJE_IRRITANTE_POR_GRUPO = { cara: 'textura', cuerpo: 'cuerpo_textura' };
-  const irritantByDateGrupo = {};  // ds → { cara: 1, cuerpo: 1 }
+  // El cuello entra aquí porque su piel es MÁS fina que la de la cara: es donde
+  // la tretinoína irrita primero. Dejarlo sin eje de aviso habría desprotegido
+  // justo la zona más sensible.
+  const EJE_IRRITANTE_POR_GRUPO = { cara: 'textura', cuerpo: 'cuerpo_textura', cuello: 'cuello_textura' };
+  const irritantByDateGrupo = {};  // ds → { cara: 1, cuerpo: 1, cuello: 1 }
+  // ── ESPEJO DEL SPF AL CUELLO ──────────────────────────────────────────────
+  // La usuaria extiende SIEMPRE el protector facial al cuello, así que registrar
+  // la aplicación dos veces sería pedirle trabajo para un dato que ya tenemos.
+  // Toda aplicación con eje `proteccion` entrega también `cuello_proteccion`,
+  // con el MISMO puntaje (spfScoreOf) y el MISMO ideal que la cara — es la misma
+  // aplicación cubriendo dos zonas.
+  // Se DERIVA en vez de listarse producto por producto (regla 5): un SPF facial
+  // nuevo queda cubierto solo, sin que nadie recuerde añadirlo en dos sitios.
+  // Para medir solo la primera aplicación del día (mañana sí, retoques no),
+  // poner esto en false y dar a los SPF su propia entrada `cuello_proteccion`.
+  const ESPEJO_SPF_CUELLO = true;
   allAppsWithProd.forEach(({ r, rp }) => {
-    const dose = rp.id ? PRODUCT_DOSE[rp.id] : null;
-    if (!dose) return;
+    const dose0 = rp.id ? PRODUCT_DOSE[rp.id] : null;
+    if (!dose0) return;
+    const dose = (ESPEJO_SPF_CUELLO && 'proteccion' in dose0 && !('cuello_proteccion' in dose0))
+      ? Object.assign({}, dose0, { cuello_proteccion: dose0.proteccion })
+      : dose0;
     const ds = localDateOfISO(r.applied_at);
     if (!dosePtsByDate[ds]) dosePtsByDate[ds] = {};
     Object.keys(dose).forEach(ax => {
@@ -872,7 +889,9 @@ async function loadHistory() {
       // Protección: los puntos se normalizan al ideal del día según exposición
       // solar. Así el techo diario sigue siendo fijo (500 = 5 aplicaciones) pero
       // cumplir 2 en un día de interior ya vale el 100% de ese día.
-      if (ax === 'proteccion') {
+      // cuello_proteccion usa el ideal de la CARA, no el de cuerpo: es la misma
+      // aplicación y la misma exposición: cara y cuello van igual de descubiertos.
+      if (ax === 'proteccion' || ax === 'cuello_proteccion') {
         v = v * (IDEAL_SPF_APPS / idealSpfAppsFor(ds));
       } else if (ax === 'cuerpo_proteccion' || ax === 'manos_proteccion') {
         // manos_proteccion reusa el mismo ideal que cuerpo (a petición de la
@@ -936,8 +955,17 @@ async function loadHistory() {
     return { pct, weekly, overDays, cfg };
   };
   const EJES_CARA = ['proteccion', 'aclarado', 'textura', 'barrera', 'firmeza'];
-  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello', 'manos', 'manos_proteccion'];
+  // 'labios' agregado 2026-07-25: va en OTROS y no en CARA a propósito — el
+  // bermellón es tejido aparte y sus productos no deben mover las métricas
+  // faciales (mismo criterio que pies/manos/cabello). Ver nota del eje en
+  // activos-matriz.js.
+  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello', 'manos', 'manos_proteccion', 'labios'];
+  // El cuello va en bloque propio y no dentro de OTROS: comparte los 5 ejes de
+  // la cara y se lee en paralelo con ella. Metido entre cuerpo y pies quedaba
+  // sepultado en una lista de 14 barras.
+  const EJES_CUELLO = ['cuello_proteccion', 'cuello_aclarado', 'cuello_textura', 'cuello_barrera', 'cuello_firmeza'];
   const dosisCara = EJES_CARA.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
+  const dosisCuello = EJES_CUELLO.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
   const dosisOtros = EJES_OTROS.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
   // Se define aquí (y no junto al render) porque buildFocusHTML lo usa antes.
   const doseDiag = (key, o) => {
@@ -957,7 +985,13 @@ async function loadHistory() {
         pies: 'Dosis queratolítica completa. Si ya no ves grietas, puedes bajar a mantenimiento.',
         cabello: 'Uso constante. El folículo responde lento: dale meses.',
         manos: 'Dosis despigmentante completa en manos y brazos. Igual que en cara, el ácido kójico y similares tardan meses en aclarar manchas ya formadas — lo importante es sostenerlo.',
-        manos_proteccion: 'Reaplicación de SPF en manos completa. Las manos son de las zonas que más rápido muestran manchas nuevas por exposición incidental (manejar, caminar) — sostener esto protege el trabajo que hace tu crema despigmentante.'
+        manos_proteccion: 'Reaplicación de SPF en manos completa. Las manos son de las zonas que más rápido muestran manchas nuevas por exposición incidental (manejar, caminar) — sostener esto protege el trabajo que hace tu crema despigmentante.',
+        labios: 'Labios bien cubiertos. Es tejido sin apenas melanina y con la barrera más fina del cuerpo, así que el bálsamo con SPF hace aquí más trabajo del que parece.',
+        cuello_proteccion: 'Cuello cubierto cada vez que te proteges la cara. Es la zona donde más se nota el descuido a largo plazo: la poiquilodermia de Civatte es exactamente eso, años de sol en cuello y escote.',
+        cuello_aclarado: 'Buena dosis despigmentante en cuello. Aquí los resultados tardan más que en la cara — la piel es más fina pero también responde más lento a los aclarantes.',
+        cuello_textura: 'Renovación de cuello en su techo útil. Ojo: es piel más delgada que la de la cara, así que si notas escozor o descamación, baja frecuencia aunque el número diga que vas bien.',
+        cuello_barrera: 'Cuello bien hidratado. Importa más de lo que parece: tiene menos glándulas sebáceas que la cara y se reseca antes.',
+        cuello_firmeza: 'Buen estímulo de colágeno en cuello. Es donde la flacidez se ve primero, así que sostener esto vale mucho.'
       };
       return ALTO[key] || 'Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.';
     }
@@ -969,6 +1003,18 @@ async function loadHistory() {
     }
     if (key === 'manos_proteccion') {
       return `Mismo ideal que cuerpo (${IDEAL_BODY_SPF_BY_SUN.interior} aplicación en día normal, ${IDEAL_BODY_SPF_BY_SUN.playa} en playa) — usa cualquiera de tus protectores registrados como "(Manos)" cuando reapliques en el dorso de las manos.`;
+    }
+    if (key === 'cuello_proteccion') {
+      return `Se registra solo: cada protector que te aplicas en la cara cuenta también aquí, porque lo extiendes al cuello. Si esta barra está baja es por lo mismo que la de la cara — falta reaplicar, no falta producto.`;
+    }
+    if (key === 'cuello_firmeza') {
+      return `El cuello pierde soporte antes que la cara y es lo primero que delata la edad. Tus péptidos y la tretinoína ya llegan aquí cuando los extiendes; sumar la crema de cuello en las noches que no toca retinoide es lo que más mueve esta barra.`;
+    }
+    if (key === 'cuello_textura') {
+      return `Piel más fina que la de la cara: aquí los retinoides y ácidos irritan antes. Subir la frecuencia rinde, pero si aparece escozor o descamación conviene espaciar aunque el número lo permita.`;
+    }
+    if (key === 'labios') {
+      return `Los labios casi no tienen melanina y su barrera es de 3–5 capas contra las 15–20 de la cara: es donde el sol pega más directo. Reaplicar el bálsamo con SPF cuenta igual que reaplicar en cara — es el mismo gesto de un segundo.`;
     }
     if (o.pct >= 60) return `Buen nivel. Para cerrar la brecha, subir la frecuencia rinde más que agregar productos nuevos.`;
     if (o.pct >= 30) return `Estímulo parcial: los productos que tienes alcanzan, falta constancia en los días.`;
@@ -1308,8 +1354,14 @@ async function loadHistory() {
   <div class="dose-intro">Mide la <strong>dosis de activos que tu piel recibió</strong>, no si seguiste una rutina. Una aplicación cuenta completa aunque la hagas fuera de rutina. Pasarse del ideal no baja el número — se avisa aparte.</div>
   ${dosisCara.map(doseRow).join('')}
 </div>` : '';
+  const dosisCuelloHTML = dosisCuello.length ? `
+<div class="adh-label">🦢 Cuello y escote</div>
+<div class="adh-card">
+  <div class="dose-intro">Zona propia: la piel del cuello es más fina que la de la cara y envejece antes. Cuenta lo que te aplicas <strong>solo ahí</strong> más lo que extiendes desde la cara — estos últimos puntúan algo menos porque el mismo producto cubre el triple de superficie. El protector solar se registra solo, junto con el de la cara.</div>
+  ${dosisCuello.map(doseRow).join('')}
+</div>` : '';
   const dosisOtrosHTML = dosisOtros.length ? `
-<div class="adh-label">🧴 Cuerpo, pies, cabello y manos</div>
+<div class="adh-label">🧴 Cuerpo, pies, cabello, manos y labios</div>
 <div class="adh-card">${dosisOtros.map(doseRow).join('')}</div>` : '';
   const ROUTINE_COLOR = '#6B7FA0';
   const routineHTML = `
@@ -1338,6 +1390,7 @@ ${streaksHTML}
 ${focusHTML}
 ${heatHTML}
 ${dosisHTML}
+${dosisCuelloHTML}
 ${dosisOtrosHTML}
 ${corrHTML}
 <details class="adh-secondary">
@@ -3034,17 +3087,97 @@ async function loadInventory() {
   inventoryLoaded = true;
   renderInventory();
 }
+// ── FILTROS DE STOCK ─────────────────────────────────────────────────────────
+// Estado en memoria, NO en localStorage: la regla 8 reserva localStorage para
+// la cola offline y preferencias duraderas. Un filtro es estado de vista — que
+// se pierda al recargar es lo correcto, y evita el bug de "abro Stock y me
+// faltan productos" porque quedó un filtro puesto de la sesión anterior.
+let invFilterCat = '';
+let invFilterBrand = '';
+let invFilterAxis = '';
+// La marca viene con descriptores pegados ('SKIN1004 · centella 50%+HA',
+// 'PURITO Seoul · barrera piel sensible'). Se corta en el '·' para que las
+// variantes del mismo fabricante agrupen en una sola entrada del filtro.
+function invBrandOf(p) { return String(p.brand || '').split('·')[0].trim(); }
+// Ejes que toca un producto según la matriz de dosis. Un producto que actúa
+// sobre varios aparece en el filtro de TODOS ellos — así lo pidió la usuaria.
+function invAxesOf(p) {
+  if (typeof PRODUCT_DOSE === 'undefined') return [];
+  const d = PRODUCT_DOSE[p.id];
+  if (!d) return [];
+  // Se filtra contra DOSE_AXES para no ofrecer un eje que quedó huérfano en la
+  // matriz: sin esto, una clave mal escrita generaría una opción que no filtra
+  // nada y parecería que el catálogo está incompleto.
+  return Object.keys(d).filter(a => typeof DOSE_AXES !== 'undefined' && DOSE_AXES[a]);
+}
+function invMatches(p) {
+  if (invFilterCat && p.category !== invFilterCat) return false;
+  if (invFilterBrand && invBrandOf(p) !== invFilterBrand) return false;
+  if (invFilterAxis && !invAxesOf(p).includes(invFilterAxis)) return false;
+  return true;
+}
+function setInvFilter(which, value) {
+  if (which === 'cat') invFilterCat = value;
+  else if (which === 'brand') invFilterBrand = value;
+  else if (which === 'axis') invFilterAxis = value;
+  renderInventory();
+}
+function clearInvFilters() {
+  invFilterCat = ''; invFilterBrand = ''; invFilterAxis = '';
+  renderInventory();
+}
+// Las opciones se GENERAN del catálogo real, nunca se hardcodean (regla 5):
+// una lista escrita a mano se desincroniza en cuanto se da de alta un producto
+// con categoría o marca nueva.
+function invFilterBarHTML() {
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
+  const brands = [...new Set(allProducts.map(invBrandOf).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  const axesPresentes = new Set();
+  allProducts.forEach(p => invAxesOf(p).forEach(a => axesPresentes.add(a)));
+  // Se respeta el orden de declaración de DOSE_AXES (cara → cuerpo → resto),
+  // que es el mismo con que se leen las barras en Progreso.
+  const axes = (typeof DOSE_AXES !== 'undefined' ? Object.keys(DOSE_AXES) : [])
+    .filter(a => axesPresentes.has(a));
+  const opt = (v, label, sel) =>
+    `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(label)}</option>`;
+  const activos = [invFilterCat, invFilterBrand, invFilterAxis].filter(Boolean).length;
+  const clearBtn = activos
+    ? `<button class="inv-filter-clear" onclick="clearInvFilters()">✕ Limpiar filtros</button>`
+    : '';
+  return `<div class="inv-filters">
+  <select class="inv-filter-sel${invFilterCat ? ' on' : ''}" onchange="setInvFilter('cat', this.value)" aria-label="Filtrar por tipo de producto">
+    ${opt('', 'Todo tipo', invFilterCat)}${cats.map(c => opt(c, c, invFilterCat)).join('')}
+  </select>
+  <select class="inv-filter-sel${invFilterBrand ? ' on' : ''}" onchange="setInvFilter('brand', this.value)" aria-label="Filtrar por marca">
+    ${opt('', 'Toda marca', invFilterBrand)}${brands.map(b => opt(b, b, invFilterBrand)).join('')}
+  </select>
+  <select class="inv-filter-sel${invFilterAxis ? ' on' : ''}" onchange="setInvFilter('axis', this.value)" aria-label="Filtrar por eje de progreso">
+    ${opt('', 'Todo eje', invFilterAxis)}${axes.map(a => opt(a, `${DOSE_AXES[a].icon} ${DOSE_AXES[a].label}`, invFilterAxis)).join('')}
+  </select>
+  ${clearBtn}
+</div>`;
+}
 function renderInventory() {
   const el = document.getElementById('inventory-content');
   if (!el) return;
-  const lowCount = allProducts.filter(p => p.status === 'low').length;
-  const outCount = allProducts.filter(p => p.status === 'out').length;
-  const okCount  = allProducts.length - lowCount - outCount;
+  const visibles = allProducts.filter(invMatches);
+  const filtrando = !!(invFilterCat || invFilterBrand || invFilterAxis);
+  // El resumen cuenta lo FILTRADO, no el catálogo entero: con un filtro puesto,
+  // "3 sin stock" tiene que referirse a lo que estás mirando. Se rotula abajo
+  // para que no se confunda con el total.
+  const lowCount = visibles.filter(p => p.status === 'low').length;
+  const outCount = visibles.filter(p => p.status === 'out').length;
+  const okCount  = visibles.length - lowCount - outCount;
   const summaryHTML = `<div class="inv-summary">
   <div class="inv-sum-card"><div class="inv-sum-val">${okCount}</div><div class="inv-sum-lbl">✅ Tengo</div></div>
   <div class="inv-sum-card"><div class="inv-sum-val amber">${lowCount}</div><div class="inv-sum-lbl">⚠️ Reponer</div></div>
   <div class="inv-sum-card"><div class="inv-sum-val red">${outCount}</div><div class="inv-sum-lbl">❌ Sin stock</div></div>
 </div>`;
+  const filterBar = invFilterBarHTML();
+  const metaHTML = filtrando
+    ? `<div class="inv-filter-meta">Mostrando <strong>${visibles.length}</strong> de ${allProducts.length} productos</div>`
+    : '';
   const addBtn = `<button class="add-prod-btn" onclick="openAddProductModal()">＋ Agregar producto</button>`;
   // ── AVISO DE DERIVA DE LA MATRIZ DE DOSIS ─────────────────────────────────
   // PRODUCT_DOSE es un archivo estático; el catálogo vive en Supabase. Cada
@@ -3055,22 +3188,30 @@ function renderInventory() {
   const sinMatriz = (typeof PRODUCT_DOSE !== 'undefined')
     ? allProducts.filter(p => !PRODUCT_DOSE[p.id])
     : [];
+  // El id va visible: cuando este aviso aparece hay que ir a pegar una fila en
+  // activos-matriz.js, y el id es justo el dato que hace falta. Sin él tocaba
+  // ir a buscarlo a Supabase producto por producto.
   const driftHTML = sinMatriz.length ? `<div class="matrix-drift">
   <strong>⚠️ ${sinMatriz.length} producto(s) fuera de la matriz de dosis</strong>
   <div class="matrix-drift-sub">No cuentan para ningún eje de Progreso. Hay que agregarlos a <code>activos-matriz.js</code>:</div>
-  <div class="matrix-drift-list">${sinMatriz.map(p => prodLabelHTML(p)).join(' · ')}</div>
+  <div class="matrix-drift-list">${sinMatriz.map(p => `<div class="matrix-drift-item">${prodLabelHTML(p)} <code>${esc(p.id)}</code></div>`).join('')}</div>
 </div>` : '';
+  // El aviso de deriva se pinta SIEMPRE contra el catálogo completo, no contra
+  // lo filtrado: es una alerta de mantenimiento global y ocultarla porque hay
+  // un filtro puesto sería justo la forma de volver a olvidarla.
   const groups = {};
-  for (const item of allProducts) {
+  for (const item of visibles) {
     if (!groups[item.category]) groups[item.category] = [];
     groups[item.category].push(item);
   }
-  const groupsHTML = Object.entries(groups).map(([cat, items]) =>
-    `<div class="inv-group">
+  const groupsHTML = visibles.length
+    ? Object.entries(groups).map(([cat, items]) =>
+      `<div class="inv-group">
   <div class="inv-group-hdr">${esc(cat)}</div>
   ${items.map(invItemHTML).join('')}
-</div>`).join('');
-  el.innerHTML = summaryHTML + driftHTML + addBtn + groupsHTML;
+</div>`).join('')
+    : `<div class="inv-empty">Ningún producto coincide con estos filtros.<br><button class="inv-filter-clear" onclick="clearInvFilters()">✕ Limpiar filtros</button></div>`;
+  el.innerHTML = summaryHTML + driftHTML + filterBar + metaHTML + addBtn + groupsHTML;
 }
 function invItemDetailHTML(item) {
   let html = item.note ? `<div>${fmtRich(item.note)}</div>` : '';

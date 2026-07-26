@@ -20,19 +20,31 @@ El progreso medía **obediencia a un plan**, no resultados:
 - **33 de 74 productos no tenían rol clínico** — eran invisibles: la Vitamina C 20%,
   el Glicólico 7%, todos los salicílicos y los 8 productos de firmeza.
 
-Hoy **los 92 productos de la matriz puntúan** en al menos un eje.
+Hoy **los 104 productos de la matriz puntúan** en al menos un eje. Ninguna
+entrada queda vacía: ver "el caso de los labiales" abajo.
 
-> ⚠️ **La matriz tiene 92 ids y la base 93 productos.** `PRODUCT_DOSE` es un
-> archivo estático y el catálogo vive en Supabase: cada producto nuevo nace
-> **invisible** para el motor de dosis hasta que se le agrega su fila. Es el
-> mismo fallo que originó la Fase B, por otra puerta. La pestaña Stock ahora
-> avisa cuáles faltan (`renderInventory`).
+> ⚠️ **`PRODUCT_DOSE` es un archivo estático y el catálogo vive en Supabase:**
+> cada producto nuevo nace **invisible** para el motor de dosis hasta que se le
+> agrega su fila. Es el mismo fallo que originó la Fase B, por otra puerta. La
+> pestaña Stock avisa cuáles faltan (`renderInventory`) y muestra su id para
+> poder pegarlo directo.
+
+> ⚠️ **Reincidencia registrada (2026-07-25).** El aviso de deriva funcionó —
+> marcó 12 productos— pero eso no bastó. Las entradas de 11 de ellos se
+> redactaron en un archivo aparte, `activos-matriz-agregar.js`, "para pegarlas
+> después". Nunca se pegaron, y los 11 pasaron semanas sin contar para nada con
+> la calibración ya hecha y esperando en el repo. **Lección: detectar el
+> problema y redactar la solución no lo resuelve; la matriz es un archivo
+> único** (regla 28 de ARQUITECTURA.md). Un producto nuevo se agrega a
+> `PRODUCT_DOSE` en la misma sesión en que se da de alta.
 
 ---
 
 ## 2. Los ejes de resultado
 
-### Cara y cuello (5)
+### Cara (5)
+
+> El cuello **ya no vive aquí** — tiene su propio bloque más abajo (2026-07-25).
 
 | Eje | Qué mide | `techoDiario` | `diasIdeales` |
 |---|---|---|---|
@@ -58,13 +70,82 @@ Hoy **los 92 productos de la matriz puntúan** en al menos un eje.
 | 💇 `cabello` | 70 | 3 |
 | ✋ `manos` | 90 | 7 |
 | 🧴 `manos_proteccion` | 500 | 7 |
+| 💋 `labios` | 110 | 7 |
 
-**13 ejes en total** (5 de cara + 8 de aquí). Los de manos se agregaron después
-de la primera versión de este documento: las manos y los brazos pigmentan por
-UVA incidental y no compartían eje con nada.
+### Cuello y escote (5)
+
+| Eje | `techoDiario` | `diasIdeales` |
+|---|---|---|
+| 🛡️ `cuello_proteccion` | 500 | 7 |
+| 🎯 `cuello_aclarado` | 135 | 7 |
+| 🔬 `cuello_textura` | 110 | 4 |
+| 💧 `cuello_barrera` | 150 | 7 |
+| 🧬 `cuello_firmeza` | 170 | 6 |
+
+Antes el cuello estaba **partido**: dos productos dedicados puntuaban en ejes de
+CARA y uno en ejes de CUERPO. Tres productos de la misma zona en dos grupos
+distintos, así que ninguna de las dos métricas decía nada real sobre el cuello.
+
+Lleva los 5 ejes de la cara y no un subconjunto porque su piel **se comporta como
+piel facial** — de hecho es más fina, con menos densidad sebácea y menos soporte
+dérmico. Conserva `cuello_textura` aunque "poros" no sea un tema ahí porque es el
+eje que dispara el aviso de irritantes, y el cuello es donde la tretinoína irrita
+**antes** que en la cara.
+
+**El espejo del SPF.** `cuello_proteccion` no tiene entradas propias en
+`PRODUCT_DOSE` ni productos duplicados "(Cuello)" en la base: se **deriva** de
+toda aplicación con eje `proteccion` (`ESPEJO_SPF_CUELLO` en app.js), con el
+ideal de la CARA porque es literalmente la misma aplicación. Es la regla 5 —nada
+de listas duplicadas—: un SPF facial nuevo queda cubierto solo.
+⚠️ Mientras se extiendan todos los protectores, esta barra marcará lo mismo que
+Protección facial; se separa cuando aparezca uno que no se extienda.
+
+**Productos extendidos.** Los que se aplican en "cara, cuello y escote"
+(tretinoína, péptidos, azelaico, toners, limpiador glicólico) puntúan en **ambas**
+zonas — es una sola aplicación que sí entrega estímulo a las dos, no doble
+conteo. Pero van a **~0.85** del valor facial: la misma cantidad de producto
+sobre ~3x de superficie baja la dosis por cm² de verdad. Los exclusivos de cuello
+conservan su valor íntegro.
+
+**19 ejes en total** (5 de cara + 9 de otras zonas + 5 de cuello). Los de manos,
+el de labios y los de cuello se agregaron después de la primera versión de este
+documento: las manos y los brazos pigmentan por UVA incidental y no compartían
+eje con nada.
 
 **Criterio:** ejes propios, separados de la cara. Una crema corporal de retinol NO
-debe inflar la métrica facial de firmeza — no toca la cara.
+debe inflar la métrica facial de firmeza — no toca la cara. La excepción
+deliberada son los productos que se aplican **a la vez** en dos zonas (ver
+"productos extendidos"): ahí el estímulo sí llega a ambas.
+
+### El caso de los labiales — por qué "fuera de todo" era un error
+
+La versión original de este documento decía que el bálsamo labial era el único
+producto sin eje, y lo daba por resuelto. La premisa era buena: los labios **no**
+son piel facial, no tienen estrato córneo comparable y no participan en manchas,
+textura ni firmeza de la cara. Pero la conclusión no se seguía. De "no encaja en
+los ejes de cara" no se deduce "no hay nada que medir": se deduce que necesita
+**eje propio**, exactamente el razonamiento con que `pies`, `cabello` y `manos`
+salieron de los ejes genéricos.
+
+Y había algo que medir. El bermellón es el tejido con **menos defensa UV del
+cuerpo**: melanina casi nula y un estrato córneo de 3–5 capas contra las 15–20 de
+la piel facial. Es donde aparecen la queilitis actínica y los lentigos labiales.
+En una usuaria cuyo foco clínico son las **manchas solares**, tener un bálsamo
+con SPF50 y no medirlo era un hueco real, no una omisión inofensiva.
+
+Dos decisiones de diseño del eje:
+
+- **No entra en `proteccion`** aunque el bálsamo lleve SPF50. Ese eje mide la
+  cara y su ideal se modula por aplicaciones faciales; un bálsamo inflaría la
+  métrica sin cubrir un cm² de mejilla.
+- **No usa `spfScoreOf`.** El puntaje aquí es mixto —hidratación + protección—,
+  no protección pura, así que lleva número fijo. La regla de "una sola fuente de
+  verdad para la calibración UVA" aplica a los ejes de protección; este no lo es.
+
+Techo 110 y 7 días ideales son **provisionales**, igual que lo fueron los de
+`manos`: no hay datos reales todavía. Con 110, un día de solo bálsamo (60) da
+~55% y un día de bálsamo + sérum (130) topa en 100% — discrimina. Recalibrar en
+~1 mes.
 
 ### Dónde caen poros y firmeza
 
@@ -292,7 +373,7 @@ durante el día**. No comprar nada, no agregar pasos.
 
 | Archivo | Contenido |
 |---|---|
-| `activos-matriz.js` | `DOSE_AXES` (13 ejes), `PRODUCT_DOSE` (92 productos por id), `IRRITANTES` (`Set` de 13) |
+| `activos-matriz.js` | `DOSE_AXES` (19 ejes), `PRODUCT_DOSE` (104 productos por id), `IRRITANTES` (`Set` de 13). **Archivo único: no volver a partirlo en "agregar" + "base".** |
 | `pure.js` | `spfScoreOf`, `doseWeekPct`, `overExposureDays` |
 | `app.js` | Cálculo de dosis, render, focus card, ideales por exposición |
 | `tests-spf-agregar.js` · `tests-dosis-agregar.js` | 26 casos para `tests.html` |

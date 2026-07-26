@@ -13,7 +13,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 | `index.html` | Markup: tabs, secciones, TODOS los modales. Sin lógica. |
 | `styles.css` | Todo el CSS. |
 | `pure.js` | **Solo funciones puras** (fechas, escaping, adherencia, `spfScoreOf`, `doseWeekPct`, `overExposureDays`, `buildHydration`, `resolveStepHydration`, `shiftDateStr`, `reactionSignal`). Sin DOM, sin Supabase. Compartido con `tests.html`. |
-| `activos-matriz.js` | Config de Fase B: `DOSE_AXES`, `PRODUCT_DOSE` (93 productos por id), `IRRITANTES`. Solo datos, sin lógica. Se carga ENTRE `pure.js` y `app.js`. |
+| `activos-matriz.js` | Config de Fase B: `DOSE_AXES` (19 ejes), `PRODUCT_DOSE` (104 productos por id), `IRRITANTES`. Solo datos, sin lógica. Se carga ENTRE `pure.js` y `app.js`. **Archivo único — ver regla 28.** |
 | `app.js` | Toda la lógica. Script clásico (no módulos), funciones globales llamadas desde `onclick` en HTML. Se carga DESPUÉS de pure.js y activos-matriz.js. |
 | `sw.js` | Service worker: cache network-first del shell + handlers de Web Push. |
 | `manifest.webmanifest`, `icon-192/512.png` | PWA instalable. |
@@ -155,6 +155,88 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     Las fotos se firman **en un solo lote**, nunca una por una.
 
 27. **El heatmap tiene columnas propias**, semanas calendario lunes→domingo, para que la primera fila sea siempre lunes. **No usa `weekBuckets`** — esas son ventanas móviles de 7 días que alimentan las sparklines de tendencia; cambiarlas alteraría esa métrica. La semana en curso se prorratea por días transcurridos, o el lunes parece un desplome.
+
+28. **La matriz de dosis vive en UN solo archivo.** Durante un tiempo hubo un
+    `activos-matriz-agregar.js` con entradas "pendientes de pegar" en
+    `activos-matriz.js`. Nunca se pegaron: 11 productos pasaron semanas
+    invisibles para el motor de dosis mientras el aviso de deriva de Stock los
+    marcaba. Partir la matriz en dos archivos convierte un dato en una tarea
+    pendiente, y las tareas pendientes se olvidan. **Un producto nuevo se agrega
+    directo a `PRODUCT_DOSE`, en la misma sesión en que se da de alta.** Si hace
+    falta redactar el razonamiento, va en el comentario de la propia entrada.
+
+29. **Ningún producto se queda sin eje.** El criterio viejo era que los labiales
+    quedaran fuera de todo ("los labios no son piel facial"). La premisa es
+    correcta pero la conclusión no: de ahí no se sigue que no haya nada que
+    medir, se sigue que necesitan eje PROPIO — igual que `pies`, `cabello` y
+    `manos`. Por eso existe `labios` (2026-07-25). Un producto sin eje no es
+    neutral: es un producto que la usuaria compra, aplica y registra, y que el
+    Progreso trata como si no existiera. **Si un producto no encaja en ningún
+    eje, la respuesta es un eje nuevo, no una entrada vacía.**
+
+30. **`labios` es zona propia y no toca la cara.** No entra en `proteccion`
+    aunque el bálsamo lleve SPF50 (ese eje mide la cara y su ideal se modula por
+    aplicaciones faciales: un bálsamo inflaría la métrica sin cubrir un cm² de
+    mejilla), y **no usa `spfScoreOf`** porque su puntaje es mixto
+    —hidratación + protección—, no protección pura. Su grupo no está en
+    `EJE_IRRITANTE_POR_GRUPO`, así que no dispara avisos de sobre-exposición:
+    correcto, ningún labial es irritante. Techo 110 y 7 días ideales son
+    **provisionales** (no hay datos reales todavía), igual que lo fueron los de
+    `manos` — recalibrar en ~1 mes.
+
+31. **Los filtros de Stock son estado de VISTA, no preferencia.** Viven en
+    variables de módulo (`invFilterCat`/`invFilterBrand`/`invFilterAxis`), nunca
+    en localStorage: si sobrevivieran a la recarga, abrir Stock con un filtro
+    puesto de ayer se lee como "me faltan productos". Las opciones se **generan**
+    del catálogo real (regla 5) — una lista escrita a mano se desincroniza en
+    cuanto se da de alta una categoría o marca nueva. La marca se agrupa
+    cortando en el `·` porque el campo trae descriptores pegados
+    (`SKIN1004 · 30ml`). Un producto que toca varios ejes aparece al filtrar por
+    **cada uno** de ellos. El resumen ✅/⚠️/❌ cuenta lo FILTRADO —con un filtro
+    puesto, "3 sin stock" tiene que referirse a lo que estás viendo—, pero el
+    **aviso de deriva se pinta siempre contra el catálogo completo**: es una
+    alerta de mantenimiento y ocultarla por un filtro sería la forma de volver a
+    olvidarla.
+
+32. **El cuello es zona propia con los 5 ejes de la cara** (`cuello_*`, 2026-07-25).
+    Antes estaba partido: dos productos de cuello puntuaban en ejes de CARA y uno
+    en ejes de CUERPO, así que ninguna métrica decía nada real sobre la zona.
+    Lleva los 5 ejes y no un subconjunto porque su piel se comporta como piel
+    facial —es más fina, con menos densidad sebácea y menos soporte dérmico—. En
+    particular **conserva `cuello_textura` aunque "poros" no sea un tema ahí**:
+    es el eje que dispara el aviso de sobre-exposición a irritantes, y el cuello
+    es donde la tretinoína irrita ANTES que en la cara.
+
+33. **`cuello_proteccion` se DERIVA, no se lista.** La usuaria extiende siempre
+    el protector facial al cuello, así que pedirle registrarlo dos veces sería
+    trabajo por un dato que ya existe. Toda aplicación con eje `proteccion`
+    entrega también `cuello_proteccion`, con el mismo `spfScoreOf` y el **ideal
+    de la cara** (no el de cuerpo: es la misma aplicación y la misma exposición).
+    Se deriva en `loadHistory` vía `ESPEJO_SPF_CUELLO` en vez de duplicar
+    productos "(Cuello)" en la base como se hizo con Manos — regla 5: un SPF
+    facial nuevo queda cubierto solo. **Los duplicados "(Manos)" y los SPF
+    corporales NO espejan**, o habría doble conteo.
+    ⚠️ Mientras se extiendan todos los protectores, esta barra marcará lo mismo
+    que Protección facial. No es un bug; se separa cuando aparezca un SPF que no
+    se extienda. Para medir solo la primera aplicación del día, poner
+    `ESPEJO_SPF_CUELLO` en false y dar a los SPF su entrada propia.
+
+34. **Un producto extendido a otra zona puntúa en AMBAS, con factor.** La
+    tretinoína en "cara, cuello y escote" es una sola aplicación que sí entrega
+    estímulo a las dos zonas — no es doble conteo. Pero reparte la misma
+    cantidad de producto sobre ~3x de superficie, así que los ejes de cuello van
+    a **~0.85** del valor facial. No es castigo por desviarse (eso es lo que
+    Fase B eliminó): es que la dosis por cm² baja de verdad. Los productos
+    **exclusivos** de una zona conservan su valor íntegro.
+
+35. **Los techos se calibran contra el día REAL, no contra la suma del
+    catálogo.** `cuello_textura` nació en 130 copiando la proporción de la cara y
+    el eje no llegaba a 100% ni haciéndolo todo bien: en el cuello no se apilan
+    tantos activos (noche de tretinoína = 80, de ácidos ≈ 115). Bajó a 110.
+    Corolario: **"4 noches de tretinoína = 100%" ya no es invariante** — dejó de
+    serlo en la cara al recalibrar al p90 real el 2026-07-23. Lo que sí debe
+    seguir cumpliéndose es el mecanismo: llegar al techo 4 días vale lo mismo que
+    llegar 7 (las noches de descanso no son falla).
 
 ## Al terminar cualquier cambio
 
