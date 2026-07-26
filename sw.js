@@ -4,7 +4,11 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
-const CACHE = 'skincare-shell-v4';
+// v5 — refactor función × zona (2026-07-25). Subir esta versión es lo que
+// obliga al service worker a descartar el shell viejo: sin ello la app puede
+// seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
+// aunque los archivos ya estén subidos (pasó con los filtros de Stock).
+const CACHE = 'skincare-shell-v5';
 const SHELL = [
   './',
   './index.html',

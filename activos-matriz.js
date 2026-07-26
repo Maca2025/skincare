@@ -101,20 +101,16 @@ const PRODUCT_DOSE = {
   '7454f16a-51b3-44c9-b392-4d97b50038b8': { barrera: 35 },  // Aceite de Ducha PH5
   '6447629f-d5f2-4a83-b011-006b25cf18e3': { queratolitico: 90 },  // Aceite Urea 60%
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': { proteccion: null, aclarado: 25 },  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
-  'c17786a0-2acb-4a2c-9c0e-5e37bd7a7204': { proteccion: null },  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural) (Manos)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': { proteccion: null },  // Anthelios UVMune 400 SPF50
-  'b2b73756-d9a1-4d40-ac66-93e15dff6db2': { proteccion: null },  // Anthelios UVMune 400 SPF50 (Manos)
   '1b656610-fce5-45a6-b6e8-8ec33e209653': { aclarado: 70, barrera: 25 },  // Anti-Pigment Contorno de Ojos
   '9b91d98e-c293-4e27-8cf1-b5faae440bad': { textura: 20 },  // BALANCEFUL Pore Cleansing Foam
   'f5419858-d505-4621-9379-bdedad67dd50': { queratolitico: 85 },  // Barra Urea 60% (Aguacate + Jojoba)
   'd5332696-838e-4d79-9f4e-cde584f0aa91': { barrera: 65 },  // Barrier Support Serum
   '27826422-4e8b-47a3-a6a0-27f436ce2b26': { proteccion: null },  // Black Rice Airyfit Sunscreen
-  'c4bb9f39-991b-48aa-85ee-79a4a47a7b10': { proteccion: null },  // Black Rice Airyfit Sunscreen (Manos)
   '900a4aab-bed0-402c-bcb9-a01806886918': { barrera: 70, aclarado: 15 },  // Black Rice Probiotics Barrier Essence
   '20064300-8139-45ef-b803-4e4bf61d94bc': { barrera: 60, firmeza: 30 },  // Black Rice Probiotics NAD+ Serum Mist
   '86d57790-31c4-4db8-888f-ffdd6a2465c5': { barrera: 15 },  // Caffeine Eye Cream Stick
   'f4f4f34a-d243-41f3-9bb1-dc1ca966d035': { proteccion: null },  // Canmake Mermaid Skin Gel SPF50
-  'f3659011-6e5b-4ea1-8502-63b5e56f2a3a': { proteccion: null },  // Canmake Mermaid Skin Gel SPF50 (Manos)
   'b73336bc-ad0e-444b-b807-7956498daa5e': { barrera: 15 },  // Caudalie Beauty Elixir Bruma Facial
   '914a738d-a1f7-4657-9f84-53be8ad64b66': { barrera: 55 },  // Centella Ampoule (viaje)
   'd93e2cfd-b65c-4be1-86af-36fd64108486': { textura: 10 },  // Centella Ampoule Foam (viaje)
@@ -134,7 +130,6 @@ const PRODUCT_DOSE = {
   'dcff4486-a13e-4bef-a4d3-9fce38945ac2': { barrera: 55, firmeza: 45, textura: 35 },  // Crepe Corrector Body Lotion
   '2b41c15a-bbab-4a44-b583-476d0f11f3f9': { barrera: 75 },  // Dove Ceramidas Body Lotion
   'c495313f-4f9c-49a6-a672-13483a04f0f2': { proteccion: null, aclarado: 75 },  // Eucerin Pigment Control Tintado SPF50
-  'ee0d72b3-f639-4bfe-8eae-b8620d71ab09': { proteccion: null },  // Eucerin Pigment Control Tintado SPF50 (Manos)
   'ecef5283-7bdd-460b-a9a8-ccb917942c4c': { aclarado: 90, textura: 55, barrera: 10 },  // Finacea Ácido Azelaico 15%
   'b464ed06-74c8-413b-8513-289eb6a53931': { queratolitico: 60 },  // Gel Ácido Salicílico 2%
   '999186d7-a30e-42c4-914f-b0b76f619b58': { aclarado: 65, textura: 55, firmeza: 35 },  // GlycoIsdin Serum
@@ -142,20 +137,14 @@ const PRODUCT_DOSE = {
   '3ba97655-b68a-4084-8bec-fd0c4aac09de': { textura: 25, aclarado: 15 },  // Glycolic Bright Gel Cleanser
   '6cfe7393-865c-4af0-b1bf-5d90e7cd52de': { aclarado: 15 },  // Hasselan Turmeric Lemon Kojic Acid Soap
   '5e0fd428-5d22-41ed-91d9-bcd57fddad20': { proteccion: null },  // Heliocare 360 Opti D Gel SPF50
-  'efefbb3f-a268-4163-9eaa-2132697105e4': { proteccion: null },  // Heliocare 360 Opti D Gel SPF50 (Manos)
   '17913609-6130-48bd-977e-45ee06379ff6': { barrera: 80, aclarado: 20, firmeza: 15 },  // Hyalu-Cica Moisture Cream
   '7daf598c-e5aa-402f-a26a-6662aa196be9': { proteccion: null },  // Hyalu-Cica Water-Fit Sun Serum
-  '54fcb159-b00c-4afb-a3d8-71bd45cd3a31': { proteccion: null },  // Hyalu-Cica Water-Fit Sun Serum (Manos)
   '8a2eb58a-2c7e-47c7-8fe8-532d541e7803': { barrera: 60 },  // Hydro Boost Gel Cream
   'b4b6743b-2aa6-468f-9662-b6d9d1cc1736': { proteccion: null },  // Isdin Fotoprotector Wet Skin SPF50+
-  '00f87492-1e78-42f2-99b0-f8077f990ac4': { proteccion: null },  // Isdin Fotoprotector Wet Skin SPF50+ (Manos)
   '3c1c8b13-bf04-4cf2-a154-5f0d0e2be2ec': { proteccion: null },  // Isdin Fusion Water Color SPF50
-  '4db3009f-bbe9-44d7-b8af-68270c0bd167': { proteccion: null },  // Isdin Fusion Water Color SPF50 (Manos)
   'c998b392-f91e-4ea5-a2b4-9acb871bcc20': { proteccion: null },  // Isdin Fusion Water SPF50
-  '41e73a9e-788b-40a8-b1d7-21449f0522ad': { proteccion: null },  // Isdin Fusion Water SPF50 (Manos)
   'b3a581cd-c0fd-43e0-8c73-cf043bc7e5a4': { firmeza: 55, barrera: 55 },  // Kopher Curepair Derma Ampoule Mist
   '4c775124-b388-45d0-941f-77cf67c48148': { proteccion: null },  // L'Oréal UV Defender SPF50 PA++++
-  '99924fdc-cb71-46e9-83ab-d44b576357e2': { proteccion: null },  // L'Oréal UV Defender SPF50 PA++++ (Manos)
   '3cef35a0-bc27-440f-9d97-a19709ee2bb9': { capilar: 70 },  // Lambdapil Shampoo Anticaída
   'feac892a-7a0c-4647-9035-c5278c23cd19': { barrera: 70, firmeza: 30 },  // Laneige Cream Skin Toner & Moisturizer
   '23236746-4738-468c-b043-250f0db91ddb': { barrera: 25 },  // Limpiador Hidratante
@@ -170,7 +159,6 @@ const PRODUCT_DOSE = {
   '6b2ab52e-8479-4016-a8eb-2a61864491f7': { firmeza: 55, barrera: 40 },  // Neck and Chest Firming Cream
   'c74e3fdb-3665-438e-9cbb-574459d0e87f': { textura: 65, aclarado: 55, barrera: 50 },  // Niacinamide 10% + Zinc 1% Serum
   '6d30d838-50c9-461c-a93a-7e32eba414f0': { proteccion: null },  // Nivea Sun Silky UV Stick SPF50
-  '8d600de1-b696-4bcc-a38d-c471266c09a7': { proteccion: null },  // Nivea Sun Silky UV Stick SPF50 (Manos)
   '83f81d90-df90-4b65-897c-029c479acb62': { firmeza: 65, barrera: 45, aclarado: 25 },  // Numbuzin Toner No.9 NAD+ PDRN
   'be7a694e-0211-4d3f-b9ed-0c2d83f05943': { labial: 60 },  // Ollie Lip Hydrating Balm SPF50
   '34b622c4-e4bf-4289-b8a6-923632995796': { labial: 70 },  // PDRN Lip Serum
@@ -178,7 +166,6 @@ const PRODUCT_DOSE = {
   'a6451499-e856-4494-b68b-acdbbc038824': { textura: 55 },  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': { barrera: 55, textura: 45, aclarado: 25, firmeza: 15 },  // Poremizing Light Gel Cream
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': { proteccion: null },  // Probio-Cica Glow Sun Ampoule
-  '296dd1c2-648d-43e2-9d5f-7e3d8db1e554': { proteccion: null },  // Probio-Cica Glow Sun Ampoule (Manos)
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': { textura: 95, firmeza: 85, aclarado: 70 },  // Retin-A Tretinoína 0.025%
   'e029ae8d-5443-4c99-bb5a-3c2718f12694': { firmeza: 55, textura: 45, barrera: 30 },  // Retinol Body Cream (Vit E, Té Verde, Aloe)
   '7a10d78f-3fd3-4308-9df5-25f16a062d52': { firmeza: 60, textura: 50, barrera: 30 },  // Retinol Crema Corporal Reafirmante
@@ -196,7 +183,6 @@ const PRODUCT_DOSE = {
   '9c30b24f-9e2b-422c-8518-0536579cf894': { aclarado: 55, barrera: 40, textura: 35 },  // The Ordinary Saccharomyces Ferment 30% Milky Toner
   'f95c263b-102e-46c9-bc24-485bf192cdc9': { barrera: 40, firmeza: 35, aclarado: 30 },  // Tocobo Collagen Eye Gel Cream
   '2026eae7-7ae3-4596-b61f-8b3bb5cd2088': { proteccion: null },  // Tocobo Sun Stick Cotton Soft SPF50
-  '1f467bd0-e75d-469d-9dfb-6f99294526ec': { proteccion: null },  // Tocobo Sun Stick Cotton Soft SPF50 (Manos)
   'd6f17e28-ccb7-4267-a588-5812bdfa2fde': { barrera: 85, aclarado: 20 },  // Toleriane Double Repair
   '18d9e716-ed74-41f9-b234-a4c0fcd229c1': { barrera: 80, aclarado: 20 },  // Toleriane Double Repair Face Moisturizer
   '110a2828-a348-41f3-93b6-bc2b7612d731': { textura: 70, aclarado: 30, barrera: 10 },  // Toner AHA BHA PHA + Niacinamide 2%
@@ -204,6 +190,13 @@ const PRODUCT_DOSE = {
 };
 
 // ── ZONAS POR DEFECTO ───────────────────────────────────────────────────────
+// ⚠️ LOS SPF FACIALES INCLUYEN 'cuello' A PROPÓSITO. Antes del refactor eso no
+// vivía aquí sino en app.js, como una regla que derivaba `cuello_proteccion` de
+// toda aplicación con `proteccion` (el "espejo"): la usuaria extiende siempre el
+// protector de la cara al cuello. Al pasar a función × zona esa regla se retiró,
+// y sin subir 'cuello' a estas listas el histórico de protección de cuello se
+// habría ido a CERO de golpe. Ahora es dato explícito en vez de regla oculta,
+// que era el objetivo del refactor.
 // Dos usos: (1) preseleccionar el multipicker de zona al registrar, y (2)
 // calcular el HISTÓRICO — los registros anteriores al refactor no traen zona, y
 // se les aplica esta lista para que sus porcentajes no se muevan ni un punto.
@@ -211,21 +204,17 @@ const PRODUCT_ZONAS = {
   '4a9ab636-db1f-424f-bcfc-7abc237c673c': ['cara'],  // 345 Relief Cream Mist
   '7454f16a-51b3-44c9-b392-4d97b50038b8': ['cuerpo'],  // Aceite de Ducha PH5
   '6447629f-d5f2-4a83-b011-006b25cf18e3': ['pies'],  // Aceite Urea 60%
-  'd62e61a3-0715-44c3-95bb-a402ca0f73cc': ['cara'],  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
-  'c17786a0-2acb-4a2c-9c0e-5e37bd7a7204': ['manos'],  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural) (Manos)
-  '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': ['cara'],  // Anthelios UVMune 400 SPF50
-  'b2b73756-d9a1-4d40-ac66-93e15dff6db2': ['manos'],  // Anthelios UVMune 400 SPF50 (Manos)
+  'd62e61a3-0715-44c3-95bb-a402ca0f73cc': ['cara', 'cuello', 'manos'],  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
+  '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': ['cara', 'cuello', 'manos'],  // Anthelios UVMune 400 SPF50
   '1b656610-fce5-45a6-b6e8-8ec33e209653': ['cara'],  // Anti-Pigment Contorno de Ojos
   '9b91d98e-c293-4e27-8cf1-b5faae440bad': ['cara'],  // BALANCEFUL Pore Cleansing Foam
   'f5419858-d505-4621-9379-bdedad67dd50': ['pies'],  // Barra Urea 60% (Aguacate + Jojoba)
   'd5332696-838e-4d79-9f4e-cde584f0aa91': ['cara'],  // Barrier Support Serum
-  '27826422-4e8b-47a3-a6a0-27f436ce2b26': ['cara'],  // Black Rice Airyfit Sunscreen
-  'c4bb9f39-991b-48aa-85ee-79a4a47a7b10': ['manos'],  // Black Rice Airyfit Sunscreen (Manos)
+  '27826422-4e8b-47a3-a6a0-27f436ce2b26': ['cara', 'cuello', 'manos'],  // Black Rice Airyfit Sunscreen
   '900a4aab-bed0-402c-bcb9-a01806886918': ['cara'],  // Black Rice Probiotics Barrier Essence
   '20064300-8139-45ef-b803-4e4bf61d94bc': ['cara'],  // Black Rice Probiotics NAD+ Serum Mist
   '86d57790-31c4-4db8-888f-ffdd6a2465c5': ['cara'],  // Caffeine Eye Cream Stick
-  'f4f4f34a-d243-41f3-9bb1-dc1ca966d035': ['cara'],  // Canmake Mermaid Skin Gel SPF50
-  'f3659011-6e5b-4ea1-8502-63b5e56f2a3a': ['manos'],  // Canmake Mermaid Skin Gel SPF50 (Manos)
+  'f4f4f34a-d243-41f3-9bb1-dc1ca966d035': ['cara', 'cuello', 'manos'],  // Canmake Mermaid Skin Gel SPF50
   'b73336bc-ad0e-444b-b807-7956498daa5e': ['cara'],  // Caudalie Beauty Elixir Bruma Facial
   '914a738d-a1f7-4657-9f84-53be8ad64b66': ['cara'],  // Centella Ampoule (viaje)
   'd93e2cfd-b65c-4be1-86af-36fd64108486': ['cara'],  // Centella Ampoule Foam (viaje)
@@ -244,29 +233,22 @@ const PRODUCT_ZONAS = {
   '786a92d8-a357-4053-9b4b-d5c96ae9e821': ['pies'],  // Crema Urea 80%
   'dcff4486-a13e-4bef-a4d3-9fce38945ac2': ['cuerpo'],  // Crepe Corrector Body Lotion
   '2b41c15a-bbab-4a44-b583-476d0f11f3f9': ['cuerpo'],  // Dove Ceramidas Body Lotion
-  'c495313f-4f9c-49a6-a672-13483a04f0f2': ['cara'],  // Eucerin Pigment Control Tintado SPF50
-  'ee0d72b3-f639-4bfe-8eae-b8620d71ab09': ['manos'],  // Eucerin Pigment Control Tintado SPF50 (Manos)
+  'c495313f-4f9c-49a6-a672-13483a04f0f2': ['cara', 'cuello', 'manos'],  // Eucerin Pigment Control Tintado SPF50
   'ecef5283-7bdd-460b-a9a8-ccb917942c4c': ['cara', 'cuello'],  // Finacea Ácido Azelaico 15%
   'b464ed06-74c8-413b-8513-289eb6a53931': ['pies'],  // Gel Ácido Salicílico 2%
   '999186d7-a30e-42c4-914f-b0b76f619b58': ['cara'],  // GlycoIsdin Serum
   '86cd48aa-fab8-43bf-8275-534d625268e8': ['cara', 'cuerpo'],  // Glycolic Acid 7%
   '3ba97655-b68a-4084-8bec-fd0c4aac09de': ['cara', 'cuello'],  // Glycolic Bright Gel Cleanser
   '6cfe7393-865c-4af0-b1bf-5d90e7cd52de': ['manos'],  // Hasselan Turmeric Lemon Kojic Acid Soap
-  '5e0fd428-5d22-41ed-91d9-bcd57fddad20': ['cuerpo'],  // Heliocare 360 Opti D Gel SPF50
-  'efefbb3f-a268-4163-9eaa-2132697105e4': ['manos'],  // Heliocare 360 Opti D Gel SPF50 (Manos)
+  '5e0fd428-5d22-41ed-91d9-bcd57fddad20': ['cuerpo', 'manos'],  // Heliocare 360 Opti D Gel SPF50
   '17913609-6130-48bd-977e-45ee06379ff6': ['cara'],  // Hyalu-Cica Moisture Cream
-  '7daf598c-e5aa-402f-a26a-6662aa196be9': ['cara'],  // Hyalu-Cica Water-Fit Sun Serum
-  '54fcb159-b00c-4afb-a3d8-71bd45cd3a31': ['manos'],  // Hyalu-Cica Water-Fit Sun Serum (Manos)
+  '7daf598c-e5aa-402f-a26a-6662aa196be9': ['cara', 'cuello', 'manos'],  // Hyalu-Cica Water-Fit Sun Serum
   '8a2eb58a-2c7e-47c7-8fe8-532d541e7803': ['cara'],  // Hydro Boost Gel Cream
-  'b4b6743b-2aa6-468f-9662-b6d9d1cc1736': ['cuerpo'],  // Isdin Fotoprotector Wet Skin SPF50+
-  '00f87492-1e78-42f2-99b0-f8077f990ac4': ['manos'],  // Isdin Fotoprotector Wet Skin SPF50+ (Manos)
-  '3c1c8b13-bf04-4cf2-a154-5f0d0e2be2ec': ['cara'],  // Isdin Fusion Water Color SPF50
-  '4db3009f-bbe9-44d7-b8af-68270c0bd167': ['manos'],  // Isdin Fusion Water Color SPF50 (Manos)
-  'c998b392-f91e-4ea5-a2b4-9acb871bcc20': ['cara'],  // Isdin Fusion Water SPF50
-  '41e73a9e-788b-40a8-b1d7-21449f0522ad': ['manos'],  // Isdin Fusion Water SPF50 (Manos)
+  'b4b6743b-2aa6-468f-9662-b6d9d1cc1736': ['cuerpo', 'manos'],  // Isdin Fotoprotector Wet Skin SPF50+
+  '3c1c8b13-bf04-4cf2-a154-5f0d0e2be2ec': ['cara', 'cuello', 'manos'],  // Isdin Fusion Water Color SPF50
+  'c998b392-f91e-4ea5-a2b4-9acb871bcc20': ['cara', 'cuello', 'manos'],  // Isdin Fusion Water SPF50
   'b3a581cd-c0fd-43e0-8c73-cf043bc7e5a4': ['cara'],  // Kopher Curepair Derma Ampoule Mist
-  '4c775124-b388-45d0-941f-77cf67c48148': ['cara'],  // L'Oréal UV Defender SPF50 PA++++
-  '99924fdc-cb71-46e9-83ab-d44b576357e2': ['manos'],  // L'Oréal UV Defender SPF50 PA++++ (Manos)
+  '4c775124-b388-45d0-941f-77cf67c48148': ['cara', 'cuello', 'manos'],  // L'Oréal UV Defender SPF50 PA++++
   '3cef35a0-bc27-440f-9d97-a19709ee2bb9': ['cabello'],  // Lambdapil Shampoo Anticaída
   'feac892a-7a0c-4647-9035-c5278c23cd19': ['cara'],  // Laneige Cream Skin Toner & Moisturizer
   '23236746-4738-468c-b043-250f0db91ddb': ['cara'],  // Limpiador Hidratante
@@ -280,16 +262,14 @@ const PRODUCT_ZONAS = {
   '1e59f9b3-18b8-4a98-91a0-376a0f8f72f8': ['cara', 'cuello'],  // Multi-Peptide + Copper Peptides 1% Serum
   '6b2ab52e-8479-4016-a8eb-2a61864491f7': ['cuello'],  // Neck and Chest Firming Cream
   'c74e3fdb-3665-438e-9cbb-574459d0e87f': ['cara'],  // Niacinamide 10% + Zinc 1% Serum
-  '6d30d838-50c9-461c-a93a-7e32eba414f0': ['cara'],  // Nivea Sun Silky UV Stick SPF50
-  '8d600de1-b696-4bcc-a38d-c471266c09a7': ['manos'],  // Nivea Sun Silky UV Stick SPF50 (Manos)
+  '6d30d838-50c9-461c-a93a-7e32eba414f0': ['cara', 'cuello', 'manos'],  // Nivea Sun Silky UV Stick SPF50
   '83f81d90-df90-4b65-897c-029c479acb62': ['cara'],  // Numbuzin Toner No.9 NAD+ PDRN
   'be7a694e-0211-4d3f-b9ed-0c2d83f05943': ['labios'],  // Ollie Lip Hydrating Balm SPF50
   '34b622c4-e4bf-4289-b8a6-923632995796': ['labios'],  // PDRN Lip Serum
   'fd5ac61c-3146-49ed-813f-d3b0c4e097aa': ['cara', 'cuello'],  // Peptide + HA Serum
   'a6451499-e856-4494-b68b-acdbbc038824': ['cara'],  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': ['cara'],  // Poremizing Light Gel Cream
-  '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': ['cara'],  // Probio-Cica Glow Sun Ampoule
-  '296dd1c2-648d-43e2-9d5f-7e3d8db1e554': ['manos'],  // Probio-Cica Glow Sun Ampoule (Manos)
+  '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': ['cara', 'cuello', 'manos'],  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['cara', 'cuello'],  // Retin-A Tretinoína 0.025%
   'e029ae8d-5443-4c99-bb5a-3c2718f12694': ['cuerpo'],  // Retinol Body Cream (Vit E, Té Verde, Aloe)
   '7a10d78f-3fd3-4308-9df5-25f16a062d52': ['cuerpo'],  // Retinol Crema Corporal Reafirmante
@@ -306,8 +286,7 @@ const PRODUCT_ZONAS = {
   'b06008de-44b8-4d11-b6a8-0de0dc543bed': ['cara'],  // Suero Vitamina C 20%
   '9c30b24f-9e2b-422c-8518-0536579cf894': ['cara'],  // The Ordinary Saccharomyces Ferment 30% Milky Toner
   'f95c263b-102e-46c9-bc24-485bf192cdc9': ['cara'],  // Tocobo Collagen Eye Gel Cream
-  '2026eae7-7ae3-4596-b61f-8b3bb5cd2088': ['cara'],  // Tocobo Sun Stick Cotton Soft SPF50
-  '1f467bd0-e75d-469d-9dfb-6f99294526ec': ['manos'],  // Tocobo Sun Stick Cotton Soft SPF50 (Manos)
+  '2026eae7-7ae3-4596-b61f-8b3bb5cd2088': ['cara', 'cuello', 'manos'],  // Tocobo Sun Stick Cotton Soft SPF50
   'd6f17e28-ccb7-4267-a588-5812bdfa2fde': ['cara'],  // Toleriane Double Repair
   '18d9e716-ed74-41f9-b234-a4c0fcd229c1': ['cara'],  // Toleriane Double Repair Face Moisturizer
   '110a2828-a348-41f3-93b6-bc2b7612d731': ['cara', 'cuello'],  // Toner AHA BHA PHA + Niacinamide 2%
