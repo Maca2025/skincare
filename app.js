@@ -3117,13 +3117,30 @@ function zonasCandidatasDeCat(cat, items) {
 function zonePickProductosElegidos() {
   return [...multiPickSelected].map(productByLoggedName).filter(Boolean);
 }
-// Preselección: unión de las zonas habituales de lo elegido. Sin nada elegido
-// todavía no adivina — los chips se ven apagados y el botón pide seleccionar.
+// Zonas con las que se PRESELECCIONA un producto. Normalmente sus zonas
+// habituales, pero si no tiene entrada en la matriz —producto nuevo, id que no
+// coincide, deriva— cae a su APTITUD en vez de devolver nada. Devolver nada
+// dejaba el picker en un callejón sin salida: producto marcado, cero chips
+// encendidos y el botón "Elige al menos una zona" sin nada que explicara por qué
+// no se encendían solas.
+function zonasPreselDe(p) {
+  const aptas = (typeof zonasAptasDe === 'function') ? zonasAptasDe(p) : [];
+  const def = (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[p.id]) || [];
+  const inter = aptas.filter(z => def.indexOf(z) !== -1);
+  return inter.length ? inter : aptas;
+}
+// Preselección: unión de las zonas de lo elegido. Sin nada elegido todavía no
+// adivina — los chips se ven apagados y el botón pide seleccionar.
+//
+// `zonePickDirty` solo manda MIENTRAS QUEDE alguna zona marcada. Si tocaste
+// chips hasta dejarlo en cero, respetar ese cero no ayuda a nadie: bloquea el
+// botón sin decir por qué. En cuanto no queda ninguna, la preselección vuelve a
+// entrar. Lo que el flag sí sigue impidiendo es que elegir un segundo producto
+// te pise una elección de zonas viva, que era el bug original.
 function syncZonePickFromSelection() {
-  if (zonePickDirty) return;
+  if (zonePickDirty && zonePickSel.size) return;
   const prods = zonePickProductosElegidos();
-  const defs = prods.map(p => (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[p.id]) || []);
-  zonePickSel = new Set(unionZonas(defs, ZONAS_ORDEN));
+  zonePickSel = new Set(unionZonas(prods.map(zonasPreselDe), ZONAS_ORDEN));
 }
 function renderZonePickChips() {
   const wrap = pickerEl('zone-pick-chips');
@@ -3142,9 +3159,11 @@ function renderZonePickChips() {
   }).join('');
   const sub = pickerEl('zone-pick-sub');
   if (sub) {
-    sub.textContent = zonePickSel.size
-      ? [...zonePickSel].map(zonaLabel).join(' · ')
-      : 'Elige un producto y se marcan solas tus zonas de siempre.';
+    // El texto tiene que describir el estado REAL. Decir "elige un producto" con
+    // un producto ya elegido y el botón bloqueado era desorientador.
+    if (zonePickSel.size) sub.textContent = [...zonePickSel].map(zonaLabel).join(' · ');
+    else if (prods.length) sub.textContent = 'Toca la zona donde te lo aplicaste.';
+    else sub.textContent = 'Elige un producto y se marcan solas tus zonas de siempre.';
   }
 }
 function toggleZonePick(z) {
