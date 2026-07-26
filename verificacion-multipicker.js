@@ -28,7 +28,14 @@ const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://example.
 const w = dom.window;
 w.supabase = { createClient: () => ({ from: fakeQuery, auth: { getSession: () => Promise.resolve({ data: { session: null } }), onAuthStateChange: () => {} }, storage: { from: () => ({}) } }) };
 w.fetch = () => Promise.reject(new Error('sin red en el arnés'));
-w.navigator.serviceWorker = undefined;
+// Ojo: asignar `undefined` NO sirve — crea la propiedad y `'serviceWorker' in
+// navigator` pasa a ser true, así que app.js intenta registrar el SW y revienta.
+// Va un stub que falla callado, como haría un navegador sin permiso.
+w.navigator.serviceWorker = {
+  register: () => Promise.reject(new Error('sin SW en el arnés')),
+  ready: Promise.reject(new Error('sin SW en el arnés'))
+};
+w.navigator.serviceWorker.ready.catch(() => {});
 // Las `function` de app.js sí quedan en window al evaluarse, pero `let`/`const`
 // no: viven en el ámbito léxico global. El epílogo abre una ventanita a ese
 // estado para poder inspeccionarlo desde fuera sin tocar app.js.
@@ -39,7 +46,10 @@ w.eval(['pure.js', 'activos-matriz.js', 'app.js']
   get zonePickSel() { return zonePickSel; }, set zonePickSel(v) { zonePickSel = v; },
   get zonePickDirty() { return zonePickDirty; }, set zonePickDirty(v) { zonePickDirty = v; },
   get multiPickSelected() { return multiPickSelected; },
-  get zonaEdit() { return _zonaEdit; }
+  get zonaEdit() { return _zonaEdit; },
+  get PRODUCT_DOSE() { return PRODUCT_DOSE; },
+  get PRODUCT_ZONAS() { return PRODUCT_ZONAS; },
+  get IRRITANTES() { return IRRITANTES; }
 };`);
 const T = w.__T;
 
@@ -156,6 +166,23 @@ t('edición: elegir otro producto NO revierte mi elección',
   t('paso fijo: muestra el renglón de zonas', !!fijo.querySelector('.sc-zonas'), true);
   t('paso fijo: ningún modal se abrió',
     [...w.document.querySelectorAll('.modal-overlay.open')].length, 0);
+
+  // ── 8. LA FUSIÓN DEL GEL DE SALICÍLICO ───────────────────────────────────
+  // Es el caso que sostiene el modelo función × zona: un producto con DOS
+  // funciones y tres zonas no debe generar ejes absurdos. Si `ejeKey` dejara
+  // pasar "textura de pies" o "queratolítico de cara", la fusión inventaría dos
+  // ejes que nadie calibró.
+  const GEL = 'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb';
+  t('fusión: el gel declara las dos funciones',
+    Object.keys(T.PRODUCT_DOSE[GEL]).sort(), ['queratolitico', 'textura']);
+  t('fusión: y las tres zonas', T.PRODUCT_ZONAS[GEL], ['cara', 'cuerpo', 'pies']);
+  t('fusión: "textura de pies" no existe', w.ejeKey('pies', 'textura'), null);
+  t('fusión: "queratolítico de cara" no existe', w.ejeKey('cara', 'queratolitico'), null);
+  t('fusión: los ejes que alimenta son exactamente 3',
+    w.ejesDeProducto({ id: GEL }).sort(), ['cuerpo_textura', 'pies', 'textura']);
+  // El aviso de sobre-exposición sigue siendo de cara/cuello/cuerpo/manos: usar
+  // el gel en los pies no debe disparar el aviso de irritación facial.
+  t('fusión: el gel sigue en IRRITANTES', T.IRRITANTES.has(GEL), true);
 
   console.log(`\n${fail ? '❌' : '✅'} multipicker (jsdom): ${pass} pasaron, ${fail} fallaron`);
   process.exit(fail ? 1 : 0);

@@ -120,7 +120,7 @@ const PRODUCT_DOSE = {
   '3b90cc0e-7170-4f62-9e99-c582510d6361': { barrera: 55 },  // Ceramide Eye Cream Stick
   '22b2bb98-8431-4d40-8ffe-08f02f3db40b': { barrera: 65, aclarado: 15 },  // Cerave Eye Repair Cream
   '44b6586f-754c-49a0-b6f6-867d77bd2e44': { queratolitico: 45 },  // Crema con Lanolina
-  'bc090811-c158-4bd2-b97a-6f83f0de7a24': { firmeza: 60, textura: 50, barrera: 30 },  // Crema Corporal Retinol Reafirmante
+  'bc090811-c158-4bd2-b97a-6f83f0de7a24': { firmeza: 60, textura: 50, barrera: 30 },  // Retinol Body Cream (Vit E, Té Verde, Aloe)
   'ccea1f6a-4935-44ef-a70a-e332bc9b2b9c': { barrera: 70 },  // Crema Hidratante Diaria
   'd944830f-82e8-434e-8409-dd7a89997fd9': { barrera: 40, firmeza: 20 },  // Crema Reafirmante Cuello
   'c3e2d898-e5d3-4e00-879a-827e84a44854': { queratolitico: 65 },  // Crema Urea 40%
@@ -131,7 +131,6 @@ const PRODUCT_DOSE = {
   '2b41c15a-bbab-4a44-b583-476d0f11f3f9': { barrera: 75 },  // Dove Ceramidas Body Lotion
   'c495313f-4f9c-49a6-a672-13483a04f0f2': { proteccion: null, aclarado: 75 },  // Eucerin Pigment Control Tintado SPF50
   'ecef5283-7bdd-460b-a9a8-ccb917942c4c': { aclarado: 90, textura: 55, barrera: 10 },  // Finacea Ácido Azelaico 15%
-  'b464ed06-74c8-413b-8513-289eb6a53931': { queratolitico: 60 },  // Gel Ácido Salicílico 2%
   '999186d7-a30e-42c4-914f-b0b76f619b58': { aclarado: 65, textura: 55, firmeza: 35 },  // GlycoIsdin Serum
   '86cd48aa-fab8-43bf-8275-534d625268e8': { textura: 65 },  // Glycolic Acid 7%
   '3ba97655-b68a-4084-8bec-fd0c4aac09de': { textura: 25, aclarado: 15 },  // Glycolic Bright Gel Cleanser
@@ -153,7 +152,6 @@ const PRODUCT_DOSE = {
   'e26cc8e4-79da-4389-baac-852263e51007': { aclarado: 70 },  // Melascreen Serum
   'f0797f0c-1ccc-42fa-b3c2-3ba82ecd419a': { firmeza: 60, barrera: 30 },  // Mercilen Golden Peptide Honeycomb Neck Mask
   '17bcd631-39a5-4f79-81c1-c494208c2cb1': { barrera: 10 },  // Mercilen Plant Extract Cleansing Cream
-  'b6026bce-10f2-49d3-aa77-12f94beee1c2': { barrera: 50, aclarado: 45, textura: 40 },  // Milky Toner Saccharomyces Ferment 30%
   'd2fa2faa-9408-41cf-8e86-3d3575ae2ac3': { textura: 40, barrera: 15 },  // Moisturizing Clay Mask (genérico)
   '1e59f9b3-18b8-4a98-91a0-376a0f8f72f8': { firmeza: 80, textura: 30, barrera: 15 },  // Multi-Peptide + Copper Peptides 1% Serum
   '6b2ab52e-8479-4016-a8eb-2a61864491f7': { firmeza: 55, barrera: 40 },  // Neck and Chest Firming Cream
@@ -167,13 +165,17 @@ const PRODUCT_DOSE = {
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': { barrera: 55, textura: 45, aclarado: 25, firmeza: 15 },  // Poremizing Light Gel Cream
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': { proteccion: null },  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': { textura: 95, firmeza: 85, aclarado: 70 },  // Retin-A Tretinoína 0.025%
-  'e029ae8d-5443-4c99-bb5a-3c2718f12694': { firmeza: 55, textura: 45, barrera: 30 },  // Retinol Body Cream (Vit E, Té Verde, Aloe)
-  '7a10d78f-3fd3-4308-9df5-25f16a062d52': { firmeza: 60, textura: 50, barrera: 30 },  // Retinol Crema Corporal Reafirmante
   '05f7037d-f73b-4ff8-9081-c64afb2c5cf2': { textura: 40, firmeza: 45 },  // Retinol Overnight Lotion
   'a5953eaf-73e5-4ba9-80fa-9979641b62b8': { firmeza: 45, aclarado: 45, textura: 40, barrera: 25 },  // Revitalift Laser Day Cream
   '83fb4617-acd4-404c-80e5-f4dae81accb6': { textura: 35, barrera: 20 },  // SA Cleanser
   '106e6207-662c-451d-ac3c-5c8c1db73883': { aclarado: 60 },  // Sadoer Kojic Acid Hand Cream
-  'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': { textura: 55 },  // Salicylic Acid 2% Gel
+  // Fusionado con 'Gel Ácido Salicílico 2%' [b464ed06] el 2026-07-25: era el
+  // MISMO tubo dado de alta dos veces, en español y en inglés, y por eso vivía
+  // en dos ejes que no se hablaban (pies · cara/cuerpo). Declara las DOS
+  // funciones y `ejeKey` hace el resto: queratolítico solo cuenta en pies,
+  // textura solo fuera de pies. `textura: 55` NO se tocó — es el valor con el
+  // que se calcularon meses de cara.
+  'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': { textura: 55, queratolitico: 60 },  // Salicylic Acid 2% Gel
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8': { textura: 75 },  // Salicylic Acid 2% Masque
   '50e32222-59b0-4b20-ad26-23b552f91239': { textura: 70 },  // Salicylic Acid 2% Spray
   // Niacinamida medida en 2.7-4%, panthenol y ceramidas NP/AP/EOP con
@@ -191,8 +193,7 @@ const PRODUCT_DOSE = {
   '9c30b24f-9e2b-422c-8518-0536579cf894': { aclarado: 55, barrera: 40, textura: 35 },  // The Ordinary Saccharomyces Ferment 30% Milky Toner
   'f95c263b-102e-46c9-bc24-485bf192cdc9': { barrera: 40, firmeza: 35, aclarado: 30 },  // Tocobo Collagen Eye Gel Cream
   '2026eae7-7ae3-4596-b61f-8b3bb5cd2088': { proteccion: null },  // Tocobo Sun Stick Cotton Soft SPF50
-  'd6f17e28-ccb7-4267-a588-5812bdfa2fde': { barrera: 85, aclarado: 20 },  // Toleriane Double Repair
-  '18d9e716-ed74-41f9-b234-a4c0fcd229c1': { barrera: 80, aclarado: 20 },  // Toleriane Double Repair Face Moisturizer
+  'd6f17e28-ccb7-4267-a588-5812bdfa2fde': { barrera: 85, aclarado: 20 },  // Toleriane Double Repair Face Moisturizer
   '110a2828-a348-41f3-93b6-bc2b7612d731': { textura: 70, aclarado: 30, barrera: 10 },  // Toner AHA BHA PHA + Niacinamide 2%
   'b71bc26f-a501-49eb-8461-c7485192ee48': { barrera: 35, firmeza: 20, aclarado: 20 },  // Ultramo Bruma Hidratante Niacinamida
 };
@@ -232,7 +233,7 @@ const PRODUCT_ZONAS = {
   '3b90cc0e-7170-4f62-9e99-c582510d6361': ['cara'],  // Ceramide Eye Cream Stick
   '22b2bb98-8431-4d40-8ffe-08f02f3db40b': ['cara'],  // Cerave Eye Repair Cream
   '44b6586f-754c-49a0-b6f6-867d77bd2e44': ['pies'],  // Crema con Lanolina
-  'bc090811-c158-4bd2-b97a-6f83f0de7a24': ['cuerpo'],  // Crema Corporal Retinol Reafirmante
+  'bc090811-c158-4bd2-b97a-6f83f0de7a24': ['cuerpo'],  // Retinol Body Cream (Vit E, Té Verde, Aloe)
   'ccea1f6a-4935-44ef-a70a-e332bc9b2b9c': ['cara', 'cuerpo'],  // Crema Hidratante Diaria
   'd944830f-82e8-434e-8409-dd7a89997fd9': ['cuello'],  // Crema Reafirmante Cuello
   'c3e2d898-e5d3-4e00-879a-827e84a44854': ['pies'],  // Crema Urea 40%
@@ -243,7 +244,6 @@ const PRODUCT_ZONAS = {
   '2b41c15a-bbab-4a44-b583-476d0f11f3f9': ['cuerpo'],  // Dove Ceramidas Body Lotion
   'c495313f-4f9c-49a6-a672-13483a04f0f2': ['cara', 'cuello', 'manos'],  // Eucerin Pigment Control Tintado SPF50
   'ecef5283-7bdd-460b-a9a8-ccb917942c4c': ['cara', 'cuello'],  // Finacea Ácido Azelaico 15%
-  'b464ed06-74c8-413b-8513-289eb6a53931': ['pies'],  // Gel Ácido Salicílico 2%
   '999186d7-a30e-42c4-914f-b0b76f619b58': ['cara'],  // GlycoIsdin Serum
   '86cd48aa-fab8-43bf-8275-534d625268e8': ['cara', 'cuerpo'],  // Glycolic Acid 7%
   '3ba97655-b68a-4084-8bec-fd0c4aac09de': ['cara', 'cuello'],  // Glycolic Bright Gel Cleanser
@@ -265,7 +265,6 @@ const PRODUCT_ZONAS = {
   'e26cc8e4-79da-4389-baac-852263e51007': ['cara'],  // Melascreen Serum
   'f0797f0c-1ccc-42fa-b3c2-3ba82ecd419a': ['cuello'],  // Mercilen Golden Peptide Honeycomb Neck Mask
   '17bcd631-39a5-4f79-81c1-c494208c2cb1': ['cara'],  // Mercilen Plant Extract Cleansing Cream
-  'b6026bce-10f2-49d3-aa77-12f94beee1c2': ['cara', 'cuello'],  // Milky Toner Saccharomyces Ferment 30%
   'd2fa2faa-9408-41cf-8e86-3d3575ae2ac3': ['cara'],  // Moisturizing Clay Mask (genérico)
   '1e59f9b3-18b8-4a98-91a0-376a0f8f72f8': ['cara', 'cuello'],  // Multi-Peptide + Copper Peptides 1% Serum
   '6b2ab52e-8479-4016-a8eb-2a61864491f7': ['cuello'],  // Neck and Chest Firming Cream
@@ -279,13 +278,14 @@ const PRODUCT_ZONAS = {
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': ['cara'],  // Poremizing Light Gel Cream
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': ['cara', 'cuello', 'manos'],  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['cara', 'cuello'],  // Retin-A Tretinoína 0.025%
-  'e029ae8d-5443-4c99-bb5a-3c2718f12694': ['cuerpo'],  // Retinol Body Cream (Vit E, Té Verde, Aloe)
-  '7a10d78f-3fd3-4308-9df5-25f16a062d52': ['cuerpo'],  // Retinol Crema Corporal Reafirmante
   '05f7037d-f73b-4ff8-9081-c64afb2c5cf2': ['cuerpo'],  // Retinol Overnight Lotion
   'a5953eaf-73e5-4ba9-80fa-9979641b62b8': ['cara'],  // Revitalift Laser Day Cream
   '83fb4617-acd4-404c-80e5-f4dae81accb6': ['cara'],  // SA Cleanser
   '106e6207-662c-451d-ac3c-5c8c1db73883': ['manos'],  // Sadoer Kojic Acid Hand Cream
-  'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': ['cara', 'cuerpo'],  // Salicylic Acid 2% Gel
+  // 'pies' entra por la fusión con b464ed06. Los registros anteriores quedaron
+  // FIJADOS a {cara,cuerpo} en migracion-unificar-duplicados.sql (paso 2.0):
+  // sin eso, meses de aplicaciones faciales empezarían a contar también en pies.
+  'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': ['cara', 'cuerpo', 'pies'],  // Salicylic Acid 2% Gel
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8': ['cara'],  // Salicylic Acid 2% Masque
   '50e32222-59b0-4b20-ad26-23b552f91239': ['cuerpo'],  // Salicylic Acid 2% Spray
   // Cara y cuello: sin ácidos y con ceramidas, es de lo más seguro que puede
@@ -296,11 +296,15 @@ const PRODUCT_ZONAS = {
   '21a728f9-3cfa-43eb-a3fe-8a57d417240f': ['cara'],  // Sleeping Pack Ceramidas + Cica
   '0dfd4acf-5300-4822-aa77-f048fa588cd8': ['cara'],  // Spray Ácido Hipocloroso
   'b06008de-44b8-4d11-b6a8-0de0dc543bed': ['cara'],  // Suero Vitamina C 20%
-  '9c30b24f-9e2b-422c-8518-0536579cf894': ['cara'],  // The Ordinary Saccharomyces Ferment 30% Milky Toner
+  // 'cuello' entra por la fusión con b6026bce (el mismo tónico catalogado como
+  // exfoliante), que sí lo declaraba. Registros anteriores fijados a {cara} en
+  // la migración. La POTENCIA no se fusionó: se conserva la del sobreviviente
+  // para no mover el histórico de cara — las dos entradas estimaban lo mismo
+  // con ≤10 puntos de diferencia, y ninguna es "más verdadera".
+  '9c30b24f-9e2b-422c-8518-0536579cf894': ['cara', 'cuello'],  // The Ordinary Saccharomyces Ferment 30% Milky Toner
   'f95c263b-102e-46c9-bc24-485bf192cdc9': ['cara'],  // Tocobo Collagen Eye Gel Cream
   '2026eae7-7ae3-4596-b61f-8b3bb5cd2088': ['cara', 'cuello', 'manos'],  // Tocobo Sun Stick Cotton Soft SPF50
-  'd6f17e28-ccb7-4267-a588-5812bdfa2fde': ['cara'],  // Toleriane Double Repair
-  '18d9e716-ed74-41f9-b234-a4c0fcd229c1': ['cara'],  // Toleriane Double Repair Face Moisturizer
+  'd6f17e28-ccb7-4267-a588-5812bdfa2fde': ['cara'],  // Toleriane Double Repair Face Moisturizer
   '110a2828-a348-41f3-93b6-bc2b7612d731': ['cara', 'cuello'],  // Toner AHA BHA PHA + Niacinamide 2%
   'b71bc26f-a501-49eb-8461-c7485192ee48': ['cara'],  // Ultramo Bruma Hidratante Niacinamida
 };
@@ -316,9 +320,9 @@ const IRRITANTES = new Set([
   '50e32222-59b0-4b20-ad26-23b552f91239',  // Salicylic Acid 2% Spray
   '999186d7-a30e-42c4-914f-b0b76f619b58',  // GlycoIsdin Serum
   '3ba97655-b68a-4084-8bec-fd0c4aac09de',  // Glycolic Bright Gel Cleanser
-  '7a10d78f-3fd3-4308-9df5-25f16a062d52',  // Retinol Crema Corporal Reafirmante
-  'bc090811-c158-4bd2-b97a-6f83f0de7a24',  // Crema Corporal Retinol Reafirmante
-  'e029ae8d-5443-4c99-bb5a-3c2718f12694',  // Retinol Body Cream (Vit E, Té Verde, Aloe)
+  // Las tres filas de retinol corporal de Advanced Clinicals se fusionaron en
+  // bc090811 el 2026-07-25: eran el mismo bote dado de alta tres veces.
+  'bc090811-c158-4bd2-b97a-6f83f0de7a24',  // Retinol Body Cream (Vit E, Té Verde, Aloe)
 ]);
 // ── ZONAS APTAS: DÓNDE PUEDE IR EL PRODUCTO ─────────────────────────────────
 // Pregunta DISTINTA de PRODUCT_ZONAS. Aquélla dice dónde le entregaste

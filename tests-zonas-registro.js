@@ -99,7 +99,7 @@ Object.keys(PRODUCT_ZONAS).forEach(id => {
   if (JSON.stringify(got) !== JSON.stringify(want)) desviados.push({ id, want, got });
 });
 t('histórico: ningún producto cambia sus zonas por defecto', desviados, []);
-t('histórico: el catálogo con zonas sigue siendo 91', Object.keys(PRODUCT_ZONAS).length, 91);
+t('histórico: el catálogo con zonas sigue siendo 86', Object.keys(PRODUCT_ZONAS).length, 86);
 
 // Un override que CONTRADICE las zonas por defecto es el fallo silencioso más
 // probable de este diseño: la aptitud recorta el default y el producto empieza
