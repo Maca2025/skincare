@@ -4,12 +4,14 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v7 — `no_reapp` deja de esconder productos en los pasos de rutina (la
+// tretinoína no aparecía en el picker de Activos).
 // v6 — multipicker de zona: `product_applications.zones` ya se ESCRIBE
 // (2026-07-25). Subir esta versión es lo que
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v6';
+const CACHE = 'skincare-shell-v7';
 const SHELL = [
   './',
   './index.html',

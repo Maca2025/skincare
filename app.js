@@ -3036,7 +3036,9 @@ function filterPicker(input) {
 const PICKER_MODALS = {
   '🌞 SPF Facial': {
     modal: 'spf-modal', body: 'spf-picker-body',
-    // El SPF facial no filtra no_reapp: reaplicar es justo el punto.
+    // El SPF facial no filtra no_reapp NUNCA, ni siquiera fuera de un paso de
+    // rutina: reaplicar es justo el punto.
+    ignoreNoReapp: true,
     filter: p => p.status !== 'out',
     warn: `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
   <strong>⚠️ NO NEGOCIABLE para manchas solares.</strong> El UV es la causa directa de los sunspots — sin SPF diario, los despigmentantes aclaran mientras el sol vuelve a pigmentar.
@@ -3045,15 +3047,19 @@ const PICKER_MODALS = {
   },
   '☀️ SPF Corporal': {
     modal: 'body-spf-modal', body: 'body-spf-picker-body',
+    ignoreNoReapp: true,
     filter: p => p.status !== 'out',
     warn: `<div style="background:#FFF3E0;border-left:3px solid #D4820A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4A00;line-height:1.5;">
   <strong>⚠️ Las manchas en brazos son UV-triggered</strong> — el mismo mecanismo que los sunspots de la cara. Sin SPF corporal diario no van a mejorar sin importar lo que apliques.
 </div>`
   }
 };
+// `cfg.filter` responde SOLO "¿está disponible?". El `no_reapp` se aplica
+// aparte, en openMultiPickerByCat, porque depende del CONTEXTO y no del
+// producto: ver el comentario de ahí.
 const PICKER_MODAL_DEFAULT = {
   modal: 'product-picker-modal', body: 'product-picker-body', title: 'product-picker-title',
-  filter: p => !p.no_reapp && p.status !== 'out'
+  filter: p => p.status !== 'out'
 };
 function pickerModalOf(cat) {
   return Object.assign({}, PICKER_MODAL_DEFAULT, PICKER_MODALS[cat] || {});
@@ -3151,7 +3157,14 @@ function openMultiPickerByCat(stepId, cat) {
   }
   const body = document.getElementById(cfg.body);
   if (!body) { showToast('❌ Picker no disponible', 'error'); return; }
-  const items = allProducts.filter(p => p.category === cat && cfg.filter(p));
+  // `no_reapp` SOLO esconde en el contexto de reaplicación (sin paso de rutina),
+  // que es la pregunta para la que se creó la bandera: "no me ofrezcas esto para
+  // volver a ponérmelo a media tarde". La tretinoína la tiene, y como el picker
+  // se unificó, esa misma bandera la estaba escondiendo también del paso de
+  // rutina "Activos" — donde sí tiene que estar. Una bandera que responde una
+  // pregunta no puede usarse para contestar otra.
+  const items = allProducts.filter(p =>
+    p.category === cat && cfg.filter(p) && (stepId || cfg.ignoreNoReapp || !p.no_reapp));
   zonePickCat = cat;
   zonePickSel = new Set();
   zonePickDirty = false;
