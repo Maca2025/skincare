@@ -165,7 +165,6 @@ const PRODUCT_DOSE = {
   'fd5ac61c-3146-49ed-813f-d3b0c4e097aa': { firmeza: 55, barrera: 45 },  // Peptide + HA Serum
   'a6451499-e856-4494-b68b-acdbbc038824': { textura: 55 },  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': { barrera: 55, textura: 45, aclarado: 25, firmeza: 15 },  // Poremizing Light Gel Cream
-  '35c79583-7aac-405a-b3ba-33276d379984': { textura: 55, barrera: 65, aclarado: 20, firmeza: 15 },  // Pore-Reducing Toner — Paula's Choice
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': { proteccion: null },  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': { textura: 95, firmeza: 85, aclarado: 70 },  // Retin-A Tretinoína 0.025%
   'e029ae8d-5443-4c99-bb5a-3c2718f12694': { firmeza: 55, textura: 45, barrera: 30 },  // Retinol Body Cream (Vit E, Té Verde, Aloe)
@@ -177,6 +176,14 @@ const PRODUCT_DOSE = {
   'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': { textura: 55 },  // Salicylic Acid 2% Gel
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8': { textura: 75 },  // Salicylic Acid 2% Masque
   '50e32222-59b0-4b20-ad26-23b552f91239': { textura: 70 },  // Salicylic Acid 2% Spray
+  // Niacinamida medida en 2.7-4%, panthenol y ceramidas NP/AP/EOP con
+  // fitoesfingosina. Barrera 60: para un tónico es sólido, pero por debajo de
+  // una crema de ceramidas que se queda en la piel. Textura 40 es el control de
+  // sebo y apariencia de poro de la niacinamida, no exfoliación — no lleva
+  // ácidos, así que NO entra en IRRITANTES. Aclarado 30: a 3-4% el efecto sobre
+  // pigmento es adyuvante; el rango con evidencia sólida para manchas empieza
+  // en 4-5% y esto no lo alcanza con seguridad.
+  '35c79583-7aac-405a-b3ba-33276d379984': { barrera: 60, textura: 40, aclarado: 30 },  // Skin Balancing Pore-Reducing Toner
   '8d0912a7-441d-4e03-a344-e16076334dbe': { textura: 85 },  // Skin Perfecting 2% BHA
   '21a728f9-3cfa-43eb-a3fe-8a57d417240f': { barrera: 85 },  // Sleeping Pack Ceramidas + Cica
   '0dfd4acf-5300-4822-aa77-f048fa588cd8': { barrera: 30, textura: 15 },  // Spray Ácido Hipocloroso
@@ -270,7 +277,6 @@ const PRODUCT_ZONAS = {
   'fd5ac61c-3146-49ed-813f-d3b0c4e097aa': ['cara', 'cuello'],  // Peptide + HA Serum
   'a6451499-e856-4494-b68b-acdbbc038824': ['cara'],  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': ['cara'],  // Poremizing Light Gel Cream
-  '35c79583-7aac-405a-b3ba-33276d379984': ['cara'],  // Pore-Reducing Toner — Paula's Choice
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': ['cara', 'cuello', 'manos'],  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['cara', 'cuello'],  // Retin-A Tretinoína 0.025%
   'e029ae8d-5443-4c99-bb5a-3c2718f12694': ['cuerpo'],  // Retinol Body Cream (Vit E, Té Verde, Aloe)
@@ -282,6 +288,10 @@ const PRODUCT_ZONAS = {
   'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': ['cara', 'cuerpo'],  // Salicylic Acid 2% Gel
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8': ['cara'],  // Salicylic Acid 2% Masque
   '50e32222-59b0-4b20-ad26-23b552f91239': ['cuerpo'],  // Salicylic Acid 2% Spray
+  // Cara y cuello: sin ácidos y con ceramidas, es de lo más seguro que puede
+  // subir al cuello. Si prefieres que no se preseleccione ahí, quita 'cuello'
+  // — no hay histórico que se mueva, el producto es nuevo.
+  '35c79583-7aac-405a-b3ba-33276d379984': ['cara', 'cuello'],  // Skin Balancing Pore-Reducing Toner
   '8d0912a7-441d-4e03-a344-e16076334dbe': ['cara'],  // Skin Perfecting 2% BHA
   '21a728f9-3cfa-43eb-a3fe-8a57d417240f': ['cara'],  // Sleeping Pack Ceramidas + Cica
   '0dfd4acf-5300-4822-aa77-f048fa588cd8': ['cara'],  // Spray Ácido Hipocloroso
