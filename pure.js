@@ -192,10 +192,17 @@ function overExposureDays(irritantDays, diasIdeales) {
 //   apps          — filas de product_applications de ese día
 //   productsById  — objeto { [product_id]: producto } para leer la categoría
 //   cutoffHour    — hora local que separa AM de PM (AM_PM_CUTOFF_HOUR)
+// `byStepIdApps` es ADITIVO (2026-07-25, multipicker de zona): guarda las FILAS
+// crudas de cada paso, no solo su etiqueta, para que al recargar el día se
+// puedan volver a pintar y editar las zonas registradas. Sin él, el renglón de
+// zonas desaparecía al refrescar y parecía que no se había guardado. Se llena
+// solo por `routine_step_id` — el único vínculo confiable (regla 4); editar
+// zonas a partir de un fallback por nombre podría tocar la fila equivocada.
 function buildHydration(apps, productsById, cutoffHour) {
   const h = {
     byStepId: new Map(), byProductId: new Map(),
-    byCategory: new Map(), byName: new Map()
+    byCategory: new Map(), byName: new Map(),
+    byStepIdApps: new Map()
   };
   const prods = productsById || {};
   (apps || []).forEach(r => {
@@ -205,6 +212,9 @@ function buildHydration(apps, productsById, cutoffHour) {
       // día — se concatenan para mostrarlas todas en el paso.
       const prev = h.byStepId.get(r.routine_step_id);
       h.byStepId.set(r.routine_step_id, prev ? prev + ' · ' + label : label);
+      const rows = h.byStepIdApps.get(r.routine_step_id) || [];
+      rows.push({ id: r.id, product_id: r.product_id, product_name: r.product_name, zones: r.zones || null });
+      h.byStepIdApps.set(r.routine_step_id, rows);
       return;
     }
     // Una REAPLICACIÓN no es un paso de rutina, y no debe marcar ninguno.
@@ -343,4 +353,49 @@ function spotTrend(obs) {
     first: Number(a.shade), last: Number(b.shade), delta,
     n: v.length, days
   };
+}
+
+// ── ZONAS DE UN REGISTRO (multipicker de zona) ───────────────────────────────
+// Qué se escribe en `product_applications.zones`. Vive aquí, puro y con tests,
+// porque es la pieza que decide QUÉ EJES DE PROGRESO recibe cada aplicación:
+// una resolución mal hecha no da error, solo mueve porcentajes en silencio.
+//
+// Tres entradas, tres preguntas distintas (confundirlas fue lo que motivó el
+// refactor función × zona):
+//   elegidas   — lo que ella marcó en el picker
+//   aptas      — dónde PUEDE ir ese producto (zonasAptasDe)
+//   porDefecto — PRODUCT_ZONAS del producto: dónde suele ponérselo
+//
+// La aptitud MANDA sobre lo elegido: el picker es de sesión (varios productos a
+// la vez), así que marcar "cara + manos" con un limpiador y una crema de manos
+// en la misma tanda es normal. Cada producto se queda con la parte que le toca
+// en vez de recibir una zona donde nadie se lo pondría.
+//
+// Devuelve [] cuando no hay nada defendible que escribir. El caller escribe
+// null en ese caso y el motor cae al respaldo de PRODUCT_ZONAS, que es
+// exactamente lo que hacía antes de existir la columna — nunca inventa zonas.
+function ordenarZonas(zonas, orden) {
+  const ord = Array.isArray(orden) ? orden : [];
+  const rank = z => { const i = ord.indexOf(z); return i === -1 ? 99 : i; };
+  return (Array.isArray(zonas) ? zonas.slice() : []).sort((a, b) => rank(a) - rank(b));
+}
+function unionZonas(listas, orden) {
+  const set = new Set();
+  (Array.isArray(listas) ? listas : []).forEach(l =>
+    (Array.isArray(l) ? l : []).forEach(z => { if (z) set.add(z); }));
+  return ordenarZonas([...set], orden);
+}
+function resolveZonas(elegidas, aptas, porDefecto, orden) {
+  const el  = [...new Set((Array.isArray(elegidas) ? elegidas : []).filter(Boolean))];
+  const ap  = [...new Set((Array.isArray(aptas) ? aptas : []).filter(Boolean))];
+  const def = [...new Set((Array.isArray(porDefecto) ? porDefecto : []).filter(Boolean))];
+  // Producto sin aptitud conocida (categoría nueva y sin entrada en la matriz):
+  // no hay con qué filtrar, así que se respeta lo elegido tal cual.
+  if (!ap.length) return ordenarZonas(el.length ? el : def, orden);
+  const inter = ap.filter(z => el.indexOf(z) !== -1);
+  if (inter.length) return ordenarZonas(inter, orden);
+  // Nada de lo elegido le sirve a este producto → su zona habitual, si es apta.
+  const interDef = ap.filter(z => def.indexOf(z) !== -1);
+  if (interDef.length) return ordenarZonas(interDef, orden);
+  return [];
 }

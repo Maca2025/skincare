@@ -213,6 +213,22 @@ body {
 .sc-brand, .inv-brand, .rout-step-brand { color: #4A6FA5; font-style: italic; font-weight: 300; }
 
 /* MULTI PICKER (TODA categoría admite varios productos por paso) */
+/* ── MULTIPICKER DE ZONA ──────────────────────────────────────────────────── */
+.zone-pick { background: #FDFAF8; border: 1px solid #F0E4E7; border-radius: 12px; padding: 10px 11px; margin-bottom: 10px; }
+.zone-pick-label { font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: #C4818A; margin-bottom: 8px; }
+.zone-pick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.zone-pick-sub { font-size: 11px; color: #7A6E6A; font-style: italic; margin-top: 8px; line-height: 1.5; }
+.zone-chip { padding: 7px 12px; border-radius: 20px; border: 1.5px solid #EDE0E2; background: #FFF; color: #7A6E6A; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.zone-chip-on { background: #C4818A; border-color: #C4818A; color: #FFF; }
+/* Apagado, no bloqueado: ninguno de los productos elegidos va ahí, pero se
+   puede marcar la zona antes que el producto. */
+.zone-chip-na { opacity: 0.42; }
+.zone-chip-na.zone-chip-on { opacity: 0.62; }
+/* Renglón de zonas en el paso — es el editor: se toca y se corrigen. */
+.sc-zonas { margin-top: 7px; display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8A7E7A; }
+.sc-zonas-editable { cursor: pointer; }
+.sc-zonas-list { flex: 1; line-height: 1.4; }
+.sc-zonas-edit { color: #C4818A; font-size: 12px; flex-shrink: 0; }
 .multi-pick-hint { font-size: 11px; color: #7A6E6A; font-style: italic; margin-bottom: 8px; }
 .spf-item.multi-pick { border: 1.5px solid transparent; }
 .spf-item.multi-pick.multi-on { border-color: #C4818A; background: #FBEAF0; }

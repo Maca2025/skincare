@@ -250,6 +250,21 @@
     <div class="modal-body" id="product-picker-body"></div>
   </div>
 </div>
+<!-- Zonas de una aplicación ya registrada (se abre desde el renglón 📍 del paso) -->
+<div class="modal-overlay" id="zonas-modal" onclick="closeModal('zonas-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📍 Zonas de aplicación</div>
+      <button class="modal-close" onclick="closeModal('zonas-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="zone-pick-sub" id="zonas-modal-sub"></div>
+      <div class="zone-pick-chips" id="zonas-modal-chips"></div>
+      <button class="save-btn" id="zonas-modal-save" onclick="saveZonasEditor()" style="margin-top:10px;margin-bottom:0">Guardar zonas</button>
+    </div>
+  </div>
+</div>
 <!-- Add Product Modal -->
 <div class="modal-overlay" id="add-product-modal" onclick="closeModal('add-product-modal')">
   <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">

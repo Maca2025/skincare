@@ -96,6 +96,37 @@ function ejesDeProducto(p) {
   return out;
 }
 
+// Orden de presentación de las zonas: el de `ZONAS` en activos-matriz.js, en un
+// solo lugar. Se usa tanto para los chips del picker como para lo que se
+// escribe en `zones`, para que el array guardado sea siempre comparable.
+const ZONAS_ORDEN = (typeof ZONAS !== 'undefined')
+  ? Object.keys(ZONAS).sort((a, b) => (ZONAS[a].orden || 99) - (ZONAS[b].orden || 99))
+  : [];
+function zonaLabel(z) {
+  const info = (typeof ZONAS !== 'undefined') ? ZONAS[z] : null;
+  return info ? `${info.icon} ${info.label}` : z;
+}
+// Zonas que se escriben para UN producto. `elegidas` es lo marcado en el picker
+// (o null cuando el registro no pasó por picker: paso fijo, reaplicación
+// rápida, notificación). Sin elección explícita se escriben las zonas por
+// defecto — el mismo resultado que el respaldo del motor, pero ya como DATO:
+// si mañana PRODUCT_ZONAS cambia, los registros viejos conservan lo que pasó.
+// El precio es que un default equivocado queda congelado en el histórico, así
+// que el renglón de zonas del paso es tocable para corregirlo.
+function zonasDeProducto(prod, elegidas) {
+  if (!prod) return Array.isArray(elegidas) ? [...new Set(elegidas.filter(Boolean))] : [];
+  const aptas = (typeof zonasAptasDe === 'function') ? zonasAptasDe(prod) : [];
+  const def = (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[prod.id]) || [];
+  return resolveZonas(elegidas, aptas, def, ZONAS_ORDEN);
+}
+function zonasAptasDeNombre(name) {
+  const p = productByLoggedName(name);
+  return (p && typeof zonasAptasDe === 'function') ? zonasAptasDe(p) : [];
+}
+function zonasDeNombre(name, elegidas) {
+  return zonasDeProducto(productByLoggedName(name), elegidas);
+}
+
 const PRODUCT_CATEGORIES = [
   '🧼 Limpieza',
   '💦 Toners',
@@ -143,19 +174,33 @@ async function checkStep(stepId, event) {
     if (sb) updateProgress(sb.id);
     const nameEl = step.querySelector('.sc-name');
     if (nameEl) {
-      selectedProduct = nameEl.textContent.trim();
-      const ok = await logApplication('rutina', routineStepId);
+      const nombre = nameEl.textContent.trim();
+      selectedProduct = nombre;
+      // Producto fijo: se registra con sus zonas por defecto y se muestran
+      // debajo, tocables. Abrir un picker de zona en cada ✓ sería un toque
+      // extra diario para confirmar lo mismo de siempre.
+      const zonas = zonasDeNombre(nombre, null);
+      const ok = await logApplication('rutina', routineStepId, null);
       if (!ok) { step.classList.remove('done'); if (sb) updateProgress(sb.id); }
+      else if (zonas.length) {
+        setStepZonas(stepId, (ok !== true && ok !== 'queued') ? [ok] : [],
+          zonas, zonasAptasDeNombre(nombre));
+      }
     }
   } else {
     step.classList.remove('done');
     if (sb) updateProgress(sb.id);
     const ok = await unlogRoutineStep(routineStepId, step);
     if (!ok) { step.classList.add('done'); if (sb) updateProgress(sb.id); }
-    else if (step.dataset.picker) {
-      // Paso con picker: quitar el "✓ producto elegido" y regresar el hint.
-      const picked = step.querySelector('.sc-picked');
-      if (picked) picked.outerHTML = '<div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>';
+    else {
+      // Desmarcar BORRA las filas del día: el renglón de zonas ya no describe
+      // ningún registro y tiene que irse con ellas.
+      clearStepZonas(stepId);
+      if (step.dataset.picker) {
+        // Paso con picker: quitar el "✓ producto elegido" y regresar el hint.
+        const picked = step.querySelector('.sc-picked');
+        if (picked) picked.outerHTML = '<div class="sc-pick-hint" style="font-size:11px;color:#C4818A;margin-top:5px;font-style:italic;">Toca para elegir producto →</div>';
+      }
     }
   }
 }
@@ -1945,16 +1990,22 @@ window.addEventListener('offline', renderSyncBanner);
 
 // Devuelve true si el registro quedó guardado (o encolado offline) — los
 // callers usan esto para revertir el checkmark si falló.
-async function logApplication(source, routineStepId) {
+// `zonas` (opcional) = lo marcado en el multipicker de zona. Si no viene, se
+// resuelven las de PRODUCT_ZONAS. Se escribe null cuando no hay nada
+// defendible: el motor cae entonces al respaldo de PRODUCT_ZONAS, igual que
+// todos los registros anteriores a esta columna.
+async function logApplication(source, routineStepId, zonas) {
   if (!selectedProduct) return false;
   const name = selectedProduct;
   selectedProduct = null;
+  const zonasFinal = zonasDeNombre(name, zonas);
   const row = {
     product_name: name,
     product_id: productIdForLoggedName(name),
     applied_at: getBackdateOverrideISO() || new Date().toISOString(),
     source: source || null,
-    routine_step_id: routineStepId || null
+    routine_step_id: routineStepId || null,
+    zones: zonasFinal.length ? zonasFinal : null
   };
   // Se pide el id de vuelta para que quien registre pueda DESHACER esa fila
   // exacta. Sigue devolviendo un valor truthy, así que los callers que solo
@@ -2803,6 +2854,137 @@ function showStepProduct(step, productName) {
   else sc.insertAdjacentHTML('beforeend', html);
 }
 
+// ── ZONAS EN EL PASO: MOSTRARLAS Y CORREGIRLAS ───────────────────────────────
+// El paso de producto FIJO no abre picker (marcar debe seguir siendo un toque),
+// así que registra con las zonas por defecto y las muestra debajo. Ese renglón
+// es el editor: se toca y se corrigen, sin sumar fricción al caso normal.
+//
+// El estado va en un Map por id de elemento y NO en data-attributes: son arrays
+// de ids que tendrían que escaparse a mano dentro de un onclick, y ese es el
+// patrón que ya causó bugs de escaping (regla 2).
+const _stepZonas = new Map();
+function setStepZonas(stepElId, appIds, zonas, aptas) {
+  if (!stepElId) return;
+  _stepZonas.set(stepElId, {
+    ids: (appIds || []).filter(Boolean),
+    zonas: zonas || [],
+    aptas: (aptas && aptas.length) ? aptas : (zonas || [])
+  });
+  renderStepZonasRow(stepElId);
+}
+function stepZonasRowHTML(stepElId) {
+  const st = _stepZonas.get(stepElId);
+  if (!st || !st.zonas.length) return '';
+  // Sin id de fila no hay nada que actualizar (registro encolado offline o
+  // hidratado por un fallback que no identifica la fila): se muestra, pero no
+  // se ofrece editar — prometer un editor que no puede guardar es peor.
+  const editable = st.ids.length > 0;
+  const lapiz = editable ? `<span class="sc-zonas-edit">✎</span>` : '';
+  const click = editable
+    ? ` onclick="event.stopPropagation(); openZonasEditorFromStep('${cssSafe(stepElId)}')"`
+    : ' onclick="event.stopPropagation()"';
+  return `<div class="sc-zonas${editable ? ' sc-zonas-editable' : ''}"${click}>
+  <span class="sc-zonas-list">📍 ${esc(st.zonas.map(zonaLabel).join(' · '))}</span>${lapiz}
+</div>`;
+}
+function renderStepZonasRow(stepElId) {
+  const step = document.getElementById(stepElId);
+  if (!step) return;
+  const sc = step.querySelector('.sc');
+  if (!sc) return;
+  const html = stepZonasRowHTML(stepElId);
+  const existing = sc.querySelector('.sc-zonas');
+  if (existing) {
+    if (html) existing.outerHTML = html; else existing.remove();
+  } else if (html) {
+    sc.insertAdjacentHTML('beforeend', html);
+  }
+}
+function clearStepZonas(stepElId) {
+  _stepZonas.delete(stepElId);
+  const step = document.getElementById(stepElId);
+  const existing = step && step.querySelector('.sc-zonas');
+  if (existing) existing.remove();
+}
+// Al re-renderizar el día, las zonas se reconstruyen de las filas del propio
+// registro (buildHydration.byStepIdApps). Los registros previos a la columna
+// traen zones null: se muestran las de PRODUCT_ZONAS, que es exactamente lo que
+// el motor está usando para ellos — y si las corriges, quedan explícitas.
+function registerStepZonasFromRows(stepElId, rows) {
+  if (!rows || !rows.length) return '';
+  const zonasPorFila = rows.map(r => {
+    if (Array.isArray(r.zones) && r.zones.length) return r.zones;
+    return (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[r.product_id]) || [];
+  });
+  const aptas = rows.map(r => {
+    const p = r.product_id ? allProducts.find(x => x.id === r.product_id) : productByLoggedName(r.product_name);
+    return (p && typeof zonasAptasDe === 'function') ? zonasAptasDe(p) : [];
+  });
+  const zonas = unionZonas(zonasPorFila, ZONAS_ORDEN);
+  if (!zonas.length) return '';
+  _stepZonas.set(stepElId, {
+    ids: rows.map(r => r.id).filter(Boolean),
+    zonas,
+    aptas: unionZonas(aptas, ZONAS_ORDEN)
+  });
+  return stepZonasRowHTML(stepElId);
+}
+let _zonaEdit = { stepElId: null, ids: [], sel: new Set(), aptas: [] };
+function openZonasEditorFromStep(stepElId) {
+  const st = _stepZonas.get(stepElId);
+  if (!st || !st.ids.length) return;
+  _zonaEdit = {
+    stepElId,
+    ids: st.ids.slice(),
+    sel: new Set(st.zonas),
+    aptas: (st.aptas && st.aptas.length) ? st.aptas : st.zonas.slice()
+  };
+  const sub = document.getElementById('zonas-modal-sub');
+  if (sub) sub.textContent = st.ids.length > 1
+    ? `Se aplicará a los ${st.ids.length} registros de este paso.`
+    : 'Corrige dónde te lo aplicaste.';
+  renderZonasEditorChips();
+  openModal('zonas-modal');
+}
+function renderZonasEditorChips() {
+  const wrap = document.getElementById('zonas-modal-chips');
+  if (!wrap) return;
+  wrap.innerHTML = _zonaEdit.aptas.map(z => {
+    const on = _zonaEdit.sel.has(z);
+    return `<button type="button" class="zone-chip${on ? ' zone-chip-on' : ''}"
+  onclick="event.stopPropagation(); toggleZonaEdit('${cssSafe(z)}')">${esc(zonaLabel(z))}</button>`;
+  }).join('');
+  const btn = document.getElementById('zonas-modal-save');
+  if (btn) {
+    btn.disabled = _zonaEdit.sel.size === 0;
+    btn.textContent = _zonaEdit.sel.size ? 'Guardar zonas' : '📍 Elige al menos una zona';
+  }
+}
+function toggleZonaEdit(z) {
+  if (_zonaEdit.sel.has(z)) _zonaEdit.sel.delete(z); else _zonaEdit.sel.add(z);
+  renderZonasEditorChips();
+}
+async function saveZonasEditor() {
+  const zonas = ordenarZonas([..._zonaEdit.sel], ZONAS_ORDEN);
+  if (!zonas.length || !_zonaEdit.ids.length) return;
+  const stepElId = _zonaEdit.stepElId;
+  const previas = (_stepZonas.get(stepElId) || {}).zonas || [];
+  const st = _stepZonas.get(stepElId);
+  // Optimista con rollback (regla 3): se pinta ya, y si Supabase falla vuelve
+  // a lo anterior en vez de dejar en pantalla una zona que no se guardó.
+  if (st) { st.zonas = zonas; renderStepZonasRow(stepElId); }
+  closeModal('zonas-modal');
+  const { error } = await db.from('product_applications')
+    .update({ zones: zonas }).in('id', _zonaEdit.ids);
+  if (error) {
+    if (st) { st.zonas = previas; renderStepZonasRow(stepElId); }
+    showToast('❌ ' + error.message, 'error');
+    return;
+  }
+  historyLoaded = false;
+  showToast('📍 Zonas actualizadas', 'success');
+}
+
 // ── PICKERS ──────────────────────────────────────────────────────────────────
 // Texto sobre el que busca el filtro del picker: nombre, marca y etiquetas.
 function searchKeyOf(p) {
@@ -2882,6 +3064,74 @@ function pickerModalOf(cat) {
 const AM_PM_CUTOFF_HOUR = 15;
 let multiPickSelected = new Set();
 let multiPickModalId = 'product-picker-modal';
+// ── MULTIPICKER DE ZONA ──────────────────────────────────────────────────────
+// La columna `zones` existía y el motor ya la leía, pero NADA la escribía: todo
+// se calculaba con PRODUCT_ZONAS. Esto es lo que la escribe.
+//
+// Comportamiento pedido: PRESELECCIONADO Y EDITABLE. Los chips se rellenan
+// solos con las zonas habituales de lo que vas eligiendo, así que el caso
+// normal no suma ni un toque; en cuanto tocas un chip, `zonePickDirty` se
+// enciende y la preselección deja de pisarte la elección. Ese flag es todo el
+// truco: sin él, elegir un segundo producto revertía lo que acababas de marcar.
+let zonePickSel = new Set();
+let zonePickDirty = false;
+let zonePickCat = '';
+function zonasCandidatasDeCat(cat, items) {
+  // Unión de la aptitud de los productos QUE SE VEN en el picker, no la tabla
+  // de categorías: así un override (jabón de manos catalogado como Limpieza)
+  // aporta su zona sin tener que duplicar la excepción aquí.
+  const porCat = (typeof ZONAS_APTAS_POR_CATEGORIA !== 'undefined' && ZONAS_APTAS_POR_CATEGORIA[cat]) || [];
+  const deItems = (items || []).map(p => (typeof zonasAptasDe === 'function') ? zonasAptasDe(p) : []);
+  return unionZonas([porCat].concat(deItems), ZONAS_ORDEN);
+}
+function zonePickProductosElegidos() {
+  return [...multiPickSelected].map(productByLoggedName).filter(Boolean);
+}
+// Preselección: unión de las zonas habituales de lo elegido. Sin nada elegido
+// todavía no adivina — los chips se ven apagados y el botón pide seleccionar.
+function syncZonePickFromSelection() {
+  if (zonePickDirty) return;
+  const prods = zonePickProductosElegidos();
+  const defs = prods.map(p => (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[p.id]) || []);
+  zonePickSel = new Set(unionZonas(defs, ZONAS_ORDEN));
+}
+function renderZonePickChips() {
+  const wrap = document.getElementById('zone-pick-chips');
+  if (!wrap) return;
+  const candidatas = zonasCandidatasDeCat(zonePickCat, allProducts.filter(p => p.category === zonePickCat));
+  const prods = zonePickProductosElegidos();
+  const aptasElegidas = new Set(unionZonas(
+    prods.map(p => (typeof zonasAptasDe === 'function') ? zonasAptasDe(p) : []), ZONAS_ORDEN));
+  wrap.innerHTML = candidatas.map(z => {
+    const on = zonePickSel.has(z);
+    // Apagado (no bloqueado): ninguno de los productos elegidos va ahí. Se deja
+    // tocable porque puedes marcar la zona antes que el producto.
+    const na = prods.length && !aptasElegidas.has(z);
+    return `<button type="button" class="zone-chip${on ? ' zone-chip-on' : ''}${na ? ' zone-chip-na' : ''}"
+  onclick="event.stopPropagation(); toggleZonePick('${cssSafe(z)}')">${esc(zonaLabel(z))}</button>`;
+  }).join('');
+  const sub = document.getElementById('zone-pick-sub');
+  if (sub) {
+    sub.textContent = zonePickSel.size
+      ? [...zonePickSel].map(zonaLabel).join(' · ')
+      : 'Elige un producto y se marcan solas tus zonas de siempre.';
+  }
+}
+function toggleZonePick(z) {
+  zonePickDirty = true;
+  if (zonePickSel.has(z)) zonePickSel.delete(z); else zonePickSel.add(z);
+  renderZonePickChips();
+  updateMultiPickBtn();
+}
+function updateMultiPickBtn() {
+  const btn = document.getElementById('multi-pick-btn');
+  if (!btn) return;
+  const nP = multiPickSelected.size, nZ = zonePickSel.size;
+  btn.disabled = nP === 0 || nZ === 0;
+  if (!nP) { btn.textContent = 'Aplicar seleccionados'; return; }
+  if (!nZ) { btn.textContent = '📍 Elige al menos una zona'; return; }
+  btn.textContent = `Aplicar ${nP} en ${nZ === 1 ? [...zonePickSel].map(zonaLabel)[0] : nZ + ' zonas'}`;
+}
 function multiPickItemHTML(p) {
   const logName = p.logged_as || `${p.emoji} ${p.name}`;
   return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
@@ -2902,13 +3152,23 @@ function openMultiPickerByCat(stepId, cat) {
   const body = document.getElementById(cfg.body);
   if (!body) { showToast('❌ Picker no disponible', 'error'); return; }
   const items = allProducts.filter(p => p.category === cat && cfg.filter(p));
+  zonePickCat = cat;
+  zonePickSel = new Set();
+  zonePickDirty = false;
   const hint = `<div class="multi-pick-hint">Toca los que aplicaste — puedes elegir varios.</div>`;
-  body.innerHTML = (cfg.warn || '') + hint + pickerSearchHTML(items.length) +
+  const zonaBlock = `<div class="zone-pick">
+  <div class="zone-pick-label">📍 ¿Dónde te lo aplicaste?</div>
+  <div class="zone-pick-chips" id="zone-pick-chips"></div>
+  <div class="zone-pick-sub" id="zone-pick-sub"></div>
+</div>`;
+  body.innerHTML = (cfg.warn || '') + hint + zonaBlock + pickerSearchHTML(items.length) +
     (items.length
       ? items.map(multiPickItemHTML).join('')
       : '<div class="empty-state">No hay productos de esta categoría en Stock todavía.</div>') +
     `<button class="save-btn" id="multi-pick-btn" onclick="confirmMultiPick()" disabled style="margin-top:6px;margin-bottom:0">Aplicar seleccionados</button>` +
     (cfg.footer || '');
+  renderZonePickChips();
+  updateMultiPickBtn();
   openModal(cfg.modal);
 }
 // Único wrapper que sobrevive: lo llama el recordatorio de reaplicar SPF, que
@@ -2926,17 +3186,14 @@ function toggleMultiPick(el) {
     el.classList.add('multi-on');
     if (check) check.textContent = '●';
   }
-  const btn = document.getElementById('multi-pick-btn');
-  if (btn) {
-    btn.disabled = multiPickSelected.size === 0;
-    btn.textContent = multiPickSelected.size
-      ? `Aplicar ${multiPickSelected.size} seleccionado${multiPickSelected.size > 1 ? 's' : ''}`
-      : 'Aplicar seleccionados';
-  }
+  syncZonePickFromSelection();
+  renderZonePickChips();
+  updateMultiPickBtn();
 }
 async function confirmMultiPick() {
   const names = [...multiPickSelected];
-  if (!names.length) return;
+  const zonasElegidas = [...zonePickSel];
+  if (!names.length || !zonasElegidas.length) return;
   multiPickSelected = new Set();
   const source = currentPickerStepId ? 'rutina' : 'reaplicacion';
   const routineStepId = routineStepIdFromPickerStepId(currentPickerStepId);
@@ -2944,10 +3201,23 @@ async function confirmMultiPick() {
   closeModal(multiPickModalId);
   markPickerStepDone(names.join(' · '));
   let okCount = 0;
+  const appIds = [];
+  const zonasEscritas = [];
+  const ajustados = [];
   for (const name of names) {
     selectedProduct = name;
-    const ok = await logApplication(source, routineStepId);
+    // Cada producto se queda con la parte de lo elegido que le sirve: marcar
+    // "cara + manos" con una crema de manos en la tanda no la registra en cara.
+    const zonasProd = zonasDeNombre(name, zonasElegidas);
+    if (zonasProd.length !== zonasElegidas.length) ajustados.push(name);
+    zonasEscritas.push(...zonasProd);
+    const ok = await logApplication(source, routineStepId, zonasElegidas);
     if (ok) okCount++;
+    if (ok && ok !== true && ok !== 'queued') appIds.push(ok);
+  }
+  if (okCount && stepElId) {
+    setStepZonas(stepElId, appIds, unionZonas([zonasEscritas], ZONAS_ORDEN),
+      unionZonas(names.map(zonasAptasDeNombre), ZONAS_ORDEN));
   }
   // Rollback del checkmark solo si NINGUNO se pudo registrar.
   if (okCount === 0 && stepElId) {
@@ -2959,6 +3229,12 @@ async function confirmMultiPick() {
     }
   } else if (okCount > 1) {
     showToast(`✅ ${okCount} productos registrados`, 'success');
+  }
+  // Aviso, no corrección silenciosa: si algo no iba donde marcaste, se dice.
+  // VA AL FINAL a propósito: showToast reemplaza el aviso anterior, y puesto
+  // antes lo tapaba el "✅ N productos registrados" en cuanto había varios.
+  if (okCount && ajustados.length) {
+    showToast(`📍 ${ajustados.length} producto(s) se registraron en su zona habitual`, '');
   }
 }
 // ── SPF COMPARE TABLE ────────────────────────────────────────────────────────
@@ -3939,6 +4215,13 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
   // con sus tests: reglas 4 y 19 de ARQUITECTURA.md.
   const appliedName = resolveStepHydration(s, todayHydration, sectionKey, `${dEmoji} ${dName}`.trim());
   const doneCls = appliedName ? ' done' : '';
+  // Renglón de zonas de lo ya registrado en ESTE paso. Se reconstruye de las
+  // filas (byStepIdApps) y no de un estado en memoria, para que sobreviva a
+  // recargar el día — si desapareciera al refrescar parecería no haberse
+  // guardado, que es justo la duda que el renglón viene a resolver.
+  const _appRows = (appliedName && todayHydration && todayHydration.byStepIdApps)
+    ? (todayHydration.byStepIdApps.get(s.id) || []) : [];
+  const zonasRow = registerStepZonasFromRows(`step_${id}`, _appRows);
   if (s.picker_category) {
     const pickerFn = pickerFnForCat(s.picker_category, `step_${id}`);
     const pickedBlock = appliedName
@@ -3955,6 +4238,7 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
     <div class="sc-top"><span class="sc-name">${esc(s.emoji||'')} ${esc(s.name)}</span></div>
     <div class="sc-brand">${esc(s.brand||'')}</div>
     ${pickedBlock}
+    ${zonasRow}
   </div>
   <div class="step-chevron" onclick="try{${pickerFn}}catch(e){showToast('❌ Picker: '+e.message,'error')}">›</div>
 </div>`;
@@ -3969,6 +4253,7 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
     <div class="sc-detail" id="${id}">
       <div class="det-title">How to apply</div>${fmtRich(s.how_to_apply||'')}${why}${warn}
     </div>
+    ${zonasRow}
   </div>
   <div class="step-chevron" onclick="toggleStep('step_${id}','${id}')">›</div>
 </div>`;
