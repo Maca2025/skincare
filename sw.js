@@ -4,6 +4,10 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v8 — un solo picker vivo a la vez: los tres modales de picker repetían los
+// ids `zone-pick-chips` y `multi-pick-btn`, y getElementById devuelve el primero
+// del documento. Con el picker de SPF facial ya abierto, el de SPF corporal
+// salía sin chips de zona y con "Aplicar" muerto.
 // v7 — `no_reapp` deja de ESCONDER y pasa a DEGRADAR: en un paso de rutina el
 // producto aparece normal, y fuera de rutina baja al final con una nota. La
 // tretinoína no salía en el picker de Activos.
@@ -12,7 +16,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v7';
+const CACHE = 'skincare-shell-v8';
 const SHELL = [
   './',
   './index.html',

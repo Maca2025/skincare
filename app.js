@@ -3082,6 +3082,30 @@ let multiPickModalId = 'product-picker-modal';
 let zonePickSel = new Set();
 let zonePickDirty = false;
 let zonePickCat = '';
+// ── UN SOLO PICKER VIVO A LA VEZ ─────────────────────────────────────────────
+// Hay TRES modales de picker (SPF cara, SPF cuerpo y el genérico) y los tres
+// pintan el mismo HTML dentro, con los mismos ids: `zone-pick-chips`,
+// `multi-pick-btn`. `getElementById` devuelve el PRIMERO del documento, no el
+// visible, así que con dos modales cargados los chips se pintaban en el que
+// estaba oculto y el botón que se habilitaba era el de ese otro. Resultado:
+// producto seleccionado, cero chips y "Aplicar" muerto.
+//
+// Dos candados, no uno:
+//   1. al abrir un picker se VACÍAN los demás → los ids vuelven a ser únicos;
+//   2. las búsquedas se acotan al body activo → aunque mañana alguien deje HTML
+//      en otro modal, esto sigue apuntando al que se ve.
+// La lista de bodies se DERIVA de la config (regla 5): una lista a mano se
+// desincroniza en cuanto se agregue otro modal.
+let multiPickBodyId = 'product-picker-body';
+function pickerBodyIds() {
+  return [...new Set([PICKER_MODAL_DEFAULT.body]
+    .concat(Object.keys(PICKER_MODALS).map(k => PICKER_MODALS[k].body))
+    .filter(Boolean))];
+}
+function pickerEl(id) {
+  const body = document.getElementById(multiPickBodyId);
+  return body ? body.querySelector('#' + id) : document.getElementById(id);
+}
 function zonasCandidatasDeCat(cat, items) {
   // Unión de la aptitud de los productos QUE SE VEN en el picker, no la tabla
   // de categorías: así un override (jabón de manos catalogado como Limpieza)
@@ -3102,7 +3126,7 @@ function syncZonePickFromSelection() {
   zonePickSel = new Set(unionZonas(defs, ZONAS_ORDEN));
 }
 function renderZonePickChips() {
-  const wrap = document.getElementById('zone-pick-chips');
+  const wrap = pickerEl('zone-pick-chips');
   if (!wrap) return;
   const candidatas = zonasCandidatasDeCat(zonePickCat, allProducts.filter(p => p.category === zonePickCat));
   const prods = zonePickProductosElegidos();
@@ -3116,7 +3140,7 @@ function renderZonePickChips() {
     return `<button type="button" class="zone-chip${on ? ' zone-chip-on' : ''}${na ? ' zone-chip-na' : ''}"
   onclick="event.stopPropagation(); toggleZonePick('${cssSafe(z)}')">${esc(zonaLabel(z))}</button>`;
   }).join('');
-  const sub = document.getElementById('zone-pick-sub');
+  const sub = pickerEl('zone-pick-sub');
   if (sub) {
     sub.textContent = zonePickSel.size
       ? [...zonePickSel].map(zonaLabel).join(' · ')
@@ -3130,7 +3154,7 @@ function toggleZonePick(z) {
   updateMultiPickBtn();
 }
 function updateMultiPickBtn() {
-  const btn = document.getElementById('multi-pick-btn');
+  const btn = pickerEl('multi-pick-btn');
   if (!btn) return;
   const nP = multiPickSelected.size, nZ = zonePickSel.size;
   btn.disabled = nP === 0 || nZ === 0;
@@ -3162,6 +3186,13 @@ function openMultiPickerByCat(stepId, cat) {
   }
   const body = document.getElementById(cfg.body);
   if (!body) { showToast('❌ Picker no disponible', 'error'); return; }
+  // Candado 1: los otros pickers se vacían para que no queden ids repetidos.
+  multiPickBodyId = cfg.body;
+  pickerBodyIds().forEach(id => {
+    if (id === cfg.body) return;
+    const otro = document.getElementById(id);
+    if (otro) otro.innerHTML = '';
+  });
   // `no_reapp` YA NO ESCONDE A NADIE: DEGRADA.
   //
   // La bandera nació para la rejilla de reaplicación ("no me ofrezcas esto para
