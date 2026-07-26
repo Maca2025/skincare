@@ -592,7 +592,10 @@ body {
    sistema es más cómodo y accesible que cualquier menú custom, y con ~13
    categorías y ~40 marcas un menú a mano obligaría a scroll interno. */
 .inv-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.inv-filter-sel { flex: 1 1 30%; min-width: 0; padding: 8px 26px 8px 10px;
+/* 45% y no 30%: con cuatro filtros (tipo · marca · zona · función) se acomodan
+   en una rejilla 2x2 legible en móvil, en vez de cuatro columnas apretadas
+   donde ninguna etiqueta cabe. */
+.inv-filter-sel { flex: 1 1 45%; min-width: 0; padding: 8px 26px 8px 10px;
   border: 1.5px solid #EAE4E0; border-radius: 12px; background: white;
   font-family: inherit; font-size: 11.5px; font-weight: 600; color: #6A5A5A;
   cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.15s;

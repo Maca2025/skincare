@@ -375,7 +375,10 @@ const ZONAS_APTAS_POR_CATEGORIA = {
   '🫧 Exfoliantes':     ['cara', 'cuello'],
   '👁️ Contorno Ojos':  ['cara'],
   '🌞 SPF Facial':      ['cara', 'cuello', 'manos'],
-  '☀️ SPF Corporal':    ['cuerpo', 'manos', 'cuello'],
+  // Sin 'cuello': la usuaria confirma que nunca se pone protector corporal ahí,
+  // y ofrecerlo solo ensuciaba el picker de cuello. El cuello se cubre con los
+  // SPF faciales, que sí lo declaran.
+  '☀️ SPF Corporal':    ['cuerpo', 'manos'],
   '🧴 Cuerpo':          ['cuerpo', 'manos'],
   '✋ Manos':           ['manos', 'cuerpo'],
   '🦶 Pies':            ['pies'],

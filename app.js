@@ -3152,31 +3152,44 @@ async function loadInventory() {
 // faltan productos" porque quedó un filtro puesto de la sesión anterior.
 let invFilterCat = '';
 let invFilterBrand = '';
-let invFilterAxis = '';
+let invFilterZona = '';
+let invFilterFuncion = '';
 // La marca viene con descriptores pegados ('SKIN1004 · centella 50%+HA',
 // 'PURITO Seoul · barrera piel sensible'). Se corta en el '·' para que las
 // variantes del mismo fabricante agrupen en una sola entrada del filtro.
 function invBrandOf(p) { return String(p.brand || '').split('·')[0].trim(); }
-// Ejes que toca un producto según la matriz de dosis. Un producto que actúa
-// sobre varios aparece en el filtro de TODOS ellos — así lo pidió la usuaria.
-// Desde el refactor función × zona, PRODUCT_DOSE ya no guarda ejes sino
-// FUNCIONES: el eje se compone con las zonas del producto. Sin esto el filtro
-// ofrecía 'barrera' y 'textura' sueltos y no encontraba nada.
-function invAxesOf(p) { return ejesDeProducto(p); }
+// ── ZONA Y FUNCIÓN SEPARADAS, NO EL EJE COMPUESTO ───────────────────────────
+// Antes había un solo filtro por EJE ('cuello_textura'), que mezclaba las dos
+// preguntas y obligaba a recorrer una lista larguísima de combinaciones. Ahora
+// son dos filtros que se componen: "lo que renueva textura" × "en manos".
+//
+// La ZONA usa `zonasAptasDe` (dónde PUEDE ir), no las zonas de dosis: en Stock
+// la pregunta es "qué tengo que pueda usar aquí", no "dónde le he entregado
+// estímulo". Es justo la distinción que motivó el refactor.
+function invZonasOf(p) {
+  return (typeof zonasAptasDe === 'function') ? zonasAptasDe(p) : [];
+}
+function invFuncionesOf(p) {
+  if (typeof PRODUCT_DOSE === 'undefined') return [];
+  const pot = PRODUCT_DOSE[p.id];
+  return pot ? Object.keys(pot) : [];
+}
 function invMatches(p) {
   if (invFilterCat && p.category !== invFilterCat) return false;
   if (invFilterBrand && invBrandOf(p) !== invFilterBrand) return false;
-  if (invFilterAxis && !invAxesOf(p).includes(invFilterAxis)) return false;
+  if (invFilterZona && !invZonasOf(p).includes(invFilterZona)) return false;
+  if (invFilterFuncion && !invFuncionesOf(p).includes(invFilterFuncion)) return false;
   return true;
 }
 function setInvFilter(which, value) {
   if (which === 'cat') invFilterCat = value;
   else if (which === 'brand') invFilterBrand = value;
-  else if (which === 'axis') invFilterAxis = value;
+  else if (which === 'zona') invFilterZona = value;
+  else if (which === 'funcion') invFilterFuncion = value;
   renderInventory();
 }
 function clearInvFilters() {
-  invFilterCat = ''; invFilterBrand = ''; invFilterAxis = '';
+  invFilterCat = ''; invFilterBrand = ''; invFilterZona = ''; invFilterFuncion = '';
   renderInventory();
 }
 // Las opciones se GENERAN del catálogo real, nunca se hardcodean (regla 5):
@@ -3186,15 +3199,17 @@ function invFilterBarHTML() {
   const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
   const brands = [...new Set(allProducts.map(invBrandOf).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'es'));
-  const axesPresentes = new Set();
-  allProducts.forEach(p => invAxesOf(p).forEach(a => axesPresentes.add(a)));
-  // Se respeta el orden de declaración de DOSE_AXES (cara → cuerpo → resto),
-  // que es el mismo con que se leen las barras en Progreso.
-  const axes = (typeof DOSE_AXES !== 'undefined' ? Object.keys(DOSE_AXES) : [])
-    .filter(a => axesPresentes.has(a));
+  // Solo se ofrecen zonas y funciones que algún producto tenga: un desplegable
+  // con opciones que no filtran nada hace parecer que el catálogo está vacío.
+  const zPres = new Set(); allProducts.forEach(p => invZonasOf(p).forEach(z => zPres.add(z)));
+  const fPres = new Set(); allProducts.forEach(p => invFuncionesOf(p).forEach(f => fPres.add(f)));
+  // Orden de declaración: ZONAS por `orden`, FUNCIONES como se leen en Progreso.
+  const zonas = (typeof ZONAS !== 'undefined' ? Object.keys(ZONAS) : [])
+    .filter(z => zPres.has(z)).sort((a, b) => (ZONAS[a].orden || 99) - (ZONAS[b].orden || 99));
+  const funcs = (typeof FUNCIONES !== 'undefined' ? Object.keys(FUNCIONES) : []).filter(f => fPres.has(f));
   const opt = (v, label, sel) =>
     `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(label)}</option>`;
-  const activos = [invFilterCat, invFilterBrand, invFilterAxis].filter(Boolean).length;
+  const activos = [invFilterCat, invFilterBrand, invFilterZona, invFilterFuncion].filter(Boolean).length;
   const clearBtn = activos
     ? `<button class="inv-filter-clear" onclick="clearInvFilters()">✕ Limpiar filtros</button>`
     : '';
@@ -3205,8 +3220,11 @@ function invFilterBarHTML() {
   <select class="inv-filter-sel${invFilterBrand ? ' on' : ''}" onchange="setInvFilter('brand', this.value)" aria-label="Filtrar por marca">
     ${opt('', 'Toda marca', invFilterBrand)}${brands.map(b => opt(b, b, invFilterBrand)).join('')}
   </select>
-  <select class="inv-filter-sel${invFilterAxis ? ' on' : ''}" onchange="setInvFilter('axis', this.value)" aria-label="Filtrar por eje de progreso">
-    ${opt('', 'Todo eje', invFilterAxis)}${axes.map(a => opt(a, `${DOSE_AXES[a].icon} ${DOSE_AXES[a].label}`, invFilterAxis)).join('')}
+  <select class="inv-filter-sel${invFilterZona ? ' on' : ''}" onchange="setInvFilter('zona', this.value)" aria-label="Filtrar por zona del cuerpo">
+    ${opt('', 'Toda zona', invFilterZona)}${zonas.map(z => opt(z, `${ZONAS[z].icon} ${ZONAS[z].label}`, invFilterZona)).join('')}
+  </select>
+  <select class="inv-filter-sel${invFilterFuncion ? ' on' : ''}" onchange="setInvFilter('funcion', this.value)" aria-label="Filtrar por función">
+    ${opt('', 'Toda función', invFilterFuncion)}${funcs.map(f => opt(f, `${FUNCIONES[f].icon} ${FUNCIONES[f].label}`, invFilterFuncion)).join('')}
   </select>
   ${clearBtn}
 </div>`;
@@ -3215,7 +3233,7 @@ function renderInventory() {
   const el = document.getElementById('inventory-content');
   if (!el) return;
   const visibles = allProducts.filter(invMatches);
-  const filtrando = !!(invFilterCat || invFilterBrand || invFilterAxis);
+  const filtrando = !!(invFilterCat || invFilterBrand || invFilterZona || invFilterFuncion);
   // El resumen cuenta lo FILTRADO, no el catálogo entero: con un filtro puesto,
   // "3 sin stock" tiene que referirse a lo que estás mirando. Se rotula abajo
   // para que no se confunda con el total.
