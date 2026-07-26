@@ -233,6 +233,11 @@ body {
 .spf-item.multi-pick { border: 1.5px solid transparent; }
 .spf-item.multi-pick.multi-on { border-color: #C4818A; background: #FBEAF0; }
 .multi-pick-check { color: #C4818A; font-weight: 800; margin-right: 4px; }
+/* Degradado por `no_reapp`: va al final y se ve más apagado, pero se elige
+   igual — el progreso mide dosis, no obediencia. */
+.spf-item.multi-pick-degradado { opacity: 0.72; }
+.spf-item.multi-pick-degradado.multi-on { opacity: 1; }
+.spf-item-noreapp { font-size: 10.5px; color: #9A8888; font-style: italic; margin-top: 3px; }
 /* CONFIRM SHEET (reemplaza a confirm() nativo) */
 .confirm-body { padding: 22px 20px 30px; text-align: center; }
 .confirm-msg { font-size: 14px; color: #4A3E3A; line-height: 1.6; margin-bottom: 18px; }

@@ -3138,10 +3138,15 @@ function updateMultiPickBtn() {
   if (!nZ) { btn.textContent = '📍 Elige al menos una zona'; return; }
   btn.textContent = `Aplicar ${nP} en ${nZ === 1 ? [...zonePickSel].map(zonaLabel)[0] : nZ + ' zonas'}`;
 }
-function multiPickItemHTML(p) {
+function multiPickItemHTML(p, degradado) {
   const logName = p.logged_as || `${p.emoji} ${p.name}`;
-  return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
+  // `degradado` = va al final de la lista por `no_reapp`. Se marca visualmente
+  // para que se entienda por qué está hasta abajo, pero se puede elegir igual.
+  const nota = degradado
+    ? `<div class="spf-item-noreapp">· no suele reaplicarse — regístralo igual si te lo pusiste</div>` : '';
+  return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick${degradado ? ' multi-pick-degradado' : ''}" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
   <div class="spf-item-name"><span class="multi-pick-check">○</span> ${prodLabelHTML(p)}</div>
+  ${nota}
   <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
   <div class="spf-item-note">${fmtRich(p.note || '')}</div>
 </div>`;
@@ -3157,14 +3162,23 @@ function openMultiPickerByCat(stepId, cat) {
   }
   const body = document.getElementById(cfg.body);
   if (!body) { showToast('❌ Picker no disponible', 'error'); return; }
-  // `no_reapp` SOLO esconde en el contexto de reaplicación (sin paso de rutina),
-  // que es la pregunta para la que se creó la bandera: "no me ofrezcas esto para
-  // volver a ponérmelo a media tarde". La tretinoína la tiene, y como el picker
-  // se unificó, esa misma bandera la estaba escondiendo también del paso de
-  // rutina "Activos" — donde sí tiene que estar. Una bandera que responde una
-  // pregunta no puede usarse para contestar otra.
-  const items = allProducts.filter(p =>
-    p.category === cat && cfg.filter(p) && (stepId || cfg.ignoreNoReapp || !p.no_reapp));
+  // `no_reapp` YA NO ESCONDE A NADIE: DEGRADA.
+  //
+  // La bandera nació para la rejilla de reaplicación ("no me ofrezcas esto para
+  // volver a ponérmelo a media tarde"). Cuando el picker se unificó, pasó a
+  // esconder la tretinoína también del paso de rutina "Activos", donde sí tiene
+  // que estar — una bandera que responde una pregunta usada para contestar otra.
+  //
+  // Esconderla del camino LIBRE tampoco se sostiene: la regla 1 dice que el
+  // progreso mide DOSIS, no obediencia, y un producto que no se puede registrar
+  // fuera de la rutina es un producto invisible para el motor. Es exactamente
+  // el fallo que originó la Fase B (33 de 74 productos invisibles).
+  //
+  // Así que fuera de un paso de rutina baja al final de la lista con una nota,
+  // en vez de desaparecer. Decisión de la usuaria, 2026-07-26.
+  const degradar = p => !stepId && !cfg.ignoreNoReapp && !!p.no_reapp;
+  const items = allProducts.filter(p => p.category === cat && cfg.filter(p))
+    .sort((a, b) => (degradar(a) ? 1 : 0) - (degradar(b) ? 1 : 0));
   zonePickCat = cat;
   zonePickSel = new Set();
   zonePickDirty = false;
@@ -3176,7 +3190,7 @@ function openMultiPickerByCat(stepId, cat) {
 </div>`;
   body.innerHTML = (cfg.warn || '') + hint + zonaBlock + pickerSearchHTML(items.length) +
     (items.length
-      ? items.map(multiPickItemHTML).join('')
+      ? items.map(p => multiPickItemHTML(p, degradar(p))).join('')
       : '<div class="empty-state">No hay productos de esta categoría en Stock todavía.</div>') +
     `<button class="save-btn" id="multi-pick-btn" onclick="confirmMultiPick()" disabled style="margin-top:6px;margin-bottom:0">Aplicar seleccionados</button>` +
     (cfg.footer || '');
