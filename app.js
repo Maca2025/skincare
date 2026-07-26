@@ -63,6 +63,39 @@ async function loadProducts() {
 }
 
 // ── PRODUCT CATEGORIES (lista maestra — única fuente de verdad) ──────────────
+// ── EJE = FUNCIÓN × ZONA ────────────────────────────────────────────────────
+// Reproduce EXACTAMENTE el naming de DOSE_AXES en activos-matriz.js. No es
+// decorativo: las claves se conservaron del modelo anterior para no invalidar
+// los techos recalibrados con datos reales, así que cualquier cambio aquí tiene
+// que ir acompañado del cambio allá.
+//   · cara      → sin prefijo ('textura', 'firmeza'…)
+//   · manos     → 'manos' para aclarado (clave histórica), 'manos_X' el resto
+//   · monofunción (pies/labios/cabello) → su propio nombre, y SOLO con su
+//     función: "firmeza de pies" no existe y devuelve null en vez de inventar
+//     un eje que nadie calibró.
+const ZONA_SOLO_FUNCION = { pies: 'queratolitico', labios: 'labial', cabello: 'capilar' };
+const FUNCION_EXCLUSIVA = ['queratolitico', 'labial', 'capilar'];
+function ejeKey(zona, funcion) {
+  if (ZONA_SOLO_FUNCION[zona]) return ZONA_SOLO_FUNCION[zona] === funcion ? zona : null;
+  if (FUNCION_EXCLUSIVA.indexOf(funcion) !== -1) return null;
+  if (zona === 'cara') return funcion;
+  if (zona === 'manos' && funcion === 'aclarado') return 'manos';
+  return zona + '_' + funcion;
+}
+// Ejes que un producto puede alimentar = sus funciones × sus zonas por defecto.
+function ejesDeProducto(p) {
+  if (!p || typeof PRODUCT_DOSE === 'undefined') return [];
+  const pot = PRODUCT_DOSE[p.id];
+  if (!pot) return [];
+  const zonas = (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[p.id]) || [];
+  const out = [];
+  zonas.forEach(z => Object.keys(pot).forEach(f => {
+    const k = ejeKey(z, f);
+    if (k && typeof DOSE_AXES !== 'undefined' && DOSE_AXES[k] && out.indexOf(k) === -1) out.push(k);
+  }));
+  return out;
+}
+
 const PRODUCT_CATEGORIES = [
   '🧼 Limpieza',
   '💦 Toners',
@@ -851,6 +884,16 @@ async function loadHistory() {
   // aunque no venga de un paso de rutina: es justo lo que la adherencia no veía.
   // La matemática (techo diario + ventana semanal) vive en pure.js.
   const dosePtsByDate = {};   // ds → { eje: puntos }
+  // ── EJE = FUNCIÓN × ZONA ──────────────────────────────────────────────────
+  // Reproduce EXACTAMENTE el naming de DOSE_AXES en activos-matriz.js. No es
+  // decorativo: las claves se conservaron del modelo anterior para no invalidar
+  // los techos recalibrados con datos reales, así que cualquier cambio aquí
+  // tiene que ir acompañado del cambio allá.
+  //   · cara      → sin prefijo ('textura', 'firmeza'…)
+  //   · manos     → 'manos' para aclarado (histórico), 'manos_X' el resto
+  //   · monofunción (pies/labios/cabello) → su propio nombre, y SOLO con su
+  //     función: "firmeza de pies" no existe y devuelve null.
+  // (ejeKey vive en el ámbito global — se usa también desde el filtro de Stock)
   // ── SOBRE-EXPOSICIÓN A IRRITANTES: SE RASTREA POR ZONA, NO GLOBAL ─────────
   // Antes era un solo mapa `ds → 1` que TODOS los ejes consultaban contra su
   // propio `diasIdeales`. Resultado: 5 noches de tretinoína facial hacían que
@@ -862,54 +905,57 @@ async function loadHistory() {
   // El cuello entra aquí porque su piel es MÁS fina que la de la cara: es donde
   // la tretinoína irrita primero. Dejarlo sin eje de aviso habría desprotegido
   // justo la zona más sensible.
-  const EJE_IRRITANTE_POR_GRUPO = { cara: 'textura', cuerpo: 'cuerpo_textura', cuello: 'cuello_textura' };
-  const irritantByDateGrupo = {};  // ds → { cara: 1, cuerpo: 1, cuello: 1 }
-  // ── ESPEJO DEL SPF AL CUELLO ──────────────────────────────────────────────
-  // La usuaria extiende SIEMPRE el protector facial al cuello, así que registrar
-  // la aplicación dos veces sería pedirle trabajo para un dato que ya tenemos.
-  // Toda aplicación con eje `proteccion` entrega también `cuello_proteccion`,
-  // con el MISMO puntaje (spfScoreOf) y el MISMO ideal que la cara — es la misma
-  // aplicación cubriendo dos zonas.
-  // Se DERIVA en vez de listarse producto por producto (regla 5): un SPF facial
-  // nuevo queda cubierto solo, sin que nadie recuerde añadirlo en dos sitios.
-  // Para medir solo la primera aplicación del día (mañana sí, retoques no),
-  // poner esto en false y dar a los SPF su propia entrada `cuello_proteccion`.
-  const ESPEJO_SPF_CUELLO = true;
+  const EJE_IRRITANTE_POR_ZONA = { cara: 'textura', cuerpo: 'cuerpo_textura', cuello: 'cuello_textura', manos: 'manos_textura' };
+  const irritantByDateZona = {};  // ds → { cara: 1, cuerpo: 1, cuello: 1 }
   allAppsWithProd.forEach(({ r, rp }) => {
-    const dose0 = rp.id ? PRODUCT_DOSE[rp.id] : null;
-    if (!dose0) return;
-    const dose = (ESPEJO_SPF_CUELLO && 'proteccion' in dose0 && !('cuello_proteccion' in dose0))
-      ? Object.assign({}, dose0, { cuello_proteccion: dose0.proteccion })
-      : dose0;
+    // MODELO FUNCIÓN × ZONA: el producto aporta la POTENCIA (qué hace) y el
+    // registro aporta la ZONA (dónde se lo puso). El eje sale de combinarlos.
+    const pot = rp.id ? PRODUCT_DOSE[rp.id] : null;
+    if (!pot) return;
     const ds = localDateOfISO(r.applied_at);
+    // ── DE DÓNDE SALE LA ZONA ────────────────────────────────────────────────
+    // 1) `r.zones` — lo que marcaste al registrar. Dato real.
+    // 2) PRODUCT_ZONAS — las zonas por defecto del producto.
+    // El (2) NO es un parche: es lo que mantiene el HISTÓRICO intacto. Los
+    // registros anteriores al refactor no traen zona, y con este fallback dan
+    // exactamente los mismos puntos que daban antes — los porcentajes que ya
+    // viste no se mueven.
+    const zonas = (Array.isArray(r.zones) && r.zones.length)
+      ? r.zones
+      : (typeof PRODUCT_ZONAS !== 'undefined' ? (PRODUCT_ZONAS[rp.id] || []) : []);
+    if (!zonas.length) return;
     if (!dosePtsByDate[ds]) dosePtsByDate[ds] = {};
-    Object.keys(dose).forEach(ax => {
-      // null = protección: se toma spfScoreOf para no duplicar la calibración UVA.
-      let v = dose[ax] == null ? spfScoreOf(rp) : dose[ax];
-      // Protección: los puntos se normalizan al ideal del día según exposición
-      // solar. Así el techo diario sigue siendo fijo (500 = 5 aplicaciones) pero
-      // cumplir 2 en un día de interior ya vale el 100% de ese día.
-      // cuello_proteccion usa el ideal de la CARA, no el de cuerpo: es la misma
-      // aplicación y la misma exposición: cara y cuello van igual de descubiertos.
-      if (ax === 'proteccion' || ax === 'cuello_proteccion') {
-        v = v * (IDEAL_SPF_APPS / idealSpfAppsFor(ds));
-      } else if (ax === 'cuerpo_proteccion' || ax === 'manos_proteccion') {
-        // manos_proteccion reusa el mismo ideal que cuerpo (a petición de la
-        // usuaria: "igual que cuerpo") — interior 1 · normal 1 · alta 2 · playa 4.
-        const ideal = idealBodySpfAppsFor(ds);
-        if (ideal <= 0) return; // día no evaluable (ej. interior en 0)
-        v = v * (IDEAL_SPF_APPS / ideal);
-      }
-      dosePtsByDate[ds][ax] = (dosePtsByDate[ds][ax] || 0) + v;
+    zonas.forEach(zona => {
+      Object.keys(pot).forEach(funcion => {
+        const ax = ejeKey(zona, funcion);
+        // Combinación sin sentido (ej. "firmeza de pies"): ejeKey devuelve null
+        // y se descarta en vez de inventar un eje.
+        if (!ax || !DOSE_AXES[ax]) return;
+        // null = protección: se toma spfScoreOf para no duplicar la calibración UVA.
+        let v = pot[funcion] == null ? spfScoreOf(rp) : pot[funcion];
+        if (funcion === 'proteccion') {
+          // Los puntos se normalizan al ideal del día según exposición solar:
+          // el techo diario sigue fijo (500 = 5 aplicaciones) pero cumplir 2 en
+          // un día de interior ya vale el 100% de ese día.
+          // Cara y CUELLO comparten el ideal facial: van igual de descubiertos.
+          // Cuerpo y MANOS usan el ideal corporal, mucho más bajo — nadie
+          // reaplica protector corporal 5 veces al día.
+          const facial = (zona === 'cara' || zona === 'cuello' || zona === 'labios');
+          const ideal = facial ? idealSpfAppsFor(ds) : idealBodySpfAppsFor(ds);
+          if (ideal <= 0) return;  // día no evaluable (ej. interior en 0)
+          v = v * (IDEAL_SPF_APPS / ideal);
+        }
+        dosePtsByDate[ds][ax] = (dosePtsByDate[ds][ax] || 0) + v;
+      });
     });
     if (typeof IRRITANTES !== 'undefined' && IRRITANTES.has(rp.id)) {
-      // Un producto puede tocar dos zonas (ej. un ácido de cara y cuerpo):
-      // se marcan ambas.
-      Object.keys(dose).forEach(ax => {
-        const g = DOSE_AXES[ax] && DOSE_AXES[ax].grupo;
-        if (!EJE_IRRITANTE_POR_GRUPO[g]) return;
-        if (!irritantByDateGrupo[ds]) irritantByDateGrupo[ds] = {};
-        irritantByDateGrupo[ds][g] = 1;
+      // El día irritante se marca en las zonas donde REALMENTE se aplicó, no en
+      // todas las que el producto podría tocar. Aplicarte un ácido en el cuerpo
+      // no debe disparar el aviso de la cara.
+      zonas.forEach(zona => {
+        if (!EJE_IRRITANTE_POR_ZONA[zona]) return;
+        if (!irritantByDateZona[ds]) irritantByDateZona[ds] = {};
+        irritantByDateZona[ds][zona] = 1;
       });
     }
   });
@@ -948,25 +994,31 @@ async function loadHistory() {
     // Solo el eje de renovación de cada zona puede avisar: es donde viven los
     // retinoides y los ácidos. Barrera, aclarado, firmeza, pies, manos y
     // cabello nunca avisan, porque ningún irritante actúa ahí.
-    const esEjeDeAviso = EJE_IRRITANTE_POR_GRUPO[cfg.grupo] === axKey;
+    const esEjeDeAviso = EJE_IRRITANTE_POR_ZONA[cfg.zona] === axKey;
     const overDays = esEjeDeAviso
-      ? overExposureDays(ultimaSemana.map(ds => (irritantByDateGrupo[ds] || {})[cfg.grupo] || 0), cfg.diasIdeales)
+      ? overExposureDays(ultimaSemana.map(ds => (irritantByDateZona[ds] || {})[cfg.zona] || 0), cfg.diasIdeales)
       : 0;
     return { pct, weekly, overDays, cfg };
   };
-  const EJES_CARA = ['proteccion', 'aclarado', 'textura', 'barrera', 'firmeza'];
-  // 'labios' agregado 2026-07-25: va en OTROS y no en CARA a propósito — el
-  // bermellón es tejido aparte y sus productos no deben mover las métricas
-  // faciales (mismo criterio que pies/manos/cabello). Ver nota del eje en
-  // activos-matriz.js.
-  const EJES_OTROS = ['cuerpo_proteccion', 'cuerpo_textura', 'cuerpo_firmeza', 'cuerpo_barrera', 'pies', 'cabello', 'manos', 'manos_proteccion', 'labios'];
-  // El cuello va en bloque propio y no dentro de OTROS: comparte los 5 ejes de
-  // la cara y se lee en paralelo con ella. Metido entre cuerpo y pies quedaba
-  // sepultado en una lista de 14 barras.
-  const EJES_CUELLO = ['cuello_proteccion', 'cuello_aclarado', 'cuello_textura', 'cuello_barrera', 'cuello_firmeza'];
-  const dosisCara = EJES_CARA.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
-  const dosisCuello = EJES_CUELLO.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
-  const dosisOtros = EJES_OTROS.map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
+  // Las listas de ejes se DERIVAN de DOSE_AXES por su `zona` — ya no se
+  // escriben a mano (regla 5). Antes eran tres arrays literales y cada eje
+  // nuevo había que acordarse de añadirlo al array correcto o quedaba
+  // calculado pero invisible en Progreso, que es el fallo original de Fase B
+  // reapareciendo en el render.
+  // El orden dentro de cada zona sigue el de declaración en DOSE_AXES
+  // (protección → aclarado → textura → barrera → firmeza), que es el mismo con
+  // el que se leen las barras de la cara.
+  const ejesDeZona = z => Object.keys(DOSE_AXES).filter(k => DOSE_AXES[k].zona === z);
+  const dosisDe = zs => [].concat.apply([], zs.map(ejesDeZona))
+    .map(k => ({ key: k, o: doseAxis(k) })).filter(x => x.o);
+  const dosisCara = dosisDe(['cara']);
+  // El cuello va en bloque propio y no mezclado con cuerpo: comparte las 5
+  // funciones de la cara y se lee en paralelo con ella. Sepultado en una lista
+  // de 14 barras no lo miraría nadie.
+  const dosisCuello = dosisDe(['cuello']);
+  // Labios va aquí y no con cara a propósito: el bermellón es tejido aparte y
+  // sus productos no deben mover las métricas faciales.
+  const dosisOtros = dosisDe(['cuerpo', 'manos', 'pies', 'labios', 'cabello']);
   // Se define aquí (y no junto al render) porque buildFocusHTML lo usa antes.
   const doseDiag = (key, o) => {
     if (o.overDays > 0) {
@@ -3101,15 +3153,10 @@ let invFilterAxis = '';
 function invBrandOf(p) { return String(p.brand || '').split('·')[0].trim(); }
 // Ejes que toca un producto según la matriz de dosis. Un producto que actúa
 // sobre varios aparece en el filtro de TODOS ellos — así lo pidió la usuaria.
-function invAxesOf(p) {
-  if (typeof PRODUCT_DOSE === 'undefined') return [];
-  const d = PRODUCT_DOSE[p.id];
-  if (!d) return [];
-  // Se filtra contra DOSE_AXES para no ofrecer un eje que quedó huérfano en la
-  // matriz: sin esto, una clave mal escrita generaría una opción que no filtra
-  // nada y parecería que el catálogo está incompleto.
-  return Object.keys(d).filter(a => typeof DOSE_AXES !== 'undefined' && DOSE_AXES[a]);
-}
+// Desde el refactor función × zona, PRODUCT_DOSE ya no guarda ejes sino
+// FUNCIONES: el eje se compone con las zonas del producto. Sin esto el filtro
+// ofrecía 'barrera' y 'textura' sueltos y no encontraba nada.
+function invAxesOf(p) { return ejesDeProducto(p); }
 function invMatches(p) {
   if (invFilterCat && p.category !== invFilterCat) return false;
   if (invFilterBrand && invBrandOf(p) !== invFilterBrand) return false;
