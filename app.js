@@ -716,7 +716,13 @@ async function loadHistory() {
   el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span><br><br>Loading...</div>';
   const since90 = new Date(TODAY); since90.setDate(since90.getDate() - 90);
   const [appsRes, stepsRes, routinesRes, allStepsRes, notesRes, hitosRes] = await Promise.all([
-    db.from('product_applications').select('id, product_name, product_id, applied_at, source, routine_step_id')
+    // `zones` es indispensable: sin ella el motor de dosis nunca ve la zona
+    // registrada y cae siempre al respaldo de PRODUCT_ZONAS, con lo que la
+    // capacidad entera del refactor función × zona queda muerta y en silencio.
+    // Este select lista columnas EXPLÍCITAS a propósito (no `*`) para no traer
+    // payload de más en 90 días de registros — el precio es acordarse de
+    // añadir aquí cada columna nueva que el cálculo necesite.
+    db.from('product_applications').select('id, product_name, product_id, applied_at, source, routine_step_id, zones')
       .gte('applied_at', localDayBoundsUTC(toDateStr(since90)).startISO)
       .order('applied_at', { ascending: false }),
     db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null),
