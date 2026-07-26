@@ -165,6 +165,7 @@ const PRODUCT_DOSE = {
   'fd5ac61c-3146-49ed-813f-d3b0c4e097aa': { firmeza: 55, barrera: 45 },  // Peptide + HA Serum
   'a6451499-e856-4494-b68b-acdbbc038824': { textura: 55 },  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': { barrera: 55, textura: 45, aclarado: 25, firmeza: 15 },  // Poremizing Light Gel Cream
+  '35c79583-7aac-405a-b3ba-33276d379984': { textura: 55, barrera: 65, aclarado: 20, firmeza: 15 },  // Pore-Reducing Toner — Paula's Choice
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': { proteccion: null },  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': { textura: 95, firmeza: 85, aclarado: 70 },  // Retin-A Tretinoína 0.025%
   'e029ae8d-5443-4c99-bb5a-3c2718f12694': { firmeza: 55, textura: 45, barrera: 30 },  // Retinol Body Cream (Vit E, Té Verde, Aloe)
@@ -269,6 +270,7 @@ const PRODUCT_ZONAS = {
   'fd5ac61c-3146-49ed-813f-d3b0c4e097aa': ['cara', 'cuello'],  // Peptide + HA Serum
   'a6451499-e856-4494-b68b-acdbbc038824': ['cara'],  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': ['cara'],  // Poremizing Light Gel Cream
+  '35c79583-7aac-405a-b3ba-33276d379984': ['cara'],  // Pore-Reducing Toner — Paula's Choice
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': ['cara', 'cuello', 'manos'],  // Probio-Cica Glow Sun Ampoule
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['cara', 'cuello'],  // Retin-A Tretinoína 0.025%
   'e029ae8d-5443-4c99-bb5a-3c2718f12694': ['cuerpo'],  // Retinol Body Cream (Vit E, Té Verde, Aloe)
