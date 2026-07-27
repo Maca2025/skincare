@@ -177,6 +177,14 @@ const PRODUCT_DOSE = {
   // que se calcularon meses de cara.
   'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': { textura: 55, queratolitico: 60 },  // Salicylic Acid 2% Gel
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8': { textura: 75 },  // Salicylic Acid 2% Masque
+  // Láctico 4.5% (bajo el rango clásico de 5-10%) + salicílico 0.45% (muy bajo
+  // frente al 2% de referencia) + arrastre mecánico del relieve del pad. Es
+  // exfoliación suave y frecuente, no un peel: queda por debajo de todos los
+  // demás exfoliantes de esta matriz (BHA 2% = 85, masque = 75, toner = 70,
+  // glicólico 7% = 65). Sin `barrera`: panthenol, centella y alantoína calman,
+  // pero apuntarle barrera a una fórmula con alcohol denat en tercer lugar
+  // sería inventar.
+  'a6422a1a-1588-4490-bc03-d2b80ade8ff5': { textura: 60, aclarado: 25 },  // Zero Pore Pad 2.0
   '50e32222-59b0-4b20-ad26-23b552f91239': { textura: 70 },  // Salicylic Acid 2% Spray
   // Niacinamida medida en 2.7-4%, panthenol y ceramidas NP/AP/EOP con
   // fitoesfingosina. Barrera 60: para un tónico es sólido, pero por debajo de
@@ -287,6 +295,10 @@ const PRODUCT_ZONAS = {
   // sin eso, meses de aplicaciones faciales empezarían a contar también en pies.
   'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb': ['cara', 'cuerpo', 'pies'],  // Salicylic Acid 2% Gel
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8': ['cara'],  // Salicylic Acid 2% Masque
+  // Solo cara por defecto. La categoría lo hace apto también en cuello, así que
+  // el chip está ahí cuando lo quieras — pero con limoneno y aceites esenciales
+  // encima de piel más fina, la preselección no debería empujarte a diario.
+  'a6422a1a-1588-4490-bc03-d2b80ade8ff5': ['cara'],  // Zero Pore Pad 2.0
   '50e32222-59b0-4b20-ad26-23b552f91239': ['cuerpo'],  // Salicylic Acid 2% Spray
   // Cara y cuello: sin ácidos y con ceramidas, es de lo más seguro que puede
   // subir al cuello. Si prefieres que no se preseleccione ahí, quita 'cuello'
@@ -316,6 +328,9 @@ const IRRITANTES = new Set([
   '86cd48aa-fab8-43bf-8275-534d625268e8',  // Glycolic Acid 7%
   '8d0912a7-441d-4e03-a344-e16076334dbe',  // Skin Perfecting 2% BHA
   '5f197c24-5c60-4d16-8bb6-b0c80bd621f8',  // Salicylic Acid 2% Masque
+  // Ácidos que se quedan en la piel: cuenta como noche de exfoliación y suma al
+  // aviso de sobre-exposición. No va la misma noche que la tretinoína.
+  'a6422a1a-1588-4490-bc03-d2b80ade8ff5',  // Zero Pore Pad 2.0
   'd8085cbe-cae2-4f49-92b5-9f118c9fbdfb',  // Salicylic Acid 2% Gel
   '50e32222-59b0-4b20-ad26-23b552f91239',  // Salicylic Acid 2% Spray
   '999186d7-a30e-42c4-914f-b0b76f619b58',  // GlycoIsdin Serum
