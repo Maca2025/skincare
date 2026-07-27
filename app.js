@@ -248,28 +248,92 @@ function updateProgress(bodyId) {
 // último SPF + índice UV en vivo. Se oculta al backdatear (no aplica).
 let _lastSpfTodayISO = null;
 let _currentUV = null;
+// Última protección POR ZONA. Antes era una sola cifra para todo, que es una
+// media mentirosa: la cara se reaplica varias veces al día y las manos, con
+// suerte, una. Ahora que cada registro guarda su zona, se puede separar.
+// Zonas que se muestran, decididas por la usuaria: cara, cuello y manos.
+const SPF_ZONAS_BARRA = ['cara', 'cuello', 'manos'];
+let _lastSpfPorZona = { cara: null, cuello: null, manos: null };
 async function loadTodaySpfLast() {
-  const spfIds = allProducts.filter(p => p.category === '🌞 SPF Facial').map(p => p.id);
-  if (!spfIds.length) { _lastSpfTodayISO = null; updateTodaySummary(); return; }
+  // TODA la protección, no solo '🌞 SPF Facial': el SPF corporal también
+  // protege manos, y con el modelo función × zona quien decide la zona es el
+  // registro, no la categoría del producto.
+  const spfIds = allProducts
+    .filter(p => typeof PRODUCT_DOSE !== 'undefined' && PRODUCT_DOSE[p.id] &&
+                 'proteccion' in PRODUCT_DOSE[p.id])
+    .map(p => p.id);
+  const facialIds = allProducts.filter(p => p.category === '🌞 SPF Facial').map(p => p.id);
+  if (!spfIds.length) {
+    _lastSpfTodayISO = null;
+    _lastSpfPorZona = { cara: null, cuello: null, manos: null };
+    updateTodaySummary(); return;
+  }
   const b = localDayBoundsUTC(TODAY_STR);
-  const { data } = await db.from('product_applications').select('applied_at')
+  const { data } = await db.from('product_applications')
+    .select('applied_at, product_id, zones')
     .in('product_id', spfIds)
     .gte('applied_at', b.startISO).lt('applied_at', b.endISO)
-    .order('applied_at', { ascending: false }).limit(1);
-  _lastSpfTodayISO = (data && data.length) ? data[0].applied_at : null;
+    .order('applied_at', { ascending: false });
+  const filas = data || [];
+  // Los registros previos al multipicker no traen zona: se les aplica su
+  // respaldo de siempre (PRODUCT_ZONAS), igual que hace el motor de dosis.
+  const conZonas = filas.map(r => ({
+    applied_at: r.applied_at,
+    zones: (Array.isArray(r.zones) && r.zones.length)
+      ? r.zones
+      : ((typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[r.product_id]) || [])
+  }));
+  _lastSpfPorZona = lastSpfPorZona(conZonas, SPF_ZONAS_BARRA);
+  // El FAB y el aviso siguen colgando de la CARA: es la zona que manda el ritmo
+  // de reaplicación y la que tiene las manchas que estás tratando.
+  const facial = filas.filter(r => facialIds.indexOf(r.product_id) !== -1);
+  _lastSpfTodayISO = facial.length ? facial[0].applied_at : (_lastSpfPorZona.cara || null);
   updateTodaySummary();
 }
 // Estado de la reaplicación, en un solo lugar: lo usan el resumen y el FAB.
 // Se expresa como CUÁNDO TOCA, no como cuánto pasó — un plazo concreto mueve
 // la conducta, un tiempo transcurrido solo informa (mejora #3).
+// El plazo YA NO ES FIJO: sale de `spfGapHours(uv)` y se apaga cerca del ocaso.
+// `state` distingue tres cosas distintas que antes se veían igual:
+//   ok     — dentro del plazo
+//   due    — toca reaplicar (amarillo)
+//   urgent — toca reaplicar Y el UV está en 8+ (rojo). El color habla del SOL,
+//            no de tu retraso: es lo que decidió la usuaria.
+//   dormido— el sol ya se puso o el UV no da para avisar; no es una falla
 function spfStatus() {
-  if (!_lastSpfTodayISO) return { state: 'none', label: 'Sin SPF hoy' };
-  const next = new Date(new Date(_lastSpfTodayISO).getTime() + SPF_REMINDER_GAP_H * 3600000);
-  if (next.getTime() - Date.now() <= 0) return { state: 'due', label: 'Reaplicar ahora' };
-  return {
-    state: 'ok',
-    label: 'Próxima ' + next.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-  };
+  const uv = _currentUV;
+  const gapH = spfGapHours(uv);
+  const muyAlto = uv != null && uv >= 8;
+  const cercaDelOcaso = _sunsetMs != null &&
+    Date.now() > _sunsetMs - SPF_MINUTOS_ANTES_DE_OCASO * 60000;
+  if (gapH == null || cercaDelOcaso) {
+    // Silencio EXPLICADO: un plazo que desaparece sin decir por qué se lee como
+    // que la app se rompió.
+    return {
+      state: 'dormido',
+      label: cercaDelOcaso ? 'Sol bajo · sin reaplicar' : 'UV bajo · sin reaplicar'
+    };
+  }
+  if (!_lastSpfTodayISO) {
+    return { state: muyAlto ? 'urgent' : 'due', label: 'Sin SPF hoy' };
+  }
+  const next = new Date(new Date(_lastSpfTodayISO).getTime() + gapH * 3600000);
+  const faltanMin = Math.round((next.getTime() - Date.now()) / 60000);
+  if (faltanMin <= 0) {
+    return { state: muyAlto ? 'urgent' : 'due', label: 'Reaplicar ahora' };
+  }
+  // Cuánto falta, no a qué hora: "en 40 min" se entiende sin hacer la resta.
+  const falta = faltanMin >= 60
+    ? `${Math.floor(faltanMin / 60)} h ${String(faltanMin % 60).padStart(2, '0')} min`
+    : `${faltanMin} min`;
+  return { state: 'ok', label: `Siguiente en ${falta}`, faltanMin };
+}
+// Hora corta y local de un ISO, o null.
+function horaCorta(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null
+    : d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 }
 function updateTodaySummary() {
   const el = document.getElementById('today-summary');
@@ -277,23 +341,28 @@ function updateTodaySummary() {
   renderSpfFab();
   const bd = document.getElementById('backdate-input');
   if (bd && bd.value) { el.innerHTML = ''; return; }
-  const secs = [
-    { icon: '☀️', id: 'am-body' }, { icon: '🌙', id: 'pm-body' },
-    { icon: '🧴', id: 'body-body' }, { icon: '🦶', id: 'feet-body' },
-  ];
-  const parts = secs.map(s => {
-    const body = document.getElementById(s.id);
-    if (!body) return null;
-    const total = body.querySelectorAll('.step').length;
-    if (!total) return null;
-    const done = body.querySelectorAll('.step.done').length;
-    return `<span class="tsum-item${done === total ? ' tsum-ok' : ''}">${s.icon} ${done}/${total}</span>`;
-  }).filter(Boolean);
+  // Los contadores de pasos por sección (☀️ 5/6, 🌙 0/6…) se QUITARON el
+  // 2026-07-26 a petición de la usuaria: no les da importancia y competían por
+  // el espacio con lo único que sí mira aquí, que es la protección. La
+  // adherencia sigue completa dentro de cada sección y en Progreso.
+  const parts = SPF_ZONAS_BARRA.map(z => {
+    const info = (typeof ZONAS !== 'undefined') ? ZONAS[z] : null;
+    const iso = _lastSpfPorZona[z];
+    const hora = horaCorta(iso);
+    // Sin protección hoy en esa zona se dice con un guion, no se esconde: el
+    // hueco ES la información.
+    return `<span class="tsum-item tsum-zona${hora ? '' : ' tsum-zona-sin'}" title="${esc(info ? info.label : z)}">`
+      + `${esc(info ? info.icon : '')} ${hora || '—'}</span>`;
+  });
   const st = spfStatus();
-  const spf = `<span class="tsum-item ${st.state === 'ok' ? 'tsum-ok' : 'tsum-warn'}">🛡️ ${st.label}${st.state === 'ok' ? '' : ' ⚠️'}</span>`;
+  const spfCls = st.state === 'ok' ? 'tsum-ok'
+    : (st.state === 'urgent' ? 'tsum-alert' : (st.state === 'dormido' ? '' : 'tsum-warn'));
+  const spfIcono = st.state === 'urgent' ? '🔴' : '🛡️';
+  const spf = `<span class="tsum-item ${spfCls}">${spfIcono} ${esc(st.label)}`
+    + `${(st.state === 'due' || st.state === 'urgent') ? ' ⚠️' : ''}</span>`;
   let uv = '';
   if (_currentUV != null) {
-    const cls = _currentUV >= 8 ? ' tsum-warn' : (_currentUV < 3 ? ' tsum-ok' : '');
+    const cls = _currentUV >= 8 ? ' tsum-alert' : (_currentUV < 3 ? ' tsum-ok' : '');
     let txt = `☀️ UV ${Math.round(_currentUV)}`;
     // El pico solo se anuncia si TODAVÍA está por delante: planear la mañana
     // sirve, enterarte a las 6pm de que el pico fue a la 1pm no (mejora #4).
@@ -303,17 +372,38 @@ function updateTodaySummary() {
     }
     uv = `<span class="tsum-item${cls}">${txt}</span>`;
   }
-  el.innerHTML = `<div class="tsum-card">${parts.join('')}${spf}${uv}</div>`;
+  // La hora del ocaso se muestra solo en la última hora y media: antes de eso
+  // no cambia ninguna decisión y solo ocupa espacio.
+  let ocaso = '';
+  if (_sunsetMs != null) {
+    const minsAlOcaso = Math.round((_sunsetMs - Date.now()) / 60000);
+    if (minsAlOcaso > -60 && minsAlOcaso < 90) {
+      ocaso = `<span class="tsum-item">🌇 ${minsAlOcaso > 0 ? horaCorta(new Date(_sunsetMs).toISOString()) : 'anochece'}</span>`;
+    }
+  }
+  el.innerHTML = `<div class="tsum-card">${parts.join('')}${spf}${uv}${ocaso}</div>`;
 }
 // ── ÍNDICE UV EN VIVO (Open-Meteo, gratis y sin key) ─────────────────────────
 // Coordenadas de Guadalajara. Además de mostrarse en el resumen, hace el
 // recordatorio SPF más exigente con UV alto y lo silencia con UV bajo.
 let _uvMax = null, _uvMaxHour = null;
+// Ocaso local en ms. Se pide en la MISMA llamada que el UV: es el mismo
+// endpoint y una petición de más solo añade otra forma de fallar.
+let _sunsetMs = null;
 async function fetchUV() {
   try {
     const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=20.67&longitude=-103.35' +
-      '&current=uv_index&hourly=uv_index&forecast_days=1&timezone=auto');
+      '&current=uv_index&hourly=uv_index&daily=sunset&forecast_days=1&timezone=auto');
     const j = await r.json();
+    // `daily.sunset` viene como hora LOCAL sin zona ("2026-07-26T20:14"). Se
+    // interpreta como local a propósito: el dispositivo está en Guadalajara,
+    // igual que las coordenadas. Parsearlo como UTC correría el ocaso 6 h.
+    _sunsetMs = null;
+    const D = j && j.daily;
+    if (D && Array.isArray(D.sunset) && D.sunset[0]) {
+      const t = new Date(String(D.sunset[0]).replace(' ', 'T'));
+      if (!isNaN(t.getTime())) _sunsetMs = t.getTime();
+    }
     _currentUV = (j && j.current && j.current.uv_index != null) ? j.current.uv_index : null;
     // Pico del día. DEFENSIVO a propósito: si `hourly` no viene o cambia de
     // forma, el UV actual sigue funcionando igual que antes y solo se pierde
@@ -329,7 +419,7 @@ async function fetchUV() {
         _uvMaxHour = m ? Number(m[1]) : null;
       }
     }
-  } catch (e) { _currentUV = null; _uvMax = null; _uvMaxHour = null; }
+  } catch (e) { _currentUV = null; _uvMax = null; _uvMaxHour = null; _sunsetMs = null; }
   updateTodaySummary();
 }
 
@@ -2078,7 +2168,11 @@ async function repeatLastReapp() {
 // SPF facial registrado, manda notificación (o toast si no diste permiso).
 const SPF_REMINDER_KEY = 'skincare_spf_reminder';
 const SPF_NUDGE_TS_KEY = 'skincare_last_spf_nudge';
-const SPF_REMINDER_GAP_H = 2; // recordar cada 2 horas
+// El plazo ya NO es fijo: lo calcula `spfGapHours(uv)` en pure.js (UV 8+ → 1.5 h
+// · 6-7 → 2 h · 3-5 → 3 h · <3 → no avisa) y el ocaso lo corta. Esta constante
+// se conserva SOLO como respaldo documental del valor histórico; si vuelve a
+// aparecer en una condición, es que alguien reintrodujo el plazo fijo.
+const SPF_REMINDER_GAP_H = 2;
 // ── WEB PUSH (notificaciones con la app CERRADA) ─────────────────────────────
 // La llave pública VAPID es pública por diseño (va en el cliente). La privada
 // vive SOLO en los secrets de la Edge Function — ver PUSH-SETUP.md.
@@ -2158,32 +2252,37 @@ async function toggleSpfReminder() {
 // En iPhone, new Notification() NO existe: hay que mostrarlas a través del
 // service worker (reg.showNotification), y solo funcionan con la app agregada
 // a pantalla de inicio (iOS 16.4+) y permiso concedido. Fallback: toast.
+// Acepta el objeto { titulo, cuerpo } de `spfNudgeText` — el TÍTULO cambia con
+// la banda de UV, no solo el cuerpo: en la pantalla de bloqueo el título es lo
+// único que se lee de un vistazo, y "🔴 UV muy alto" mueve más que "toca
+// reaplicar". Sigue aceptando un string suelto por si queda algún caller viejo.
 async function notifySpf(msg) {
+  const titulo = (msg && msg.titulo) ? msg.titulo : '☀️ Toca reaplicar SPF';
+  const cuerpo = (msg && msg.cuerpo) ? msg.cuerpo : String(msg || '');
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg && reg.showNotification) {
-        await reg.showNotification('☀️ Toca reaplicar SPF', {
-          body: msg, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'spf-reminder'
+        await reg.showNotification(titulo, {
+          body: cuerpo, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'spf-reminder'
         });
         return;
       }
     } catch (e) { /* sigue al fallback */ }
-    try { new Notification('☀️ Toca reaplicar SPF', { body: msg, icon: 'icon-192.png' }); return; } catch (e) {}
+    try { new Notification(titulo, { body: cuerpo, icon: 'icon-192.png' }); return; } catch (e) {}
   }
-  showToast('☀️ ' + msg, '');
+  showToast(`${titulo} — ${cuerpo}`, '');
 }
 // _lastSpfNudge persiste en localStorage para no duplicar avisos al recargar.
 let _lastSpfNudge = Number(localStorage.getItem(SPF_NUDGE_TS_KEY) || 0);
+// Toda la aritmética de "¿toca?" vive en `spfReminderCheck` (pure.js, con
+// tests). Aquí solo se leen los datos y se manda el aviso: antes la regla
+// estaba escrita a mano aquí y era imposible probarla sin esperar dos horas.
 async function checkSpfReminder() {
   if (localStorage.getItem(SPF_REMINDER_KEY) !== '1') return;
   // Con push activo, el servidor (Edge Function + cron) es quien avisa —
   // así no llegan avisos dobles.
   if (localStorage.getItem(PUSH_ENABLED_KEY) === '1') return;
-  const h = new Date().getHours();
-  if (h < 10 || h >= 19) return;
-  if (_currentUV != null && _currentUV < 2) return; // UV casi nulo: no molestar
-  if (Date.now() - _lastSpfNudge < SPF_REMINDER_GAP_H * 3600000) return; // 1 aviso por ciclo de 2 h
   const spfIds = allProducts.filter(p => p.category === '🌞 SPF Facial').map(p => p.id);
   if (!spfIds.length) return;
   const b = localDayBoundsUTC(TODAY_STR);
@@ -2191,13 +2290,16 @@ async function checkSpfReminder() {
     .in('product_id', spfIds)
     .gte('applied_at', b.startISO).lt('applied_at', b.endISO)
     .order('applied_at', { ascending: false }).limit(1);
-  const last = (data && data.length) ? new Date(data[0].applied_at) : null;
-  const gapH = last ? (Date.now() - last.getTime()) / 3600000 : Infinity;
-  if (gapH < SPF_REMINDER_GAP_H) return;
+  const lastMs = (data && data.length) ? new Date(data[0].applied_at).getTime() : null;
+  const chk = spfReminderCheck({
+    nowMs: Date.now(), lastMs, uv: _currentUV,
+    sunsetMs: _sunsetMs, lastNudgeMs: _lastSpfNudge
+  });
+  if (!chk.avisar) return;
   _lastSpfNudge = Date.now();
   localStorage.setItem(SPF_NUDGE_TS_KEY, String(_lastSpfNudge));
-  const msg = last ? `Han pasado ${gapH.toFixed(1)} h desde tu último SPF facial` : 'Hoy aún no registras SPF facial';
-  notifySpf(msg);
+  const horas = lastMs != null ? (Date.now() - lastMs) / 3600000 : null;
+  notifySpf(spfNudgeText(_currentUV, horas));
 }
 
 // ── BOTÓN FLOTANTE DE REAPLICACIÓN ───────────────────────────────────────────

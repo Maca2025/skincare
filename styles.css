@@ -444,6 +444,14 @@ body {
 .tsum-item { font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: #F4EFE8; color: #7A6E6A; white-space: nowrap; }
 .tsum-item.tsum-ok { background: #EAF5EA; color: #3A8A3A; }
 .tsum-item.tsum-warn { background: #FFF3E0; color: #C47A00; }
+/* Rojo SOLO con UV 8+ (muy alto en la escala OMS). Reservarlo para eso es lo
+   que hace que signifique algo: si se pintara con cada retraso, en un mes sería
+   el color de fondo de la barra. */
+.tsum-item.tsum-alert { background: #FCE8E4; color: #B4241A; }
+/* Última hora de SPF por zona. El chip sin hora ("—") va más apagado: el hueco
+   es la información, pero no debe gritar más que lo que sí está hecho. */
+.tsum-item.tsum-zona { background: #F0F5FF; color: #4A6A9A; font-variant-numeric: tabular-nums; }
+.tsum-item.tsum-zona-sin { background: #F4EFE8; color: #A79A96; }
 /* CORRELACIÓN PIEL-ACTIVOS */
 .corr-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; color: #4A3E3A; border-bottom: 1px solid #F4EFE8; }
 .corr-row:last-of-type { border-bottom: none; }
@@ -592,6 +600,16 @@ body {
 .spf-fab-ok   { background: linear-gradient(135deg, #3A8A7A, #2F7568); }
 .spf-fab-due  { background: linear-gradient(135deg, #D4820A, #C47A00); }
 .spf-fab-none { background: linear-gradient(135deg, #C43020, #A82818); }
+/* UV 8+ y toca reaplicar: rojo con latido lento. La animación se desactiva sola
+   si el sistema pide menos movimiento. */
+.spf-fab-urgent { background: linear-gradient(135deg, #C43020, #A82818); animation: spf-fab-latido 2.4s ease-in-out infinite; }
+/* El sol ya está bajo o el UV no da para reaplicar: verde apagado, no alarma. */
+.spf-fab-dormido { background: linear-gradient(135deg, #8A8580, #6E6A66); }
+@keyframes spf-fab-latido {
+  0%, 100% { box-shadow: 0 4px 16px rgba(196,48,32,0.45); }
+  50%      { box-shadow: 0 4px 22px rgba(196,48,32,0.85); }
+}
+@media (prefers-reduced-motion: reduce) { .spf-fab-urgent { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .spf-fab:active { transform: none; } }
 
 /* ── DERIVA DE LA MATRIZ DE DOSIS ──────────────────────────────────────────

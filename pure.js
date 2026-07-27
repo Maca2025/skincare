@@ -355,6 +355,110 @@ function spotTrend(obs) {
   };
 }
 
+// ── RITMO DE REAPLICACIÓN: UV + OCASO ───────────────────────────────────────
+// Antes el aviso era fijo cada 2 h entre las 10 y las 19, hora local. Dos cosas
+// mal: a las 18:30 de diciembre en Guadalajara el sol ya se puso y el UV es 0
+// —el aviso solo enseña a ignorar los avisos—, y a las 13:00 de mayo con UV 11
+// dos horas es demasiado.
+//
+// Bandas de la OMS (las mismas que usa cualquier app del clima):
+//   0-2 bajo · 3-5 moderado · 6-7 alto · 8-10 muy alto · 11+ extremo
+//
+// El ritmo elegido por la usuaria (2026-07-26): 8+ → 1.5 h · 6-7 → 2 h ·
+// 3-5 → 3 h · <3 → no avisa. La base de 2 h es la recomendación derma estándar
+// con exposición real; solo se aprieta cuando el UV lo justifica. Más agresivo
+// se descartó a propósito: el riesgo real de avisar de más es que dejes de
+// hacer caso.
+function uvBand(uv) {
+  if (uv == null || isNaN(uv)) return null;
+  if (uv < 3) return 'bajo';
+  if (uv < 6) return 'moderado';
+  if (uv < 8) return 'alto';
+  if (uv < 11) return 'muy_alto';
+  return 'extremo';
+}
+const SPF_GAP_POR_BANDA = { bajo: null, moderado: 3, alto: 2, muy_alto: 1.5, extremo: 1.5 };
+// Horas entre avisos. `null` = no avisar (UV por debajo de 3).
+// Sin dato de UV se usa la base de 2 h: quedarse callado por no saber es peor
+// que avisar de más en la zona que de verdad importa.
+function spfGapHours(uv) {
+  const b = uvBand(uv);
+  if (b === null) return 2;
+  return SPF_GAP_POR_BANDA[b];
+}
+// Los últimos minutos antes del ocaso no valen un aviso: el UV cae a 0 y
+// reaplicar entonces no protege de nada. Se corta con margen.
+const SPF_MINUTOS_ANTES_DE_OCASO = 60;
+// ¿Toca avisar? Una sola función para el aviso local y (cuando se adapte) el
+// push del servidor, con toda la aritmética en un lugar con pruebas.
+//
+//   nowMs, lastMs   — ahora y último SPF facial (ms). `lastMs` null = ninguno hoy
+//   uv              — índice UV actual, o null si no se pudo consultar
+//   sunsetMs        — ocaso local en ms, o null si no se pudo consultar
+//   lastNudgeMs     — cuándo se avisó por última vez (antirrebote)
+//
+// Devuelve { avisar, gapH, motivo, minutosParaSiguiente }. `motivo` existe para
+// poder EXPLICAR el silencio: un recordatorio que no suena y no se sabe por qué
+// es indistinguible de uno roto.
+function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio = 8 }) {
+  const gapH = spfGapHours(uv);
+  const now = new Date(nowMs);
+  const out = (avisar, motivo) => {
+    const base = lastMs != null ? lastMs : null;
+    const minutos = (base != null && gapH != null)
+      ? Math.round((base + gapH * 3600000 - nowMs) / 60000) : null;
+    return { avisar, gapH, motivo, minutosParaSiguiente: minutos };
+  };
+  if (gapH == null) return out(false, 'uv_bajo');
+  if (now.getHours() < horaInicio) return out(false, 'muy_temprano');
+  if (sunsetMs != null && nowMs > sunsetMs - SPF_MINUTOS_ANTES_DE_OCASO * 60000) {
+    return out(false, 'ocaso');
+  }
+  // Sin dato de ocaso se conserva el corte viejo por hora, que es el respaldo
+  // que ya existía. Nunca dejar el aviso sin ningún límite superior.
+  if (sunsetMs == null && now.getHours() >= 19) return out(false, 'noche');
+  if (lastNudgeMs && nowMs - lastNudgeMs < gapH * 3600000) return out(false, 'ya_avise');
+  if (lastMs == null) return out(true, 'sin_spf_hoy');
+  if (nowMs - lastMs < gapH * 3600000) return out(false, 'todavia_protegida');
+  return out(true, 'toca_reaplicar');
+}
+// El mensaje cambia con la banda de UV: "reaplica" a secas no dice si hoy da
+// igual esperar media hora o no. El texto lleva el dato que justifica la prisa.
+function spfNudgeText(uv, horasDesdeUltimo) {
+  const b = uvBand(uv);
+  const desde = (horasDesdeUltimo == null || !isFinite(horasDesdeUltimo))
+    ? 'Hoy aún no registras SPF facial'
+    : `Han pasado ${horasDesdeUltimo.toFixed(1)} h desde tu último SPF`;
+  const uvTxt = (uv == null || isNaN(uv)) ? '' : ` · UV ${Math.round(uv)}`;
+  const porBanda = {
+    extremo:  { titulo: '🔴 UV extremo — reaplica ya', cola: 'Con este UV la sombra no es opcional: reaplica cada 1.5 h y busca techo entre 11 y 16 h.' },
+    muy_alto: { titulo: '🔴 UV muy alto — reaplica ya', cola: 'Es el rango que más pigmenta tus manchas. Reaplica cada 1.5 h mientras estés fuera.' },
+    alto:     { titulo: '🟠 Toca reaplicar SPF', cola: 'UV alto: cada 2 h si te da el sol, aunque estés tras una ventana.' },
+    moderado: { titulo: '🟡 Toca reaplicar SPF', cola: 'UV moderado: cada 3 h basta hoy.' },
+    bajo:     { titulo: '🟢 SPF al día', cola: 'UV bajo: no hace falta reaplicar por ahora.' }
+  };
+  const p = porBanda[b] || { titulo: '☀️ Toca reaplicar SPF', cola: 'Sin dato de UV — se asume el ritmo normal de 2 h.' };
+  return { titulo: p.titulo, cuerpo: `${desde}${uvTxt}. ${p.cola}` };
+}
+// Última aplicación de protector POR ZONA. Ahora que cada registro guarda dónde
+// te lo pusiste, "hace cuánto que no te proteges" deja de ser una sola cifra:
+// la cara se reaplica sola varias veces al día y las manos casi nunca.
+//   apps  — [{ applied_at, zones }] ya filtradas a productos con protección
+//   zonas — zonas a reportar, en orden
+function lastSpfPorZona(apps, zonas) {
+  const out = {};
+  (zonas || []).forEach(z => { out[z] = null; });
+  (apps || []).forEach(r => {
+    if (!r || !r.applied_at) return;
+    const zs = Array.isArray(r.zones) ? r.zones : [];
+    zs.forEach(z => {
+      if (!(z in out)) return;
+      if (out[z] == null || String(r.applied_at) > String(out[z])) out[z] = r.applied_at;
+    });
+  });
+  return out;
+}
+
 // ── ZONAS DE UN REGISTRO (multipicker de zona) ───────────────────────────────
 // Qué se escribe en `product_applications.zones`. Vive aquí, puro y con tests,
 // porque es la pieza que decide QUÉ EJES DE PROGRESO recibe cada aplicación:

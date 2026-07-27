@@ -4,6 +4,9 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v10 — barra superior por zona (última hora de SPF en cara/cuello/manos, fuera
+// los contadores de pasos), ritmo de reaplicación según UV y ocaso, y estado
+// rojo con UV 8+.
 // v9 — la preselección de zona cae a la APTITUD del producto cuando no tiene
 // entrada en la matriz, y apagar todos los chips ya no bloquea el registro.
 // v8 — un solo picker vivo a la vez: los tres modales de picker repetían los
@@ -18,7 +21,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v9';
+const CACHE = 'skincare-shell-v10';
 const SHELL = [
   './',
   './index.html',
