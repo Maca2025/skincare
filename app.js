@@ -1347,7 +1347,11 @@ async function loadHistory() {
       return ALTO[key] || 'Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.';
     }
     if (key === 'proteccion') {
-      return `El ideal se ajusta a tu exposición del día: ${IDEAL_SPF_BY_SUN.interior} aplicaciones en interior, ${IDEAL_SPF_BY_SUN.normal} en un día normal, ${IDEAL_SPF_BY_SUN.playa} en playa. Reaplicar es lo que más sube esta barra — mucho más que cambiar de producto: a tu ritmo actual, un protector 15 puntos mejor te daría +6, y dos aplicaciones extra te dan +34.`;
+      // Texto corregido 2026-08-01: ya no describe un ideal fijo por tipo de
+      // día. Un día 'interior' sigue en 2 aplicaciones (techo bajo fijo a
+      // propósito, ver idealSpfAppsFor), pero normal/alta/playa YA NO son 3/4/5
+      // fijos — dependen de la hora en que despertaste y el UV real de ese día.
+      return `El ideal se ajusta a tu día: si fue interior, son ${IDEAL_SPF_BY_SUN.interior} aplicaciones. Si saliste, el ideal ya no es un número fijo — depende de a qué hora despertaste ese día y cuánto UV hizo (más aplicaciones esperadas en días de más sol y más horas despierta). Reaplicar es lo que más sube esta barra — mucho más que cambiar de producto.`;
     }
     if (key === 'cuerpo_proteccion') {
       return `Brazos y escote acumulan UVA aunque no tomes sol. El ideal aquí es bajo (${IDEAL_BODY_SPF_BY_SUN.interior} aplicación en día normal, ${IDEAL_BODY_SPF_BY_SUN.playa} en playa): con ponerte protector corporal en la mañana casi cubres el día.`;
