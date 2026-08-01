@@ -422,30 +422,38 @@ function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio
   if (nowMs - lastMs < gapH * 3600000) return out(false, 'todavia_protegida');
   return out(true, 'toca_reaplicar');
 }
-// Cuántas aplicaciones de SPF caben HOY entre que te levantas y que se pone el
-// sol, espaciadas por el mismo gap que ya usa el recordatorio (`spfGapHours`
-// sobre el UV actual — un solo valor para todo el día, igual que el resto de
-// la app: nunca hubo pronóstico hora por hora para el gap, solo para el pico).
-// Antes el "ideal del día" era fijo (`IDEAL_SPF_BY_SUN`) y no sabía a qué hora
-// empezó tu día: si te levantas a mediodía, NO se cuentan aplicaciones de las
-// 8 ni las 10 como "debidas" — el conteo arranca en `wakeTimeStr`, no antes.
+// Cuántas aplicaciones de SPF caben en UNA FECHA entre que te levantas y que
+// se pone el sol, espaciadas por el mismo gap que ya usa el recordatorio
+// (`spfGapHours` sobre un UV — el actual si es hoy, el pico registrado ese día
+// si es pasado — un solo valor para todo el día, igual que el resto de la
+// app: nunca hubo pronóstico hora por hora para el gap, solo para el pico).
+// Sirve para DOS casos con la misma matemática: el resumen de HOY en vivo
+// (`ds` = hoy, `sunsetMs`/`uv` de Open-Meteo en vivo) y el ideal de Progreso
+// para un día PASADO (`ds` = esa fecha, `sunsetMs`/`uv` del Historical
+// Forecast API — ver `fetchHistUvSunset` en app.js). Antes el "ideal del día"
+// era fijo (`IDEAL_SPF_BY_SUN`) y no sabía a qué hora empezó tu día: si te
+// levantas a mediodía, NO se cuentan aplicaciones de las 8 ni las 10 como
+// "debidas" — el conteo arranca en `wakeTimeStr`, no antes.
 //
-//   nowMs        — ahora (para saber el día calendario local y no cruzar de día)
-//   sunsetMs     — ocaso local en ms, o null si no se pudo consultar (Open-Meteo
-//                  caído): sin esto no hay tope superior confiable, se devuelve
-//                  null y el caller decide su propio respaldo (el ideal fijo).
-//   uv           — índice UV actual, o null
-//   wakeTimeStr  — hora local en que empieza el día, como "HH:MM" (input nativo
-//                  type=time). Default '08:00' cuando ella no la ha puesto. Un
+//   ds           — fecha LOCAL "YYYY-MM-DD" a la que corresponde el cálculo
+//                  (hoy o un día pasado). Solo se usa para anclar `wakeTimeStr`
+//                  a un timestamp real, nunca para decidir "ahora".
+//   sunsetMs     — ocaso local en ms de ESA fecha, o null si no se pudo
+//                  consultar: sin esto no hay tope superior confiable, se
+//                  devuelve null y el caller decide su propio respaldo (el
+//                  ideal fijo).
+//   uv           — índice UV representativo de esa fecha (actual si es hoy,
+//                  pico del día si es histórico), o null
+//   wakeTimeStr  — hora local en que empezó el día, como "HH:MM" (input nativo
+//                  type=time, o `daily_notes.wake_time`). Default '08:00'. Un
 //                  valor con formato inválido cae también a '08:00' — mejor
-//                  asumir el default de siempre que tronar el resumen de hoy.
+//                  asumir el default de siempre que tronar el cálculo.
 //
 // Se resta el mismo margen de `SPF_MINUTOS_ANTES_DE_OCASO` que ya usa el
 // recordatorio: los últimos 60 min antes del ocaso no cuentan como una
 // aplicación posible más, por la misma razón (el UV ya cayó a 0).
-function spfPosiblesHoy({ nowMs, sunsetMs, uv, wakeTimeStr = '08:00' }) {
+function spfPosiblesEnFecha({ ds, sunsetMs, uv, wakeTimeStr = '08:00' }) {
   if (sunsetMs == null) return null;
-  const ds = toDateStr(new Date(nowMs));
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(wakeTimeStr || '').trim());
   const hhmm = m ? `${String(m[1]).padStart(2, '0')}:${m[2]}` : '08:00';
   const wakeMs = new Date(`${ds}T${hhmm}:00`).getTime();

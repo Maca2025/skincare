@@ -249,20 +249,39 @@ function updateProgress(bodyId) {
 let _lastSpfTodayISO = null;
 let _currentUV = null;
 // Cuántas veces te has puesto SPF facial HOY — para compararlo contra
-// `spfPosiblesHoy()` en el resumen (ver `updateTodaySummary`).
+// `spfPosiblesEnFecha()` en el resumen (ver `updateTodaySummary`).
 let _facialSpfHoyCount = 0;
-// Hora en que despertaste HOY, para `spfPosiblesHoy` — es un dato de VISTA
-// (solo alimenta el resumen de hoy en vivo, nunca Progreso histórico), así
-// que vive en localStorage y no en Supabase. Se guarda por fecha para que no
-// arrastre la hora de ayer: si mañana no la tocas, vuelve al default 08:00.
+// Hora en que despertaste HOY, para `spfPosiblesEnFecha`. Vive en dos lugares
+// a propósito:
+//   - localStorage: lectura instantánea para pintar el resumen sin esperar
+//     un round-trip a Supabase, y respaldo si el guardado en Supabase falla.
+//   - `daily_notes.wake_time`: fuente de verdad para Progreso (2026-08-01, a
+//     petición de ella — "de hoy en adelante" el ideal de Progreso usa la
+//     hora que ella indique cada día). Sin este segundo guardado, el ideal
+//     dinámico de Progreso nunca vería lo que ella puso aquí.
+// Se guarda por fecha en localStorage para que no arrastre la hora de ayer:
+// si mañana no la tocas, vuelve al default 08:00 (y Progreso, para ese día
+// pasado sin dato, asume 11:00 — ver `idealSpfAppsFor`).
 const WAKE_TIME_KEY_PREFIX = 'skincare_wake_';
 function getWakeTimeStr() {
   return localStorage.getItem(WAKE_TIME_KEY_PREFIX + TODAY_STR) || '08:00';
 }
-function setWakeTimeStr(v) {
+async function setWakeTimeStr(v) {
   const ok = /^\d{1,2}:\d{2}$/.test(String(v || '').trim());
-  if (ok) localStorage.setItem(WAKE_TIME_KEY_PREFIX + TODAY_STR, v.trim());
+  if (!ok) { updateTodaySummary(); return; }
+  const val = v.trim();
+  localStorage.setItem(WAKE_TIME_KEY_PREFIX + TODAY_STR, val);
   updateTodaySummary();
+  // Requiere la columna daily_notes.wake_time (ver migracion-wake-time.sql).
+  // Solo se manda ESTA columna: el upsert de Supabase no toca `notes` /
+  // `skin_state` / `sun_exposure` si no van en el payload, igual que hacen
+  // `setSkinState` y `setSunExposure` entre sí — así no se pisan datos del
+  // día que ya estuvieran guardados.
+  const { error } = await db.from('daily_notes').upsert(
+    { note_date: TODAY_STR, wake_time: val, updated_at: new Date().toISOString() },
+    { onConflict: 'note_date' }
+  );
+  if (error) showToast('❌ ' + error.message + ' (¿corriste migracion-wake-time.sql?)', 'error');
 }
 // Última protección POR ZONA. Antes era una sola cifra para todo, que es una
 // media mentirosa: la cara se reaplica varias veces al día y las manos, con
@@ -381,13 +400,15 @@ function updateTodaySummary() {
   // (Open-Meteo caído) — ahí no se muestra el contador en vez de inventar un
   // tope.
   const wakeTimeStr = getWakeTimeStr();
-  const posiblesHoy = spfPosiblesHoy({ nowMs: Date.now(), sunsetMs: _sunsetMs, uv: _currentUV, wakeTimeStr });
+  const posiblesHoy = spfPosiblesEnFecha({ ds: TODAY_STR, sunsetMs: _sunsetMs, uv: _currentUV, wakeTimeStr });
   const contadorHoy = posiblesHoy != null ? ` · ${_facialSpfHoyCount}/${posiblesHoy} hoy` : '';
   const spf = `<span class="tsum-item ${spfCls}">${spfIcono} ${esc(st.label)}${esc(contadorHoy)}`
     + `${(st.state === 'due' || st.state === 'urgent') ? ' ⚠️' : ''}</span>`;
   // Control de hora de despertar: chip editable, siempre visible. Es lo único
-  // que le faltaba a `spfPosiblesHoy` — sin esto no había dónde decirle a la
-  // app a qué hora empezó tu día.
+  // que le faltaba a `spfPosiblesEnFecha` — sin esto no había dónde decirle a
+  // la app a qué hora empezó tu día. Este MISMO valor, guardado en
+  // `daily_notes.wake_time`, es lo que alimenta el ideal dinámico de Progreso
+  // desde hoy en adelante (ver `setWakeTimeStr` y `idealSpfAppsFor`).
   const despertar = `<span class="tsum-item tsum-wake" title="Hora en que te levantaste hoy — ajusta el 100% posible de SPF">`
     + `🌅 <input type="time" id="wake-time-input" value="${esc(wakeTimeStr)}" `
     + `onchange="setWakeTimeStr(this.value)" style="border:none;background:transparent;font:inherit;color:inherit;width:5.2em">`
@@ -453,6 +474,68 @@ async function fetchUV() {
     }
   } catch (e) { _currentUV = null; _uvMax = null; _uvMaxHour = null; _sunsetMs = null; }
   updateTodaySummary();
+}
+
+// ── UV/OCASO HISTÓRICOS (para el ideal dinámico de Progreso) ────────────────
+// `fetchUV()` (arriba) usa el endpoint de PRONÓSTICO de Open-Meteo, que no
+// archiva `uv_index` de fechas pasadas. Para eso existe un endpoint DISTINTO:
+// el Historical Forecast API (`historical-forecast-api.open-meteo.com`), que
+// SÍ archiva uv_index por fecha desde ~2021-2022 (confirmado 2026-08-01 en la
+// documentación oficial — el endpoint de reanálisis ERA5 de "Historical
+// Weather" NO trae UV, sí este). Con eso, `idealSpfAppsFor` puede calcular el
+// ideal de un día pasado con el mismo `spfPosiblesEnFecha` que usa hoy en
+// vivo, en vez de la tabla fija.
+const HIST_UV_CACHE_PREFIX = 'skincare_histuv_';
+// El ocaso y el UV pico de un día que YA PASÓ nunca cambian — se guardan
+// indefinidamente en localStorage y no se vuelven a pedir. Progreso mira 90
+// días hacia atrás cada vez que se abre; sin esta caché, cada apertura
+// repetiría la misma llamada de red para fechas que no van a cambiar nunca.
+function getHistUvCache(ds) {
+  try { const v = localStorage.getItem(HIST_UV_CACHE_PREFIX + ds); return v ? JSON.parse(v) : null; }
+  catch (e) { return null; }
+}
+function setHistUvCache(ds, obj) {
+  try { localStorage.setItem(HIST_UV_CACHE_PREFIX + ds, JSON.stringify(obj)); } catch (e) {}
+}
+// Devuelve { [ds]: { sunsetMs, uvMax } } para cada fecha en [startDs, endDs].
+// DEFENSIVO: si el fetch falla (sin red, API caída, fecha fuera de cobertura),
+// las fechas afectadas simplemente no traen entrada — `idealSpfAppsFor` las
+// detecta y cae al ideal fijo de siempre, igual que cuando `fetchUV()` falla
+// hoy. Nunca revienta Progreso por esto.
+async function fetchHistUvSunset(startDs, endDs) {
+  const out = {};
+  const faltan = [];
+  eachDateStr(startDs, endDs, ds => {
+    const c = getHistUvCache(ds);
+    if (c) out[ds] = c; else faltan.push(ds);
+  });
+  if (!faltan.length) return out;
+  try {
+    const r = await fetch('https://historical-forecast-api.open-meteo.com/v1/forecast?latitude=20.67&longitude=-103.35' +
+      `&start_date=${faltan[0]}&end_date=${faltan[faltan.length - 1]}` +
+      '&daily=sunset,uv_index_max&timezone=auto');
+    const j = await r.json();
+    const D = j && j.daily;
+    if (D && Array.isArray(D.time)) {
+      D.time.forEach((ds, i) => {
+        const sunsetRaw = D.sunset && D.sunset[i];
+        let sunsetMs = null;
+        // Mismo parseo que `fetchUV()`: hora LOCAL sin zona, se interpreta
+        // como local a propósito (coordenadas y dispositivo en Guadalajara).
+        if (sunsetRaw) {
+          const t = new Date(String(sunsetRaw).replace(' ', 'T'));
+          if (!isNaN(t.getTime())) sunsetMs = t.getTime();
+        }
+        const uvMax = (D.uv_index_max && D.uv_index_max[i] != null) ? D.uv_index_max[i] : null;
+        const entry = { sunsetMs, uvMax };
+        out[ds] = entry;
+        setHistUvCache(ds, entry);
+      });
+    }
+  } catch (e) {
+    // Silencioso a propósito — ver nota de arriba.
+  }
+  return out;
 }
 
 // ── DAILY NOTES + ESTADO DE PIEL ─────────────────────────────────────────────
@@ -529,8 +612,15 @@ async function loadTodayNote() {
   document.getElementById('daily-notes').value = (data && data.notes) ? data.notes : '';
   selectedSkinState = data ? (data.skin_state || null) : null;
   selectedSunExposure = data ? (data.sun_exposure || null) : null;
+  // Si ya guardaste tu hora de despertar de HOY desde otro dispositivo (o en
+  // otra sesión de este mismo), este localStorage todavía no la tiene — la
+  // adopta para que el resumen y el chip 🌅 no vuelvan a mostrar el default.
+  if (data && data.wake_time && !localStorage.getItem(WAKE_TIME_KEY_PREFIX + TODAY_STR)) {
+    localStorage.setItem(WAKE_TIME_KEY_PREFIX + TODAY_STR, data.wake_time);
+  }
   renderSkinStateRow();
   renderSunExposureRow();
+  updateTodaySummary();
 }
 async function saveNote() {
   const btn = document.getElementById('save-btn');
@@ -895,7 +985,10 @@ async function loadHistory() {
     db.from('routine_steps').select('product_id, routines(schedule_days)').not('product_id', 'is', null),
     db.from('routines').select('id, section_key, schedule_days, sort_order').eq('active', true),
     db.from('routine_steps').select('id, routine_id'),
-    db.from('daily_notes').select('note_date, skin_state, sun_exposure').gte('note_date', toDateStr(since90)),
+    // `wake_time` alimenta el ideal dinámico de SPF (`idealSpfAppsFor` más
+    // abajo) — requiere migracion-wake-time.sql. Columnas explícitas por la
+    // misma razón que el select de arriba: no traer payload de más.
+    db.from('daily_notes').select('note_date, skin_state, sun_exposure, wake_time').gte('note_date', toDateStr(since90)),
     // Hitos para marcar el heatmap. Si la tabla aún no existe (migración sin
     // correr) el error se ignora y el heatmap se pinta igual que siempre.
     db.from('treatment_events').select('event_date, event_type, title').gte('event_date', toDateStr(since90))
@@ -947,6 +1040,11 @@ async function loadHistory() {
   const ENDS = toDateStr(_yst);
   const _ws = new Date(TODAY); _ws.setDate(TODAY.getDate() - 90);
   const WSTART = toDateStr(_ws);
+  // UV pico + ocaso reales de cada día pasado en el rango de Progreso (ver
+  // `fetchHistUvSunset` arriba). Un solo await más: casi siempre resuelve de
+  // la caché local sin tocar la red, porque el ocaso/UV de un día que ya
+  // pasó no cambia nunca.
+  const histUvSunset = await fetchHistUvSunset(WSTART, ENDS);
   const productDoneDates = (p) => {
     const s = new Set();
     allAppsWithProd.forEach(({ r, rp }) => {
@@ -1000,11 +1098,39 @@ async function loadHistory() {
   // el heatmap y en la correlación).
   const skinByDate = {};
   const sunByDate = {};
+  const wakeByDate = {};
   ((notesRes && notesRes.data) || []).forEach(r => {
     if (r.skin_state) skinByDate[r.note_date] = r.skin_state;
     if (r.sun_exposure) sunByDate[r.note_date] = r.sun_exposure;
+    if (r.wake_time) wakeByDate[r.note_date] = r.wake_time;
   });
-  const idealSpfAppsFor = ds => IDEAL_SPF_BY_SUN[sunByDate[ds]] || IDEAL_SPF_DEFAULT;
+  // Ideal FACIAL de SPF — dinámico desde el 2026-08-01, a petición de ella:
+  // "de hoy en adelante" usa la hora de despertar que indique cada día
+  // (`wakeByDate`, ver `setWakeTimeStr`); "hacia atrás", sin ese dato
+  // guardado, ASUME que despertó a las 11:00 todos los días pasados —
+  // decisión suya explícita, no un cálculo: no hay forma de saber su hora
+  // real de esos días.
+  // Excepción: los días marcados 'interior' CONSERVAN el techo fijo bajo de
+  // siempre (regla 14 de ARQUITECTURA.md — nadie reaplica protector de
+  // exterior si no salió de casa). Sin esta excepción, un día entero adentro
+  // habría pasado de ideal=2 a un ideal de 5-8 solo por tener horas de luz
+  // por delante, aunque ella no las haya usado — bajaría el % de esos días
+  // sin motivo clínico. Decisión mía, no pedida explícitamente: si prefieres
+  // que 'interior' también use el cálculo dinámico, es un cambio de una
+  // línea (quitar el `if` de abajo).
+  // Si falta el dato histórico (fetch caído, o la fecha cae fuera de la
+  // cobertura del API — antes de ~2021) cae al ideal fijo de siempre, igual
+  // que cuando `fetchUV()` falla hoy.
+  const idealSpfAppsFor = ds => {
+    if (sunByDate[ds] === 'interior') return IDEAL_SPF_BY_SUN.interior;
+    const h = histUvSunset[ds];
+    if (h && h.sunsetMs != null) {
+      const wakeTimeStr = wakeByDate[ds] || '11:00';
+      const dyn = spfPosiblesEnFecha({ ds, sunsetMs: h.sunsetMs, uv: h.uvMax, wakeTimeStr });
+      if (dyn != null) return dyn;
+    }
+    return IDEAL_SPF_BY_SUN[sunByDate[ds]] || IDEAL_SPF_DEFAULT;
+  };
   const idealBodySpfAppsFor = ds => {
     const v = IDEAL_BODY_SPF_BY_SUN[sunByDate[ds]];
     return v == null ? IDEAL_BODY_SPF_DEFAULT : v;
