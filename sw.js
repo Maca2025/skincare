@@ -4,6 +4,22 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v20 — la constancia diaria (heatmap + racha) deja de medir "% de pasos de
+// rutina hechos" y pasa a medir lo mismo que las barras de Progreso: cuánto
+// llenaste el techo diario de cada eje de dosis, promediado solo entre los
+// ejes con actividad ese día (los sin actividad no cuentan en contra — un
+// descanso de textura/firmeza no es una falla). Se retiró por completo la
+// tarjeta "Rutina completa" (General/Mañana/Noche/Cuerpo/Pies): no hay
+// equivalente de mañana/noche en el motor de dosis, y Cuerpo/Pies ya se veían
+// en "Estímulo entregado". Motivo: los multipickers dejan aplicar 1 o 6
+// productos bajo el mismo paso y contaban igual — el % de pasos ya no
+// reflejaba el estímulo real entregado.
+// v19 — reaplicación de SPF recalibrada por TIPO DE EXPOSICIÓN (no solo UV):
+// interior con luz natural 4h, aire libre normal/mucho sol/playa 2h, actividad
+// física o agua 60-80min (nuevo 5to botón "Actividad"). Vale tanto para el
+// ideal de Progreso (pasado y hoy) como para el aviso en vivo dentro de la app.
+// UV bajo sigue vetando el aviso sin importar la actividad. v18 corrigió el
+// gap fijo por banda de UV de 1.5h a 2h para muy_alto/extremo (guía derm real).
 // v10 — barra superior por zona (última hora de SPF en cara/cuello/manos, fuera
 // los contadores de pasos), ritmo de reaplicación según UV y ocaso, y estado
 // rojo con UV 8+.
@@ -21,7 +37,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v18';
+const CACHE = 'skincare-shell-v20';
 const SHELL = [
   './',
   './index.html',

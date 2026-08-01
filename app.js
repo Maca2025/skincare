@@ -1468,64 +1468,48 @@ async function loadHistory() {
   const journeyPct = Math.min(100, Math.round(weekNum / 16 * 100));
   const constVals = [prot, despig, barr, rege].map(x => x ? x.pct : null).filter(x => x != null);
   const constancia = constVals.length ? Math.round(constVals.reduce((a, b) => a + b, 0) / constVals.length) : null;
-  // ── RUTINA COMPLETA ────────────────────────────────────────────────────────
-  const stepsByRoutineId = {};
-  ((allStepsRes && allStepsRes.data) || []).forEach(s => {
-    if (!stepsByRoutineId[s.routine_id]) stepsByRoutineId[s.routine_id] = [];
-    stepsByRoutineId[s.routine_id].push(s.id);
-  });
-  const routinesForSection = key => ((routinesRes && routinesRes.data) || [])
-    .filter(r => r.section_key === key)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const amRoutinesAll = routinesForSection('am');
-  const pmRoutinesAll = routinesForSection('pm');
-  const bodyRoutinesAll = routinesForSection('body');
-  const feetRoutinesAll = routinesForSection('feet');
-  const routineAppliesOnDow = (r, dow) => !r.schedule_days || !r.schedule_days.length || r.schedule_days.includes(dow);
-  const doneStepsByDate = {};
-  apps.forEach(r => {
-    if (r.source !== 'rutina' || !r.routine_step_id) return;
-    const ds = localDateOfISO(r.applied_at);
-    if (!doneStepsByDate[ds]) doneStepsByDate[ds] = new Set();
-    doneStepsByDate[ds].add(r.routine_step_id);
-  });
-  const bySectionSum = { am: { hit: 0, total: 0 }, pm: { hit: 0, total: 0 }, body: { hit: 0, total: 0 }, feet: { hit: 0, total: 0 } };
-  const dailyRoutinePct = {}; // ds → fracción 0..1 de pasos hechos ese día (para el heatmap)
-  let routineSumPct = 0, routineElig = 0;
-  const haveAnyRoutineData = ((routinesRes && routinesRes.data) || []).length > 0;
-  if (haveAnyRoutineData && WSTART <= ENDS) {
-    eachDateStr(WSTART, ENDS, (ds, dow) => {
-      const amR = amRoutinesAll.find(r => routineAppliesOnDow(r, dow));
-      const pmR = pmRoutinesAll.find(r => routineAppliesOnDow(r, dow));
-      const bodyRs = bodyRoutinesAll.filter(r => routineAppliesOnDow(r, dow));
-      const feetRs = feetRoutinesAll.filter(r => routineAppliesOnDow(r, dow));
-      const done = doneStepsByDate[ds] || new Set();
-      let dayTotal = 0, dayHit = 0;
-      const tally = (sectionKey, routinesForDay) => {
-        let total = 0, hit = 0;
-        routinesForDay.forEach(r => {
-          (stepsByRoutineId[r.id] || []).forEach(stepId => {
-            total++;
-            if (done.has(stepId)) hit++;
-          });
-        });
-        if (total > 0) { bySectionSum[sectionKey].total += total; bySectionSum[sectionKey].hit += hit; }
-        dayTotal += total; dayHit += hit;
-      };
-      tally('am', amR ? [amR] : []);
-      tally('pm', pmR ? [pmR] : []);
-      tally('body', bodyRs);
-      tally('feet', feetRs);
-      if (dayTotal > 0) {
-        routineElig++;
-        routineSumPct += Math.round(dayHit / dayTotal * 100);
-        dailyRoutinePct[ds] = dayHit / dayTotal;
-      }
+  // ── ESTÍMULO DIARIO (para el heatmap) ──────────────────────────────────────
+  // Hasta el 2026-08-01 esto medía "% de pasos de rutina marcados como
+  // hechos" (am/pm/body/feet, por CONTEO DE PASOS). Se retiró a petición de
+  // ella: con los multipickers de producto, un paso puede llevar 1 producto o
+  // 6 y contaba exactamente igual ("paso hecho/no hecho") — el número dejó de
+  // reflejar cuánto estímulo entregó realmente ese día. Pidió que el criterio
+  // fuera el MISMO que usan las barras de Progreso (estímulo/dosis), no un
+  // checklist de pasos.
+  //
+  // Ahora `dailyStimulusPct[ds]` = promedio, entre los ejes que SÍ recibieron
+  // alguna aplicación ese día, de cuánto llenaste el techo diario de cada uno
+  // (`min(1, pts_del_día / techoDiario)` — el mismo techo ya calibrado que usa
+  // Progreso). Un eje SIN actividad ese día no entra al promedio — no cuenta
+  // en contra. Es DECISIÓN EXPLÍCITA de ella (AskUserQuestion, 2026-08-01):
+  // varios ejes (textura, firmeza) esperan descansos y el promedio SEMANAL de
+  // Progreso ya los perdona; este promedio diario hace lo mismo día a día. La
+  // alternativa (ejes sin actividad cuentan como 0) exigiría tocar los 8 ejes
+  // TODOS los días para llegar a 100%, y eso contradice ese mismo perdón.
+  //
+  // La tarjeta "Rutina completa" (General/Mañana/Noche/Cuerpo/Pies) que existía
+  // se RETIRÓ por completo el mismo día, también a petición de ella: no hay
+  // equivalente de "Mañana"/"Noche" en el motor de dosis (no registra HORA del
+  // día, solo zona×función), y Cuerpo/Pies ya se muestran como barras propias
+  // en "Estímulo entregado" más arriba — mantener ambas hubiera sido el mismo
+  // dato dos veces.
+  const dailyStimulusPct = {}; // ds → fracción 0..1, colorea el heatmap
+  if (WSTART <= ENDS) {
+    eachDateStr(WSTART, ENDS, ds => {
+      const axesDelDia = dosePtsByDate[ds];
+      if (!axesDelDia) return;
+      let sum = 0, n = 0;
+      Object.keys(axesDelDia).forEach(ax => {
+        const cfg = (typeof DOSE_AXES !== 'undefined') ? DOSE_AXES[ax] : null;
+        if (!cfg || !cfg.techoDiario) return;
+        const pts = axesDelDia[ax] || 0;
+        if (pts <= 0) return; // eje sin actividad ese día: se ignora, no cuenta en contra
+        sum += Math.min(1, pts / cfg.techoDiario);
+        n++;
+      });
+      if (n > 0) dailyStimulusPct[ds] = sum / n;
     });
   }
-  const routineCompletePct = routineElig > 0 ? Math.round(routineSumPct / routineElig) : null;
-  const sectionPct = key => bySectionSum[key].total > 0 ? Math.round(bySectionSum[key].hit / bySectionSum[key].total * 100) : null;
-  const routineBreakdown = { am: sectionPct('am'), pm: sectionPct('pm'), body: sectionPct('body'), feet: sectionPct('feet') };
   const diagnosisText = (key, label, o) => {
     if (o.pct >= 90) return `Vas muy bien aquí — arriba de 90%. Sigue así.`;
     if (key === 'spf_facial') {
@@ -1647,10 +1631,10 @@ async function loadHistory() {
         // Días futuros de la semana en curso: hueco invisible que mantiene la
         // rejilla alineada sin fingir que hay dato.
         if (ds > ENDS) { cells.push('<div class="heat-cell heat-cell-void"></div>'); return; }
-        const p = dailyRoutinePct[ds];
+        const p = dailyStimulusPct[ds];
         let bg = '#F0ECE7';
         if (p != null) bg = `rgba(40,120,72,${(0.15 + p * 0.85).toFixed(2)})`;
-        const pctTxt = p != null ? `📋 ${Math.round(p * 100)}% de rutina completada` : '📋 sin registros de rutina';
+        const pctTxt = p != null ? `💪 ${Math.round(p * 100)}% de estímulo del día` : '💪 sin estímulo registrado';
         const skin = skinByDate[ds] ? ` · 🙂 piel ${skinByDate[ds]}/5` : '';
         const sun = sunByDate[ds] ? ` · ☀️ sol: ${sunByDate[ds]}` : '';
         // Un día con hito lleva marca visible y su texto en el detalle.
@@ -1723,7 +1707,7 @@ async function loadHistory() {
   };
   let spfStreak = streakOf(ds => (spfPointsByDate[ds] || 0) > 0);
   if (spfPointsByDate[TODAY_STR]) spfStreak += 1; // hoy ya cuenta si registraste
-  const routineStreak = streakOf(ds => (dailyRoutinePct[ds] || 0) >= 0.8);
+  const stimulusStreak = streakOf(ds => (dailyStimulusPct[ds] || 0) >= 0.8);
   const streakCard = (icon, n, name) => {
     const cls = n >= 7 ? ' hot' : (n >= 3 ? ' warm' : '');
     return `<div class="streak-card${cls}">
@@ -1733,7 +1717,7 @@ async function loadHistory() {
   <div class="streak-name">${name}</div>
 </div>`;
   };
-  const streaksHTML = `<div class="streak-grid">${streakCard('🛡️', spfStreak, 'con SPF registrado')}${streakCard('📋', routineStreak, 'rutina ≥80% completa')}</div>`;
+  const streaksHTML = `<div class="streak-grid">${streakCard('🛡️', spfStreak, 'con SPF registrado')}${streakCard('💪', stimulusStreak, 'día con buen estímulo (≥80%)')}</div>`;
   // ── CORRELACIÓN: cómo amanece tu piel según qué usaste la víspera ─────────
   const nextDayStr = ds => { const d = new Date(ds + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return _dsOfUTC(d); };
   const tretDates = new Set(), exfoDates = new Set();
@@ -1770,14 +1754,6 @@ async function loadHistory() {
   }
   // Datos que reutiliza el reporte para la dermatóloga.
   lastReportData = { prot, despig, barr, rege, textura, constancia, weekNum, melStart };
-  const routineRow = (pct, color, icon, label, sub) => {
-    if (pct == null) return `<div class="adh-row"><div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:#A09090">—</span></div><div class="adh-sub">Sin rutinas programadas en la ventana o aún sin registros.</div></div>`;
-    return `<div class="adh-row">
-  <div class="adh-top"><span class="adh-name"><span class="adh-ic">${icon}</span>${label}</span><span class="adh-val" style="color:${color}">${pct}%</span></div>
-  <div class="adh-track"><div class="adh-fill" style="width:${pct}%;background:${color}"></div></div>
-  <div class="adh-sub">${sub}</div>
-</div>`;
-  };
   // ── RENDER: ESTÍMULO ENTREGADO (dosis) ─────────────────────────────────────
   const doseRow = ({ key, o }) => {
     const c = o.cfg;
@@ -1805,16 +1781,6 @@ async function loadHistory() {
   const dosisOtrosHTML = dosisOtros.length ? `
 <div class="adh-label">🧴 Cuerpo, pies, cabello, manos y labios</div>
 <div class="adh-card">${dosisOtros.map(doseRow).join('')}</div>` : '';
-  const ROUTINE_COLOR = '#6B7FA0';
-  const routineHTML = `
-<div class="adh-label">Rutina completa · últimos 90 días</div>
-<div class="adh-card">
-  ${routineRow(routineCompletePct, ROUTINE_COLOR, '📋', 'General', 'Promedio de pasos de rutina marcados como hechos cada día, en las 4 secciones. No es específico de melasma.')}
-  ${routineRow(routineBreakdown.am, ROUTINE_COLOR, '☀️', 'Mañana', 'Pasos de tu rutina AM completados.')}
-  ${routineRow(routineBreakdown.pm, ROUTINE_COLOR, '🌙', 'Noche', 'Pasos de tu rutina PM completados.')}
-  ${routineRow(routineBreakdown.body, ROUTINE_COLOR, '🧴', 'Cuerpo', 'Pasos de tu(s) rutina(s) de cuerpo completados.')}
-  ${routineRow(routineBreakdown.feet, ROUTINE_COLOR, '🦶', 'Pies', 'Pasos de tu rutina de pies completados.')}
-</div>`;
   el.innerHTML = `
 ${streaksHTML}
 <div class="pj-card">
@@ -1849,7 +1815,6 @@ ${corrHTML}
   <div class="adh-card">
     ${adhRow(textura, '#5B8FA8', '🔍', 'Textura / Poros', 'textura_poros', sparkHTML(roleWeekly('textura_poros'), '#5B8FA8'))}
   </div>
-  ${routineHTML}
 </details>`;
   histApps = apps;
   renderHistorial();
