@@ -4,6 +4,11 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v21 — filtro por ZONA en "Historial de aplicaciones", en cascada con los
+// filtros de tipo de producto y producto específico ya existentes. Resuelve
+// zona con el mismo respaldo (r.zones → PRODUCT_ZONAS) que usa el motor de
+// dosis, para no mostrar un conteo distinto al de Progreso para el mismo
+// registro.
 // v20 — la constancia diaria (heatmap + racha) deja de medir "% de pasos de
 // rutina hechos" y pasa a medir lo mismo que las barras de Progreso: cuánto
 // llenaste el techo diario de cada eje de dosis, promediado solo entre los
@@ -37,7 +42,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v20';
+const CACHE = 'skincare-shell-v21';
 const SHELL = [
   './',
   './index.html',

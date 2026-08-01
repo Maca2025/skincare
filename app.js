@@ -1872,6 +1872,7 @@ function debugDoseAxis(axKey = 'proteccion') {
 let histApps = [];
 let histFilter = '';
 let histCatFilter = '';
+let histZonaFilter = '';
 // Categoría de un registro: por product_id; para registros viejos sin id,
 // se intenta resolver por nombre.
 function categoryOfApp(r) {
@@ -1882,16 +1883,40 @@ function categoryOfApp(r) {
   }
   return p ? p.category : null;
 }
+// Zonas de un registro: `r.zones` si se guardó explícito (multipicker), y si
+// no, el mismo respaldo que usa el motor de dosis — `PRODUCT_ZONAS` del
+// producto (por id, o por nombre en registros viejos sin id). Reutilizar
+// EXACTAMENTE esta resolución (no una propia) es lo que evita que el filtro
+// de zona muestre un conteo distinto al de las barras de Progreso para el
+// mismo registro (regla 15 de la skill: un mismo registro no puede resolver
+// a zonas distintas según qué parte de la UI lo mire).
+function zonasOfApp(r) {
+  if (Array.isArray(r.zones) && r.zones.length) return r.zones;
+  const pid = r.product_id || productIdForLoggedName(r.product_name);
+  return (typeof PRODUCT_ZONAS !== 'undefined' && pid && PRODUCT_ZONAS[pid]) || [];
+}
 function renderHistorial() {
   const logEl = document.getElementById('log-content');
   if (!logEl) return;
-  // Filtro 1: tipo de producto (categoría). Filtro 2: producto específico —
-  // la lista de productos se acota a la categoría elegida.
+  // Filtros en cascada: zona → tipo de producto (categoría) → producto
+  // específico. Cada uno acota las opciones del siguiente, igual que ya
+  // hacía categoría → producto.
   const catOrder = c => { const i = PRODUCT_CATEGORIES.indexOf(c); return i === -1 ? 999 : i; };
-  const cats = [...new Set(histApps.map(categoryOfApp).filter(Boolean))].sort((a, b) => catOrder(a) - catOrder(b));
-  const byCat = histCatFilter ? histApps.filter(r => categoryOfApp(r) === histCatFilter) : histApps;
+  const byZona = histZonaFilter ? histApps.filter(r => zonasOfApp(r).includes(histZonaFilter)) : histApps;
+  const zonasPresentes = new Set(); histApps.forEach(r => zonasOfApp(r).forEach(z => zonasPresentes.add(z)));
+  const zonaOrder = z => (typeof ZONAS !== 'undefined' && ZONAS[z] && ZONAS[z].orden != null) ? ZONAS[z].orden : 99;
+  const zonasList = [...zonasPresentes].sort((a, b) => zonaOrder(a) - zonaOrder(b));
+  const cats = [...new Set(byZona.map(categoryOfApp).filter(Boolean))].sort((a, b) => catOrder(a) - catOrder(b));
+  if (histCatFilter && !cats.includes(histCatFilter)) histCatFilter = '';
+  const byCat = histCatFilter ? byZona.filter(r => categoryOfApp(r) === histCatFilter) : byZona;
   const names = [...new Set(byCat.map(r => r.product_name))].sort((a, b) => a.localeCompare(b));
   if (histFilter && !names.includes(histFilter)) histFilter = '';
+  const zonaOptions = '<option value="">— Toda zona —</option>' +
+    zonasList.map(z => {
+      const info = (typeof ZONAS !== 'undefined') ? ZONAS[z] : null;
+      const label = info ? `${info.icon} ${info.label}` : z;
+      return `<option value="${esc(z)}"${z === histZonaFilter ? ' selected' : ''}>${esc(label)}</option>`;
+    }).join('');
   const catOptions = '<option value="">— Todos los tipos —</option>' +
     cats.map(c => `<option value="${esc(c)}"${c === histCatFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
   const prodOptions = '<option value="">— Todos los productos —</option>' +
@@ -1899,6 +1924,7 @@ function renderHistorial() {
   const filtered = histFilter ? byCat.filter(r => r.product_name === histFilter) : byCat;
   logEl.innerHTML = `<div class="logs-card"><h3>📋 Historial de aplicaciones</h3>
 <button class="mini-action-btn" onclick="exportBackup()">⬇️ Exportar respaldo (JSON + CSV)</button>
+<select class="prod-input prod-select hist-filter" onchange="histZonaFilter=this.value; renderHistorial()">${zonaOptions}</select>
 <select class="prod-input prod-select hist-filter" onchange="histCatFilter=this.value; renderHistorial()">${catOptions}</select>
 <select class="prod-input prod-select hist-filter" onchange="histFilter=this.value; renderHistorial()">${prodOptions}</select>
 ${buildHistorialByDay(filtered)}</div>`;
