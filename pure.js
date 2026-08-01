@@ -364,11 +364,12 @@ function spotTrend(obs) {
 // Bandas de la OMS (las mismas que usa cualquier app del clima):
 //   0-2 bajo · 3-5 moderado · 6-7 alto · 8-10 muy alto · 11+ extremo
 //
-// El ritmo elegido por la usuaria (2026-07-26): 8+ → 1.5 h · 6-7 → 2 h ·
-// 3-5 → 3 h · <3 → no avisa. La base de 2 h es la recomendación derma estándar
-// con exposición real; solo se aprieta cuando el UV lo justifica. Más agresivo
-// se descartó a propósito: el riesgo real de avisar de más es que dejes de
-// hacer caso.
+// Ritmo (corregido 2026-08-01 contra criterio dermatológico real, verificado
+// por la usuaria): 2 h desde alto en adelante (6+) · 3 h en moderado (3-5) ·
+// <3 no avisa. 2 h es la recomendación derma estándar con exposición real y
+// NO se aprieta más aunque el UV sea máximo — la versión anterior apretaba a
+// 1.5 h en muy_alto/extremo por un supuesto nuestro, no por indicación
+// clínica, y quedó mal.
 function uvBand(uv) {
   if (uv == null || isNaN(uv)) return null;
   if (uv < 3) return 'bajo';
@@ -377,12 +378,36 @@ function uvBand(uv) {
   if (uv < 11) return 'muy_alto';
   return 'extremo';
 }
-const SPF_GAP_POR_BANDA = { bajo: null, moderado: 3, alto: 2, muy_alto: 1.5, extremo: 1.5 };
+// Corregido 2026-08-01: el criterio dermatológico real es reaplicar cada 2h
+// aunque el UV sea máximo — 1.5h en muy_alto/extremo era un supuesto nuestro,
+// no una indicación clínica, y se verificó que estaba mal. Por debajo de UV 6
+// no hace falta ir más seguido que cada 2h tampoco; moderado se queda en 3h.
+const SPF_GAP_POR_BANDA = { bajo: null, moderado: 3, alto: 2, muy_alto: 2, extremo: 2 };
+// Cadencia por TIPO DE EXPOSICIÓN (2026-08-01, pauta dermatológica real que
+// trajo la usuaria, verificada por ella con UV 9 de referencia):
+//   interior (con luz natural, cerca de ventanas) → 4 h
+//   normal / alta / playa (aire libre directo)    → 2 h, sin excepción
+//   actividad (actividad física o agua)           → 60-80 min: el sudor o el
+//     agua quitan el protector antes de que el tiempo por sí solo lo agote.
+//     70 min es el PUNTO MEDIO del rango — no es un cálculo, es una elección
+//     razonable dentro de "60 u 80"; ajustable si se prefiere el extremo
+//     conservador (60) o el permisivo (80).
+// Esto SUSTITUYE la banda de UV cuando se conoce la exposición del día — el
+// UV solo decide si hace falta protegerse EN ABSOLUTO ('bajo' = no), no la
+// frecuencia: sudar o nadar quita el protector sin importar qué tan fuerte
+// pegue el sol ese momento.
+const SPF_GAP_POR_EXPOSICION = { interior: 4, normal: 2, alta: 2, playa: 2, actividad: 70 / 60 };
 // Horas entre avisos. `null` = no avisar (UV por debajo de 3).
+//   uv        — índice UV actual (o pico del día, para cálculos históricos)
+//   exposure  — 'interior' | 'normal' | 'alta' | 'playa' | 'actividad', o
+//               null/undefined si no se conoce — en ese caso se cae a la
+//               banda de UV sola, como antes de esta sesión.
 // Sin dato de UV se usa la base de 2 h: quedarse callado por no saber es peor
 // que avisar de más en la zona que de verdad importa.
-function spfGapHours(uv) {
+function spfGapHours(uv, exposure) {
   const b = uvBand(uv);
+  if (b === 'bajo') return null;   // UV bajo: no hace falta protegerse, sin importar la actividad
+  if (exposure && SPF_GAP_POR_EXPOSICION[exposure] != null) return SPF_GAP_POR_EXPOSICION[exposure];
   if (b === null) return 2;
   return SPF_GAP_POR_BANDA[b];
 }
@@ -396,12 +421,18 @@ const SPF_MINUTOS_ANTES_DE_OCASO = 60;
 //   uv              — índice UV actual, o null si no se pudo consultar
 //   sunsetMs        — ocaso local en ms, o null si no se pudo consultar
 //   lastNudgeMs     — cuándo se avisó por última vez (antirrebote)
+//   exposure        — exposición del día ya registrada ('interior' · 'normal'
+//                     · 'alta' · 'playa' · 'actividad'), o null/undefined si
+//                     todavía no la marcaste (2026-08-01: antes el aviso en
+//                     vivo solo miraba el UV; ahora, si ya declaraste que es
+//                     un día de actividad física/agua, avisa cada 70 min en
+//                     vez de por banda de UV).
 //
 // Devuelve { avisar, gapH, motivo, minutosParaSiguiente }. `motivo` existe para
 // poder EXPLICAR el silencio: un recordatorio que no suena y no se sabe por qué
 // es indistinguible de uno roto.
-function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio = 8 }) {
-  const gapH = spfGapHours(uv);
+function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio = 8, exposure }) {
+  const gapH = spfGapHours(uv, exposure);
   const now = new Date(nowMs);
   const out = (avisar, motivo) => {
     const base = lastMs != null ? lastMs : null;
@@ -448,11 +479,15 @@ function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio
 //                  type=time, o `daily_notes.wake_time`). Default '08:00'. Un
 //                  valor con formato inválido cae también a '08:00' — mejor
 //                  asumir el default de siempre que tronar el cálculo.
+//   exposure     — exposición del día ('interior' · 'normal' · 'alta' ·
+//                  'playa' · 'actividad'), si ya la registraste. Determina la
+//                  cadencia (ver `SPF_GAP_POR_EXPOSICION`) por encima de la
+//                  banda de UV — 2026-08-01, pauta dermatológica real.
 //
 // Se resta el mismo margen de `SPF_MINUTOS_ANTES_DE_OCASO` que ya usa el
 // recordatorio: los últimos 60 min antes del ocaso no cuentan como una
 // aplicación posible más, por la misma razón (el UV ya cayó a 0).
-function spfPosiblesEnFecha({ ds, sunsetMs, uv, wakeTimeStr = '08:00' }) {
+function spfPosiblesEnFecha({ ds, sunsetMs, uv, wakeTimeStr = '08:00', exposure }) {
   if (sunsetMs == null) return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(wakeTimeStr || '').trim());
   const hhmm = m ? `${String(m[1]).padStart(2, '0')}:${m[2]}` : '08:00';
@@ -462,7 +497,7 @@ function spfPosiblesEnFecha({ ds, sunsetMs, uv, wakeTimeStr = '08:00' }) {
   // aplicación de la mañana, nunca cero — salir de casa sin nada no es una
   // opción válida aunque el día sea corto.
   if (finMs <= wakeMs) return 1;
-  const gapH = spfGapHours(uv);
+  const gapH = spfGapHours(uv, exposure);
   // UV bajo todo el día ('bajo' → gapH null): el recordatorio no exige
   // reaplicar, pero la aplicación base de la mañana sigue contando como el
   // 100% de hoy.
@@ -479,8 +514,8 @@ function spfNudgeText(uv, horasDesdeUltimo) {
     : `Han pasado ${horasDesdeUltimo.toFixed(1)} h desde tu último SPF`;
   const uvTxt = (uv == null || isNaN(uv)) ? '' : ` · UV ${Math.round(uv)}`;
   const porBanda = {
-    extremo:  { titulo: '🔴 UV extremo — reaplica ya', cola: 'Con este UV la sombra no es opcional: reaplica cada 1.5 h y busca techo entre 11 y 16 h.' },
-    muy_alto: { titulo: '🔴 UV muy alto — reaplica ya', cola: 'Es el rango que más pigmenta tus manchas. Reaplica cada 1.5 h mientras estés fuera.' },
+    extremo:  { titulo: '🔴 UV extremo — reaplica ya', cola: 'Con este UV la sombra no es opcional: reaplica cada 2 h y busca techo entre 11 y 16 h.' },
+    muy_alto: { titulo: '🔴 UV muy alto — reaplica ya', cola: 'Es el rango que más pigmenta tus manchas. Reaplica cada 2 h mientras estés fuera.' },
     alto:     { titulo: '🟠 Toca reaplicar SPF', cola: 'UV alto: cada 2 h si te da el sol, aunque estés tras una ventana.' },
     moderado: { titulo: '🟡 Toca reaplicar SPF', cola: 'UV moderado: cada 3 h basta hoy.' },
     bajo:     { titulo: '🟢 SPF al día', cola: 'UV bajo: no hace falta reaplicar por ahora.' }

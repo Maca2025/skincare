@@ -339,7 +339,11 @@ async function loadTodaySpfLast() {
 //   dormido— el sol ya se puso o el UV no da para avisar; no es una falla
 function spfStatus() {
   const uv = _currentUV;
-  const gapH = spfGapHours(uv);
+  // Si ya marcaste la exposición de hoy (actividad física/agua, interior…),
+  // esa cadencia manda sobre la banda de UV — 2026-08-01, pauta dermatológica
+  // real. `selectedSunExposure` es la misma variable que llena el picker de
+  // "Tu día" (setSunExposure/loadTodayNote), sin duplicar el dato.
+  const gapH = spfGapHours(uv, selectedSunExposure);
   const muyAlto = uv != null && uv >= 8;
   const cercaDelOcaso = _sunsetMs != null &&
     Date.now() > _sunsetMs - SPF_MINUTOS_ANTES_DE_OCASO * 60000;
@@ -400,7 +404,7 @@ function updateTodaySummary() {
   // (Open-Meteo caído) — ahí no se muestra el contador en vez de inventar un
   // tope.
   const wakeTimeStr = getWakeTimeStr();
-  const posiblesHoy = spfPosiblesEnFecha({ ds: TODAY_STR, sunsetMs: _sunsetMs, uv: _currentUV, wakeTimeStr });
+  const posiblesHoy = spfPosiblesEnFecha({ ds: TODAY_STR, sunsetMs: _sunsetMs, uv: _currentUV, wakeTimeStr, exposure: selectedSunExposure });
   const contadorHoy = posiblesHoy != null ? ` · ${_facialSpfHoyCount}/${posiblesHoy} hoy` : '';
   const spf = `<span class="tsum-item ${spfCls}">${spfIcono} ${esc(st.label)}${esc(contadorHoy)}`
     + `${(st.state === 'due' || st.state === 'urgent') ? ' ⚠️' : ''}</span>`;
@@ -576,11 +580,17 @@ async function setSkinState(v) {
 }
 // Exposición solar del día — LA variable causal de los sunspots. Requiere
 // la columna daily_notes.sun_exposure (ver migracion-mejoras2.sql).
+// 5to botón agregado 2026-08-01: pauta dermatológica real trae una cadencia
+// PROPIA para sudor/agua (60-80 min, se lava el protector) — meterlo dentro
+// de "Playa" habría promediado mal los días de playa sin nadar/hacer
+// ejercicio. La cadencia de cada categoría vive en `SPF_GAP_POR_EXPOSICION`
+// (pure.js), no aquí — este array es solo la UI.
 const SUN_EXPOSURES = [
   { v: 'interior', e: '🏠', l: 'Interior' },
   { v: 'normal',   e: '🚶', l: 'Normal' },
   { v: 'alta',     e: '☀️', l: 'Mucho sol' },
   { v: 'playa',    e: '🏖️', l: 'Playa' },
+  { v: 'actividad', e: '🏃', l: 'Actividad' },
 ];
 let selectedSunExposure = null;
 function renderSunExposureRow() {
@@ -1084,7 +1094,12 @@ async function loadHistory() {
   // y castiga sin motivo. Reaplicar cada 2 h es el estándar para exposición
   // real, no para estar bajo techo.
   const IDEAL_SPF_APPS = 5;            // techo: día de playa / exposición máxima
-  const IDEAL_SPF_BY_SUN = { interior: 2, normal: 3, alta: 4, playa: 5 };
+  // Tabla de RESPALDO — solo se usa si falta el dato histórico de UV/ocaso
+  // para esa fecha (ver `idealSpfAppsFor` más abajo, que desde 2026-08-01
+  // prefiere el cálculo dinámico casi siempre). `actividad` en 8 es una
+  // estimación razonable (un día típico de ~11h despierta a ese ritmo da 10;
+  // se deja un poco por debajo como respaldo conservador, no exacto).
+  const IDEAL_SPF_BY_SUN = { interior: 2, normal: 3, alta: 4, playa: 5, actividad: 8 };
   const IDEAL_SPF_DEFAULT = 3;         // sin nota ese día: se asume día normal
   // CUERPO: ideal mucho más bajo que cara. La piel corporal va cubierta por ropa
   // buena parte del tiempo y nadie reaplica protector corporal 5 veces al día.
@@ -1110,26 +1125,24 @@ async function loadHistory() {
   // guardado, ASUME que despertó a las 11:00 todos los días pasados —
   // decisión suya explícita, no un cálculo: no hay forma de saber su hora
   // real de esos días.
-  // Excepción: los días marcados 'interior' CONSERVAN el techo fijo bajo de
-  // siempre (regla 14 de ARQUITECTURA.md — nadie reaplica protector de
-  // exterior si no salió de casa). Sin esta excepción, un día entero adentro
-  // habría pasado de ideal=2 a un ideal de 5-8 solo por tener horas de luz
-  // por delante, aunque ella no las haya usado — bajaría el % de esos días
-  // sin motivo clínico. Decisión mía, no pedida explícitamente: si prefieres
-  // que 'interior' también use el cálculo dinámico, es un cambio de una
-  // línea (quitar el `if` de abajo).
+  // ACTUALIZADO el mismo día: ya NO hay excepción para 'interior'. La
+  // excepción original (mantenerlo en el techo fijo de 2) fue una decisión
+  // MÍA sin pauta clínica detrás; ella trajo la pauta real (interior con luz
+  // natural → reaplicar cada 4h, ver SPF_GAP_POR_EXPOSICION en pure.js), así
+  // que ahora 'interior' pasa por el mismo cálculo dinámico que el resto,
+  // solo que con una cadencia más lenta — ya no hace falta el `if` especial.
   // Si falta el dato histórico (fetch caído, o la fecha cae fuera de la
   // cobertura del API — antes de ~2021) cae al ideal fijo de siempre, igual
   // que cuando `fetchUV()` falla hoy.
   const idealSpfAppsFor = ds => {
-    if (sunByDate[ds] === 'interior') return IDEAL_SPF_BY_SUN.interior;
+    const exposure = sunByDate[ds];
     const h = histUvSunset[ds];
     if (h && h.sunsetMs != null) {
       const wakeTimeStr = wakeByDate[ds] || '11:00';
-      const dyn = spfPosiblesEnFecha({ ds, sunsetMs: h.sunsetMs, uv: h.uvMax, wakeTimeStr });
+      const dyn = spfPosiblesEnFecha({ ds, sunsetMs: h.sunsetMs, uv: h.uvMax, wakeTimeStr, exposure });
       if (dyn != null) return dyn;
     }
-    return IDEAL_SPF_BY_SUN[sunByDate[ds]] || IDEAL_SPF_DEFAULT;
+    return IDEAL_SPF_BY_SUN[exposure] || IDEAL_SPF_DEFAULT;
   };
   const idealBodySpfAppsFor = ds => {
     const v = IDEAL_BODY_SPF_BY_SUN[sunByDate[ds]];
@@ -1183,6 +1196,15 @@ async function loadHistory() {
   // aunque no venga de un paso de rutina: es justo lo que la adherencia no veía.
   // La matemática (techo diario + ventana semanal) vive en pure.js.
   const dosePtsByDate = {};   // ds → { eje: puntos }
+  // Cuántas aplicaciones REALES entregaron protección a la zona CARA ese día
+  // (2026-08-01, para el detalle del heatmap). Distinto de `spfAppsByDate`
+  // (cuenta todo producto categoría "SPF Facial" sin mirar a qué zona lo
+  // marcaste esa vez) — este cuenta solo las que de verdad tienen 'cara' en
+  // sus zonas, que es lo único que alimenta dosePtsByDate[ds]['proteccion'].
+  const caraProteccionAppsByDate = {};
+  // ds → [{ nombre, calidad, ideal, puntos }] — una entrada por aplicación real
+  // que entregó protección a cara, para mostrar de dónde sale cada punto.
+  const caraProteccionDetalleByDate = {};
   // ── EJE = FUNCIÓN × ZONA ──────────────────────────────────────────────────
   // Reproduce EXACTAMENTE el naming de DOSE_AXES en activos-matriz.js. No es
   // decorativo: las claves se conservaron del modelo anterior para no invalidar
@@ -1224,6 +1246,9 @@ async function loadHistory() {
       : (typeof PRODUCT_ZONAS !== 'undefined' ? (PRODUCT_ZONAS[rp.id] || []) : []);
     if (!zonas.length) return;
     if (!dosePtsByDate[ds]) dosePtsByDate[ds] = {};
+    if (zonas.indexOf('cara') !== -1 && ('proteccion' in pot)) {
+      caraProteccionAppsByDate[ds] = (caraProteccionAppsByDate[ds] || 0) + 1;
+    }
     zonas.forEach(zona => {
       Object.keys(pot).forEach(funcion => {
         const ax = ejeKey(zona, funcion);
@@ -1232,6 +1257,8 @@ async function loadHistory() {
         if (!ax || !DOSE_AXES[ax]) return;
         // null = protección: se toma spfScoreOf para no duplicar la calibración UVA.
         let v = pot[funcion] == null ? spfScoreOf(rp) : pot[funcion];
+        const vCruda = v;   // calidad ANTES de re-escalar, para el detalle transparente de abajo.
+        let idealDelDia = null;
         if (funcion === 'proteccion') {
           // Los puntos se normalizan al ideal del día según exposición solar:
           // el techo diario sigue fijo (500 = 5 aplicaciones) pero cumplir 2 en
@@ -1240,11 +1267,23 @@ async function loadHistory() {
           // Cuerpo y MANOS usan el ideal corporal, mucho más bajo — nadie
           // reaplica protector corporal 5 veces al día.
           const facial = (zona === 'cara' || zona === 'cuello' || zona === 'labios');
-          const ideal = facial ? idealSpfAppsFor(ds) : idealBodySpfAppsFor(ds);
-          if (ideal <= 0) return;  // día no evaluable (ej. interior en 0)
-          v = v * (IDEAL_SPF_APPS / ideal);
+          idealDelDia = facial ? idealSpfAppsFor(ds) : idealBodySpfAppsFor(ds);
+          if (idealDelDia <= 0) return;  // día no evaluable (ej. interior en 0)
+          v = v * (IDEAL_SPF_APPS / idealDelDia);
         }
         dosePtsByDate[ds][ax] = (dosePtsByDate[ds][ax] || 0) + v;
+        // Detalle aplicación por aplicación de protección en CARA — para poder
+        // responder "¿de dónde salen los puntos?" con nombres y números reales
+        // en vez de solo el total (ver `showHeatDay`/`_heatDayInfo`).
+        if (ax === 'proteccion') {
+          if (!caraProteccionDetalleByDate[ds]) caraProteccionDetalleByDate[ds] = [];
+          caraProteccionDetalleByDate[ds].push({
+            nombre: (rp && rp.name) || r.product_name || '(sin nombre)',
+            calidad: Math.round(vCruda),
+            ideal: idealDelDia,
+            puntos: Math.round(v)
+          });
+        }
       });
     });
     if (typeof IRRITANTES !== 'undefined' && IRRITANTES.has(rp.id)) {
@@ -1353,11 +1392,12 @@ async function loadHistory() {
       return ALTO[key] || 'Estás entregando prácticamente todo el estímulo útil. Más producto no suma: lo que queda es sostenerlo.';
     }
     if (key === 'proteccion') {
-      // Texto corregido 2026-08-01: ya no describe un ideal fijo por tipo de
-      // día. Un día 'interior' sigue en 2 aplicaciones (techo bajo fijo a
-      // propósito, ver idealSpfAppsFor), pero normal/alta/playa YA NO son 3/4/5
-      // fijos — dependen de la hora en que despertaste y el UV real de ese día.
-      return `El ideal se ajusta a tu día: si fue interior, son ${IDEAL_SPF_BY_SUN.interior} aplicaciones. Si saliste, el ideal ya no es un número fijo — depende de a qué hora despertaste ese día y cuánto UV hizo (más aplicaciones esperadas en días de más sol y más horas despierta). Reaplicar es lo que más sube esta barra — mucho más que cambiar de producto.`;
+      // Texto corregido 2026-08-01 (segunda vez, con la pauta dermatológica
+      // real): el ideal ya no depende solo de hora+UV, depende de qué tan
+      // seguido se lava el protector. Interior (luz natural) 4h · aire libre
+      // directo 2h · actividad física o agua 60-80 min, sobre las horas que
+      // estés despierta ese día.
+      return `El ideal se ajusta a tu día completo, no solo al UV: si marcaste interior, se espera reaplicar cada 4h; si saliste (normal, mucho sol o playa), cada 2h sin excepción; si hubo actividad física o agua, cada 60-80 min porque el sudor o el agua quitan el protector antes de tiempo. El número exacto de aplicaciones sale de cuántas veces cabe esa cadencia entre que despiertas y el ocaso. Reaplicar es lo que más sube esta barra — mucho más que cambiar de producto.`;
     }
     if (key === 'cuerpo_proteccion') {
       return `Brazos y escote acumulan UVA aunque no tomes sol. El ideal aquí es bajo (${IDEAL_BODY_SPF_BY_SUN.interior} aplicación en día normal, ${IDEAL_BODY_SPF_BY_SUN.playa} en playa): con ponerte protector corporal en la mañana casi cubres el día.`;
@@ -1622,19 +1662,42 @@ async function loadHistory() {
         // idealSpfAppsFor/dosePtsByDate para la barra de Progreso — no es un
         // número aparte, es el mismo que decide el %.
         const idealSpfDia = idealSpfAppsFor(ds);
-        const aplicSpfDia = spfAppsByDate[ds] || 0;
+        // OJO: es el conteo de aplicaciones marcadas a CARA específicamente
+        // (caraProteccionAppsByDate), NO spfAppsByDate — ese cuenta cualquier
+        // producto "SPF Facial" sin mirar a qué zona lo marcaste esa vez, y
+        // por eso podía mostrar "3 aplicaciones" cuando solo 2 (o menos)
+        // realmente contaban para los puntos de esta barra.
+        const aplicSpfDia = caraProteccionAppsByDate[ds] || 0;
         const ptsSpfDia = Math.round((dosePtsByDate[ds] || {})['proteccion'] || 0);
         const pctSpfDia = Math.min(100, Math.round(ptsSpfDia / 500 * 100));
+        // El gap ya NO depende solo de la banda de UV: si ese día tiene
+        // exposición registrada, manda la cadencia por tipo de actividad
+        // (SPF_GAP_POR_EXPOSICION, pure.js — pauta dermatológica real,
+        // 2026-08-01): interior 4h · aire libre directo 2h · actividad
+        // física/agua 70min. Sin exposición registrada, cae a la banda de UV
+        // sola. Se muestra explícito para que el ideal del día no sea una
+        // caja negra.
         let fuenteIdeal;
-        if (sunByDate[ds] === 'interior') {
-          fuenteIdeal = 'interior → techo fijo';
+        const exposureDia = sunByDate[ds];
+        const h = histUvSunset[ds];
+        if (h && h.sunsetMs != null) {
+          const gapDia = spfGapHours(h.uvMax, exposureDia);
+          const expTxt = exposureDia ? ` · ${exposureDia}` : ' · sin exposición registrada (banda de UV sola)';
+          fuenteIdeal = `despertar ${wakeByDate[ds] || '11:00 (asumido)'} · UV pico ${h.uvMax != null ? Math.round(h.uvMax) : '?'}${expTxt} · reaplica cada ${gapDia != null ? (Math.round(gapDia * 60) + ' min') : '?'}`;
         } else {
-          const h = histUvSunset[ds];
-          fuenteIdeal = (h && h.sunsetMs != null)
-            ? `despertar ${wakeByDate[ds] || '11:00 (asumido)'} · UV pico ${h.uvMax != null ? Math.round(h.uvMax) : '?'}`
-            : 'sin UV histórico ese día → ideal de respaldo';
+          fuenteIdeal = 'sin UV histórico ese día → ideal de respaldo';
         }
-        const spfTxt = `<div class="heat-detail-spf">🛡️ SPF: ideal ${idealSpfDia} · te aplicaste ${aplicSpfDia}${aplicSpfDia === 1 ? ' vez' : ' veces'} · ${ptsSpfDia} pts = ${pctSpfDia}% del techo diario<br><span style="opacity:.7">(${fuenteIdeal})</span></div>`;
+        // Detalle real, aplicación por aplicación, de dónde salen los puntos:
+        // sin esto "100 pts" es una caja negra. Cada línea es UNA aplicación
+        // real marcada a cara: su calidad cruda (spfScoreOf) y ya reescalada
+        // por (5 ÷ ideal del día).
+        const detalle = caraProteccionDetalleByDate[ds] || [];
+        const detalleTxt = detalle.length
+          ? `<div class="heat-detail-spf-apps">${detalle.map(d =>
+              `· ${esc(d.nombre)}: ${d.calidad} pts crudos × (5÷${d.ideal}) = ${d.puntos} pts`
+            ).join('<br>')}</div>`
+          : '';
+        const spfTxt = `<div class="heat-detail-spf">🛡️ SPF: ideal ${idealSpfDia} · te aplicaste ${aplicSpfDia}${aplicSpfDia === 1 ? ' vez' : ' veces'} a la cara · ${ptsSpfDia} pts = ${pctSpfDia}% del techo diario (500)<br><span style="opacity:.7">(${fuenteIdeal})</span>${detalleTxt}</div>`;
         _heatDayInfo[ds] = `<strong>${DOW_ES[dow]} ${fmtDate(ds)}</strong><br>${pctTxt}${skin}${sun}${hitoTxt}${spfTxt}`;
         cells.push(`<div class="heat-cell${hitos.length ? ' heat-cell-hito' : ''}" style="background:${bg}" onclick="showHeatDay('${ds}', this)"></div>`);
       });
@@ -2402,8 +2465,9 @@ async function repeatLastReapp() {
 // SPF facial registrado, manda notificación (o toast si no diste permiso).
 const SPF_REMINDER_KEY = 'skincare_spf_reminder';
 const SPF_NUDGE_TS_KEY = 'skincare_last_spf_nudge';
-// El plazo ya NO es fijo: lo calcula `spfGapHours(uv)` en pure.js (UV 8+ → 1.5 h
-// · 6-7 → 2 h · 3-5 → 3 h · <3 → no avisa) y el ocaso lo corta. Esta constante
+// El plazo ya NO es fijo: lo calcula `spfGapHours(uv)` en pure.js (2 h de UV 6
+// en adelante — corregido 2026-08-01, antes bajaba a 1.5h en 8+ sin base
+// clínica real · 3-5 → 3 h · <3 → no avisa) y el ocaso lo corta. Esta constante
 // se conserva SOLO como respaldo documental del valor histórico; si vuelve a
 // aparecer en una condición, es que alguien reintrodujo el plazo fijo.
 const SPF_REMINDER_GAP_H = 2;
@@ -2527,7 +2591,8 @@ async function checkSpfReminder() {
   const lastMs = (data && data.length) ? new Date(data[0].applied_at).getTime() : null;
   const chk = spfReminderCheck({
     nowMs: Date.now(), lastMs, uv: _currentUV,
-    sunsetMs: _sunsetMs, lastNudgeMs: _lastSpfNudge
+    sunsetMs: _sunsetMs, lastNudgeMs: _lastSpfNudge,
+    exposure: selectedSunExposure
   });
   if (!chk.avisar) return;
   _lastSpfNudge = Date.now();
