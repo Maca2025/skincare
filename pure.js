@@ -428,24 +428,27 @@ function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio
 // la app: nunca hubo pronóstico hora por hora para el gap, solo para el pico).
 // Antes el "ideal del día" era fijo (`IDEAL_SPF_BY_SUN`) y no sabía a qué hora
 // empezó tu día: si te levantas a mediodía, NO se cuentan aplicaciones de las
-// 8 ni las 10 como "debidas" — el conteo arranca en `wakeHour`, no antes.
+// 8 ni las 10 como "debidas" — el conteo arranca en `wakeTimeStr`, no antes.
 //
-//   nowMs     — ahora (para saber el día calendario local y no cruzar de día)
-//   sunsetMs  — ocaso local en ms, o null si no se pudo consultar (Open-Meteo
-//               caído): sin esto no hay tope superior confiable, se devuelve
-//               null y el caller decide su propio respaldo (el ideal fijo).
-//   uv        — índice UV actual, o null
-//   wakeHour  — hora local en que empieza el día; hoy siempre 8 porque no hay
-//               forma de preguntarla (ver nota de sesión). Parámetro para no
-//               tener que tocar esta función el día que sí se pregunte.
+//   nowMs        — ahora (para saber el día calendario local y no cruzar de día)
+//   sunsetMs     — ocaso local en ms, o null si no se pudo consultar (Open-Meteo
+//                  caído): sin esto no hay tope superior confiable, se devuelve
+//                  null y el caller decide su propio respaldo (el ideal fijo).
+//   uv           — índice UV actual, o null
+//   wakeTimeStr  — hora local en que empieza el día, como "HH:MM" (input nativo
+//                  type=time). Default '08:00' cuando ella no la ha puesto. Un
+//                  valor con formato inválido cae también a '08:00' — mejor
+//                  asumir el default de siempre que tronar el resumen de hoy.
 //
 // Se resta el mismo margen de `SPF_MINUTOS_ANTES_DE_OCASO` que ya usa el
 // recordatorio: los últimos 60 min antes del ocaso no cuentan como una
 // aplicación posible más, por la misma razón (el UV ya cayó a 0).
-function spfPosiblesHoy({ nowMs, sunsetMs, uv, wakeHour = 8 }) {
+function spfPosiblesHoy({ nowMs, sunsetMs, uv, wakeTimeStr = '08:00' }) {
   if (sunsetMs == null) return null;
   const ds = toDateStr(new Date(nowMs));
-  const wakeMs = new Date(`${ds}T${String(wakeHour).padStart(2, '0')}:00:00`).getTime();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(wakeTimeStr || '').trim());
+  const hhmm = m ? `${String(m[1]).padStart(2, '0')}:${m[2]}` : '08:00';
+  const wakeMs = new Date(`${ds}T${hhmm}:00`).getTime();
   const finMs = sunsetMs - SPF_MINUTOS_ANTES_DE_OCASO * 60000;
   // El sol se pone antes de que despiertes (o casi): al menos cuenta la
   // aplicación de la mañana, nunca cero — salir de casa sin nada no es una

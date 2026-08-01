@@ -251,6 +251,19 @@ let _currentUV = null;
 // Cuántas veces te has puesto SPF facial HOY — para compararlo contra
 // `spfPosiblesHoy()` en el resumen (ver `updateTodaySummary`).
 let _facialSpfHoyCount = 0;
+// Hora en que despertaste HOY, para `spfPosiblesHoy` — es un dato de VISTA
+// (solo alimenta el resumen de hoy en vivo, nunca Progreso histórico), así
+// que vive en localStorage y no en Supabase. Se guarda por fecha para que no
+// arrastre la hora de ayer: si mañana no la tocas, vuelve al default 08:00.
+const WAKE_TIME_KEY_PREFIX = 'skincare_wake_';
+function getWakeTimeStr() {
+  return localStorage.getItem(WAKE_TIME_KEY_PREFIX + TODAY_STR) || '08:00';
+}
+function setWakeTimeStr(v) {
+  const ok = /^\d{1,2}:\d{2}$/.test(String(v || '').trim());
+  if (ok) localStorage.setItem(WAKE_TIME_KEY_PREFIX + TODAY_STR, v.trim());
+  updateTodaySummary();
+}
 // Última protección POR ZONA. Antes era una sola cifra para todo, que es una
 // media mentirosa: la cara se reaplica varias veces al día y las manos, con
 // suerte, una. Ahora que cada registro guarda su zona, se puede separar.
@@ -363,13 +376,22 @@ function updateTodaySummary() {
   const spfCls = st.state === 'ok' ? 'tsum-ok'
     : (st.state === 'urgent' ? 'tsum-alert' : (st.state === 'dormido' ? '' : 'tsum-warn'));
   const spfIcono = st.state === 'urgent' ? '🔴' : '🛡️';
-  // Posibles de HOY: despertar (8am, fijo por ahora) → ocaso, espaciado por el
-  // UV actual. `null` cuando falta el ocaso (Open-Meteo caído) — ahí no se
-  // muestra el contador en vez de inventar un tope.
-  const posiblesHoy = spfPosiblesHoy({ nowMs: Date.now(), sunsetMs: _sunsetMs, uv: _currentUV });
+  // Posibles de HOY: despertar (la hora que pongas abajo, 08:00 si no la
+  // tocas) → ocaso, espaciado por el UV actual. `null` cuando falta el ocaso
+  // (Open-Meteo caído) — ahí no se muestra el contador en vez de inventar un
+  // tope.
+  const wakeTimeStr = getWakeTimeStr();
+  const posiblesHoy = spfPosiblesHoy({ nowMs: Date.now(), sunsetMs: _sunsetMs, uv: _currentUV, wakeTimeStr });
   const contadorHoy = posiblesHoy != null ? ` · ${_facialSpfHoyCount}/${posiblesHoy} hoy` : '';
   const spf = `<span class="tsum-item ${spfCls}">${spfIcono} ${esc(st.label)}${esc(contadorHoy)}`
     + `${(st.state === 'due' || st.state === 'urgent') ? ' ⚠️' : ''}</span>`;
+  // Control de hora de despertar: chip editable, siempre visible. Es lo único
+  // que le faltaba a `spfPosiblesHoy` — sin esto no había dónde decirle a la
+  // app a qué hora empezó tu día.
+  const despertar = `<span class="tsum-item tsum-wake" title="Hora en que te levantaste hoy — ajusta el 100% posible de SPF">`
+    + `🌅 <input type="time" id="wake-time-input" value="${esc(wakeTimeStr)}" `
+    + `onchange="setWakeTimeStr(this.value)" style="border:none;background:transparent;font:inherit;color:inherit;width:5.2em">`
+    + `</span>`;
   let uv = '';
   if (_currentUV != null) {
     const cls = _currentUV >= 8 ? ' tsum-alert' : (_currentUV < 3 ? ' tsum-ok' : '');
@@ -391,7 +413,7 @@ function updateTodaySummary() {
       ocaso = `<span class="tsum-item">🌇 ${minsAlOcaso > 0 ? horaCorta(new Date(_sunsetMs).toISOString()) : 'anochece'}</span>`;
     }
   }
-  el.innerHTML = `<div class="tsum-card">${parts.join('')}${spf}${uv}${ocaso}</div>`;
+  el.innerHTML = `<div class="tsum-card">${parts.join('')}${spf}${despertar}${uv}${ocaso}</div>`;
 }
 // ── ÍNDICE UV EN VIVO (Open-Meteo, gratis y sin key) ─────────────────────────
 // Coordenadas de Guadalajara. Además de mostrarse en el resumen, hace el
