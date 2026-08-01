@@ -21,7 +21,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v14';
+const CACHE = 'skincare-shell-v15';
 const SHELL = [
   './',
   './index.html',

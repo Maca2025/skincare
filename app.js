@@ -1271,6 +1271,12 @@ async function loadHistory() {
       doseWeeks.push(days.filter(ds => ds <= ENDS));
     }
   }
+  // Expone los datos crudos de Fase B para inspección desde la consola del
+  // navegador (`debugDoseAxis()`, definida más abajo). Son datos LOCALES a
+  // loadHistory() — sin esto, nadie fuera de esta función puede ver los
+  // números reales detrás de una barra de Progreso.
+  window._dbgDosePtsByDate = dosePtsByDate;
+  window._dbgDoseWeeks = doseWeeks;
   // Un eje solo se evalúa desde la primera semana con registro suyo: no se
   // castiga el tiempo anterior a empezar a usar ese tipo de producto.
   const doseAxis = (axKey) => {
@@ -1767,6 +1773,54 @@ ${corrHTML}
   histApps = apps;
   renderHistorial();
   historyLoaded = true;
+}
+// ── DEBUG: números reales detrás de una barra de "Estímulo entregado" ───────
+// Ella pidió ver los números reales del 28% de Protección solar. Esos datos
+// viven en SU Supabase, no en este código — no hay forma de que el asistente
+// los vea sin acceso a la base. Esto expone lo que `loadHistory()` YA calculó
+// (`window._dbgDosePtsByDate` / `window._dbgDoseWeeks`, guardados ahí mismo)
+// para que ella los vea desde la consola del navegador.
+//
+// Uso: abrir la pestaña Progreso (para que loadHistory() corra al menos una
+// vez), abrir la consola (F12 o clic derecho → Inspeccionar → Console), y
+// escribir `debugDoseAxis()` — o `debugDoseAxis('cuello_proteccion')` etc.
+// para otro eje. Imprime el detalle día por día y semana por semana que
+// arma la barra, y al final el mismo % que se ve en pantalla.
+function debugDoseAxis(axKey = 'proteccion') {
+  const ptsByDate = window._dbgDosePtsByDate, weeks = window._dbgDoseWeeks;
+  if (!ptsByDate || !weeks) {
+    console.log('Abre la pestaña Progreso primero — loadHistory() todavía no ha corrido en esta carga de página.');
+    return null;
+  }
+  const cfg = (typeof DOSE_AXES !== 'undefined') ? DOSE_AXES[axKey] : null;
+  if (!cfg) { console.log('Eje no encontrado:', axKey, '— revisa DOSE_AXES en activos-matriz.js para ver las claves válidas.'); return null; }
+  console.log(`── ${cfg.label} (eje "${axKey}") — techoDiario=${cfg.techoDiario} · diasIdeales=${cfg.diasIdeales} ──`);
+  const filas = [];
+  const semanas = weeks.map((days, wi) => {
+    if (!days.length) return null;
+    const diario = days.map(ds => {
+      const crudo = Math.round((ptsByDate[ds] || {})[axKey] || 0);
+      const topado = Math.min(crudo, cfg.techoDiario);
+      filas.push({ semana: wi + 1, fecha: ds, puntos_crudos: crudo, puntos_topados: topado });
+      return { ds, crudo };
+    });
+    if (!diario.some(d => d.crudo > 0)) return null;
+    const idealDias = cfg.diasIdeales * (days.length / 7);
+    const totalSemana = diario.reduce((a, d) => a + Math.min(d.crudo, cfg.techoDiario), 0);
+    const techoSemana = Math.round(cfg.techoDiario * idealDias);
+    const pct = Math.min(100, Math.round(totalSemana / techoSemana * 100));
+    return { semana: wi + 1, dias_con_dato: days.length, idealDias: Math.round(idealDias * 10) / 10, puntos_semana: totalSemana, techo_semana: techoSemana, pct_semana: pct };
+  });
+  console.log('Detalle día por día:');
+  console.table(filas);
+  const semanasConDato = semanas.filter(w => w);
+  console.log('Resumen por semana:');
+  console.table(semanasConDato);
+  const firstIdx = semanas.findIndex(w => w != null);
+  const vivas = firstIdx === -1 ? [] : semanas.slice(firstIdx).map(w => w ? w.pct_semana : 0);
+  const promedio = vivas.length ? Math.round(vivas.reduce((a, b) => a + b, 0) / vivas.length) : null;
+  console.log(`Promedio de ${vivas.length} semanas (incluye semanas en 0 después de la primera con dato) = ${promedio}% — esto es lo que ves en la barra.`);
+  return { detalleDiario: filas, resumenSemanal: semanasConDato, promedio };
 }
 // ── HISTORIAL CON FILTRO POR PRODUCTO ────────────────────────────────────────
 let histApps = [];
