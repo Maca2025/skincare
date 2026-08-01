@@ -1617,7 +1617,25 @@ async function loadHistory() {
         const hitos = hitosByDate[ds] || [];
         const hitoTxt = hitos.length
           ? `<div class="heat-detail-hito">${hitos.map(h => esc(h)).join('<br>')}</div>` : '';
-        _heatDayInfo[ds] = `<strong>${DOW_ES[dow]} ${fmtDate(ds)}</strong><br>${pctTxt}${skin}${sun}${hitoTxt}`;
+        // ── Ideal de SPF ese día (2026-08-01, a petición de ella: "quiero ver
+        // por qué no llegué al 100"). Reutiliza EXACTAMENTE lo que ya calculó
+        // idealSpfAppsFor/dosePtsByDate para la barra de Progreso — no es un
+        // número aparte, es el mismo que decide el %.
+        const idealSpfDia = idealSpfAppsFor(ds);
+        const aplicSpfDia = spfAppsByDate[ds] || 0;
+        const ptsSpfDia = Math.round((dosePtsByDate[ds] || {})['proteccion'] || 0);
+        const pctSpfDia = Math.min(100, Math.round(ptsSpfDia / 500 * 100));
+        let fuenteIdeal;
+        if (sunByDate[ds] === 'interior') {
+          fuenteIdeal = 'interior → techo fijo';
+        } else {
+          const h = histUvSunset[ds];
+          fuenteIdeal = (h && h.sunsetMs != null)
+            ? `despertar ${wakeByDate[ds] || '11:00 (asumido)'} · UV pico ${h.uvMax != null ? Math.round(h.uvMax) : '?'}`
+            : 'sin UV histórico ese día → ideal de respaldo';
+        }
+        const spfTxt = `<div class="heat-detail-spf">🛡️ SPF: ideal ${idealSpfDia} · te aplicaste ${aplicSpfDia}${aplicSpfDia === 1 ? ' vez' : ' veces'} · ${ptsSpfDia} pts = ${pctSpfDia}% del techo diario<br><span style="opacity:.7">(${fuenteIdeal})</span></div>`;
+        _heatDayInfo[ds] = `<strong>${DOW_ES[dow]} ${fmtDate(ds)}</strong><br>${pctTxt}${skin}${sun}${hitoTxt}${spfTxt}`;
         cells.push(`<div class="heat-cell${hitos.length ? ' heat-cell-hito' : ''}" style="background:${bg}" onclick="showHeatDay('${ds}', this)"></div>`);
       });
       return `<div class="heat-col">${cells.join('')}</div>`;
