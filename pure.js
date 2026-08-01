@@ -422,6 +422,43 @@ function spfReminderCheck({ nowMs, lastMs, uv, sunsetMs, lastNudgeMs, horaInicio
   if (nowMs - lastMs < gapH * 3600000) return out(false, 'todavia_protegida');
   return out(true, 'toca_reaplicar');
 }
+// Cuántas aplicaciones de SPF caben HOY entre que te levantas y que se pone el
+// sol, espaciadas por el mismo gap que ya usa el recordatorio (`spfGapHours`
+// sobre el UV actual — un solo valor para todo el día, igual que el resto de
+// la app: nunca hubo pronóstico hora por hora para el gap, solo para el pico).
+// Antes el "ideal del día" era fijo (`IDEAL_SPF_BY_SUN`) y no sabía a qué hora
+// empezó tu día: si te levantas a mediodía, NO se cuentan aplicaciones de las
+// 8 ni las 10 como "debidas" — el conteo arranca en `wakeHour`, no antes.
+//
+//   nowMs     — ahora (para saber el día calendario local y no cruzar de día)
+//   sunsetMs  — ocaso local en ms, o null si no se pudo consultar (Open-Meteo
+//               caído): sin esto no hay tope superior confiable, se devuelve
+//               null y el caller decide su propio respaldo (el ideal fijo).
+//   uv        — índice UV actual, o null
+//   wakeHour  — hora local en que empieza el día; hoy siempre 8 porque no hay
+//               forma de preguntarla (ver nota de sesión). Parámetro para no
+//               tener que tocar esta función el día que sí se pregunte.
+//
+// Se resta el mismo margen de `SPF_MINUTOS_ANTES_DE_OCASO` que ya usa el
+// recordatorio: los últimos 60 min antes del ocaso no cuentan como una
+// aplicación posible más, por la misma razón (el UV ya cayó a 0).
+function spfPosiblesHoy({ nowMs, sunsetMs, uv, wakeHour = 8 }) {
+  if (sunsetMs == null) return null;
+  const ds = toDateStr(new Date(nowMs));
+  const wakeMs = new Date(`${ds}T${String(wakeHour).padStart(2, '0')}:00:00`).getTime();
+  const finMs = sunsetMs - SPF_MINUTOS_ANTES_DE_OCASO * 60000;
+  // El sol se pone antes de que despiertes (o casi): al menos cuenta la
+  // aplicación de la mañana, nunca cero — salir de casa sin nada no es una
+  // opción válida aunque el día sea corto.
+  if (finMs <= wakeMs) return 1;
+  const gapH = spfGapHours(uv);
+  // UV bajo todo el día ('bajo' → gapH null): el recordatorio no exige
+  // reaplicar, pero la aplicación base de la mañana sigue contando como el
+  // 100% de hoy.
+  if (gapH == null) return 1;
+  const horas = (finMs - wakeMs) / 3600000;
+  return Math.max(1, Math.floor(horas / gapH) + 1);
+}
 // El mensaje cambia con la banda de UV: "reaplica" a secas no dice si hoy da
 // igual esperar media hora o no. El texto lleva el dato que justifica la prisa.
 function spfNudgeText(uv, horasDesdeUltimo) {

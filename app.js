@@ -248,6 +248,9 @@ function updateProgress(bodyId) {
 // último SPF + índice UV en vivo. Se oculta al backdatear (no aplica).
 let _lastSpfTodayISO = null;
 let _currentUV = null;
+// Cuántas veces te has puesto SPF facial HOY — para compararlo contra
+// `spfPosiblesHoy()` en el resumen (ver `updateTodaySummary`).
+let _facialSpfHoyCount = 0;
 // Última protección POR ZONA. Antes era una sola cifra para todo, que es una
 // media mentirosa: la cara se reaplica varias veces al día y las manos, con
 // suerte, una. Ahora que cada registro guarda su zona, se puede separar.
@@ -266,6 +269,7 @@ async function loadTodaySpfLast() {
   if (!spfIds.length) {
     _lastSpfTodayISO = null;
     _lastSpfPorZona = { cara: null, cuello: null, manos: null };
+    _facialSpfHoyCount = 0;
     updateTodaySummary(); return;
   }
   const b = localDayBoundsUTC(TODAY_STR);
@@ -288,6 +292,7 @@ async function loadTodaySpfLast() {
   // de reaplicación y la que tiene las manchas que estás tratando.
   const facial = filas.filter(r => facialIds.indexOf(r.product_id) !== -1);
   _lastSpfTodayISO = facial.length ? facial[0].applied_at : (_lastSpfPorZona.cara || null);
+  _facialSpfHoyCount = facial.length;
   updateTodaySummary();
 }
 // Estado de la reaplicación, en un solo lugar: lo usan el resumen y el FAB.
@@ -358,7 +363,12 @@ function updateTodaySummary() {
   const spfCls = st.state === 'ok' ? 'tsum-ok'
     : (st.state === 'urgent' ? 'tsum-alert' : (st.state === 'dormido' ? '' : 'tsum-warn'));
   const spfIcono = st.state === 'urgent' ? '🔴' : '🛡️';
-  const spf = `<span class="tsum-item ${spfCls}">${spfIcono} ${esc(st.label)}`
+  // Posibles de HOY: despertar (8am, fijo por ahora) → ocaso, espaciado por el
+  // UV actual. `null` cuando falta el ocaso (Open-Meteo caído) — ahí no se
+  // muestra el contador en vez de inventar un tope.
+  const posiblesHoy = spfPosiblesHoy({ nowMs: Date.now(), sunsetMs: _sunsetMs, uv: _currentUV });
+  const contadorHoy = posiblesHoy != null ? ` · ${_facialSpfHoyCount}/${posiblesHoy} hoy` : '';
+  const spf = `<span class="tsum-item ${spfCls}">${spfIcono} ${esc(st.label)}${esc(contadorHoy)}`
     + `${(st.state === 'due' || st.state === 'urgent') ? ' ⚠️' : ''}</span>`;
   let uv = '';
   if (_currentUV != null) {
