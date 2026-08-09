@@ -1,7 +1,7 @@
 {
   "name": "Skincare Tracker",
   "short_name": "Skincare",
-  "description": "Tracker de rutinas, fotos de progreso y adherencia para melasma",
+  "description": "Registro de rutinas, dosis de activos y fotos de progreso para manchas solares",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

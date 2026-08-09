@@ -127,6 +127,19 @@ function zonasDeNombre(name, elegidas) {
   return zonasDeProducto(productByLoggedName(name), elegidas);
 }
 
+// Traducción de la columna VIEJA `products.clinical_role` (singular) a las
+// claves de `clinical_roles` (array). Vive aquí, en ámbito de módulo, porque la
+// usan DOS lugares muy separados: `hasRole` dentro de `loadHistory` y el editor
+// de productos. Hasta el 2026-08-09 estaba declarada dentro de `loadHistory`, o
+// sea inalcanzable desde el editor, que llevaba **el mismo objeto escrito otra
+// vez, literal** — regla 5. Si se agrega un rol, se agrega una sola vez.
+const LEGACY_ROLE_MAP = {
+  finacea: 'despigmentacion',
+  tretinoina: 'regeneracion_celular',
+  barrera: 'barrera',
+  spf_facial: 'spf_facial'
+};
+
 const PRODUCT_CATEGORIES = [
   '🧼 Limpieza',
   '💦 Toners',
@@ -1089,7 +1102,6 @@ async function loadHistory() {
     regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || '') },
     textura_poros:        { label: 'Textura / Poros',          icon: '🔍', color: '#5B8FA8', legacyRegex: () => false }
   };
-  const LEGACY_ROLE_MAP = { finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' };
   const hasRole = (p, role) => {
     if (p.clinical_roles && p.clinical_roles.length) return p.clinical_roles.includes(role);
     if (p.clinical_role) return LEGACY_ROLE_MAP[p.clinical_role] === role;
@@ -2246,10 +2258,10 @@ async function deleteApplication(id) {
 
 // ── REAPPLICATIONS + LOGGING ─────────────────────────────────────────────────
 let selectedProduct = null;
-async function quickLog(name) {
-  selectedProduct = name;
-  await logApplication('reaplicacion');
-}
+// (2026-08-09) Aquí vivía `quickLog(name)`, de la época de los "botones de
+// reaplicación por producto". Cero llamadas en todo el proyecto: el FAB y el tap
+// en la notificación usan `quickLogSpf()`, que además no duplica dentro de 15
+// min y ofrece deshacer. Retirada.
 function stepProductOf(s) {
   return (s && s.product_id) ? allProducts.find(p => p.id === s.product_id) : null;
 }
@@ -4226,7 +4238,7 @@ function openEditProductModal(id) {
   document.getElementById('pf-started').value = p.started_at || '';
   document.getElementById('pf-pao').value    = p.pao_months || '';
   resetPfClinicalFields();
-  const roles = (p.clinical_roles && p.clinical_roles.length) ? p.clinical_roles : (p.clinical_role ? [{ finacea: 'despigmentacion', tretinoina: 'regeneracion_celular', barrera: 'barrera', spf_facial: 'spf_facial' }[p.clinical_role]] : []);
+  const roles = (p.clinical_roles && p.clinical_roles.length) ? p.clinical_roles : (p.clinical_role ? [LEGACY_ROLE_MAP[p.clinical_role]] : []);
   roles.filter(Boolean).forEach(role => {
     const cb = document.querySelector(`#pf-clinical-roles input[value="${role}"]`);
     if (cb) { cb.checked = true; cb.closest('.clinrole-chip').classList.add('on'); }

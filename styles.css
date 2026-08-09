@@ -599,7 +599,9 @@ body {
 .spf-fab-icon { font-size: 16px; }
 .spf-fab-ok   { background: linear-gradient(135deg, #3A8A7A, #2F7568); }
 .spf-fab-due  { background: linear-gradient(135deg, #D4820A, #C47A00); }
-.spf-fab-none { background: linear-gradient(135deg, #C43020, #A82818); }
+/* (2026-08-09) Se retiró `.spf-fab-none`: la clase se arma como
+   'spf-fab-' + st.state y `spfStatus()` solo devuelve dormido | ok | due |
+   urgent. El estado 'none' no existe, así que esta regla era inalcanzable. */
 /* UV 8+ y toca reaplicar: rojo con latido lento. La animación se desactiva sola
    si el sistema pide menos movimiento. */
 .spf-fab-urgent { background: linear-gradient(135deg, #C43020, #A82818); animation: spf-fab-latido 2.4s ease-in-out infinite; }
