@@ -19,7 +19,7 @@ const vm = require('vm');
 // en el contexto y se leería como undefined.
 const dir = __dirname;
 const NOMBRES = ['resolveZonas', 'unionZonas', 'ordenarZonas', 'buildHydration',
-                 'ZONAS', 'PRODUCT_ZONAS', 'zonasAptasDe', 'ZONAS_APTAS_OVERRIDE'];
+                 'ZONAS', 'PRODUCT_ZONAS', 'PRODUCT_DOSE', 'zonasAptasDe', 'ZONAS_APTAS_OVERRIDE'];
 const fuente = ['pure.js', 'activos-matriz.js']
   .map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n')
   + `\n;__api = { ${NOMBRES.join(', ')} };`;
@@ -27,7 +27,7 @@ const ctx = { console, __api: null };
 vm.createContext(ctx);
 vm.runInContext(fuente, ctx, { filename: 'pure+matriz' });
 const { resolveZonas, unionZonas, ordenarZonas, buildHydration,
-        ZONAS, PRODUCT_ZONAS, zonasAptasDe, ZONAS_APTAS_OVERRIDE } = ctx.__api;
+        ZONAS, PRODUCT_ZONAS, PRODUCT_DOSE, zonasAptasDe, ZONAS_APTAS_OVERRIDE } = ctx.__api;
 
 let pass = 0, fail = 0;
 function t(name, got, want) {
@@ -99,7 +99,14 @@ Object.keys(PRODUCT_ZONAS).forEach(id => {
   if (JSON.stringify(got) !== JSON.stringify(want)) desviados.push({ id, want, got });
 });
 t('histórico: ningún producto cambia sus zonas por defecto', desviados, []);
-t('histórico: el catálogo con zonas sigue siendo 86', Object.keys(PRODUCT_ZONAS).length, 86);
+// Antes esto era un conteo escrito a mano ("siguen siendo 86") y caducaba cada
+// vez que se daba de alta un producto: la prueba se ponía roja sin que nada
+// estuviera mal. La invariante REAL es que las dos mitades de la matriz
+// cubran exactamente los mismos productos — eso sí detecta deriva de verdad.
+t('matriz: todo producto con dosis declara zonas',
+  Object.keys(PRODUCT_DOSE).filter(id => !PRODUCT_ZONAS[id]), []);
+t('matriz: toda entrada de zonas declara dosis',
+  Object.keys(PRODUCT_ZONAS).filter(id => !PRODUCT_DOSE[id]), []);
 
 // Un override que CONTRADICE las zonas por defecto es el fallo silencioso más
 // probable de este diseño: la aptitud recorta el default y el producto empieza
@@ -113,10 +120,11 @@ t('aptitud: ningún override contradice las zonas por defecto', contradicen, [])
 
 // Los 12 SPF faciales llevan cuello a propósito (el "espejo" que se perdió al
 // refactorizar y ahora es dato). Si alguien lo quita, esto avisa.
-const spfConCuello = Object.keys(PRODUCT_ZONAS)
-  .filter(id => PRODUCT_ZONAS[id].indexOf('cara') !== -1 && PRODUCT_ZONAS[id].indexOf('cuello') !== -1
-             && PRODUCT_ZONAS[id].indexOf('manos') !== -1).length;
-t('espejo de cuello: los SPF faciales siguen llevando cuello y manos', spfConCuello, 12);
+const spfFacialSinExtender = Object.keys(PRODUCT_DOSE)
+  .filter(id => 'proteccion' in PRODUCT_DOSE[id])
+  .filter(id => (PRODUCT_ZONAS[id] || []).indexOf('cara') !== -1)
+  .filter(id => PRODUCT_ZONAS[id].indexOf('cuello') === -1 || PRODUCT_ZONAS[id].indexOf('manos') === -1);
+t('espejo de cuello: todo SPF facial sigue llevando cuello y manos', spfFacialSinExtender, []);
 
 // ── HIDRATACIÓN: LAS FILAS DEL PASO ─────────────────────────────────────────
 // byStepIdApps es lo que permite volver a pintar y EDITAR las zonas al recargar

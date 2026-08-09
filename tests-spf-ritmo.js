@@ -42,7 +42,8 @@ t('banda: 11 es extremo', uvBand(11), 'extremo');
 t('banda: sin dato es null', uvBand(null), null);
 
 // ── RITMO ELEGIDO POR LA USUARIA ────────────────────────────────────────────
-t('ritmo: UV 9 → 1.5 h', spfGapHours(9), 1.5);
+t('ritmo: UV 9 → 2 h (muy alto NO aprieta más)', spfGapHours(9), 2);
+t('ritmo: UV 12 → 2 h (extremo tampoco)', spfGapHours(12), 2);
 t('ritmo: UV 6.5 → 2 h', spfGapHours(6.5), 2);
 t('ritmo: UV 4 → 3 h', spfGapHours(4), 3);
 t('ritmo: UV 1 → no avisa', spfGapHours(1), null);
