@@ -20,8 +20,16 @@ El progreso medía **obediencia a un plan**, no resultados:
 - **33 de 74 productos no tenían rol clínico** — eran invisibles: la Vitamina C 20%,
   el Glicólico 7%, todos los salicílicos y los 8 productos de firmeza.
 
-Hoy **los 104 productos de la matriz puntúan** en al menos un eje. Ninguna
+Hoy **los 87 productos de la matriz puntúan** en al menos un eje. Ninguna
 entrada queda vacía: ver "el caso de los labiales" abajo.
+
+> **Conteos verificados el 2026-08-09** (este documento decía 104 / 19 / 13):
+> `PRODUCT_DOSE` **87** · `PRODUCT_ZONAS` **87** · `DOSE_AXES` **23** ejes ·
+> `IRRITANTES` **12**. Los 87 ids cuadran **exactamente** con el catálogo de
+> Supabase: cero huérfanos en las dos direcciones, cero duplicados, ninguna
+> categoría descubierta. La bajada de 104 a 87 no es pérdida: son las fusiones
+> de productos duplicados y la eliminación de los 14 productos "(Manos)", que el
+> modelo función × zona volvió innecesarios.
 
 > ⚠️ **`PRODUCT_DOSE` es un archivo estático y el catálogo vive en Supabase:**
 > cada producto nuevo nace **invisible** para el motor de dosis hasta que se le
@@ -58,19 +66,28 @@ entrada queda vacía: ver "el caso de los labiales" abajo.
 > 115) dejaba cuatro ejes clavados entre 92% y 100% y la barra no discriminaba.
 > Valores verificados contra `activos-matriz.js`.
 
-### Cuerpo, pies, cabello y manos (8)
+### Cuerpo, pies, cabello y manos (13)
 
 | Eje | `techoDiario` | `diasIdeales` |
 |---|---|---|
 | ☀️ `cuerpo_proteccion` | 500 | 7 |
+| 🎯 `cuerpo_aclarado` | 90 | 7 |
 | 🫧 `cuerpo_textura` | 80 | 3 |
 | 🧬 `cuerpo_firmeza` | 75 | 5 |
 | 💧 `cuerpo_barrera` | 95 | 7 |
 | 🦶 `pies` | 85 | 7 |
 | 💇 `cabello` | 70 | 3 |
-| ✋ `manos` | 90 | 7 |
+| ✋ `manos` (aclarado — la clave va sin sufijo) | 90 | 7 |
 | 🧴 `manos_proteccion` | 500 | 7 |
+| 🔬 `manos_textura` | 80 | 3 |
+| 💧 `manos_barrera` | 90 | 7 |
+| 🧬 `manos_firmeza` | 75 | 6 |
 | 💋 `labios` | 110 | 7 |
+
+> Los cuatro últimos de cuerpo/manos (`cuerpo_aclarado`, `manos_textura`,
+> `manos_barrera`, `manos_firmeza`) **existían en el código y faltaban en esta
+> tabla** — se agregaron el 2026-08-09. Están marcados PROVISIONALES en
+> `activos-matriz.js`: sus techos no se han calibrado con datos reales.
 
 ### Cuello y escote (5)
 
@@ -92,22 +109,24 @@ dérmico. Conserva `cuello_textura` aunque "poros" no sea un tema ahí porque es
 eje que dispara el aviso de irritantes, y el cuello es donde la tretinoína irrita
 **antes** que en la cara.
 
-**El espejo del SPF.** `cuello_proteccion` no tiene entradas propias en
-`PRODUCT_DOSE` ni productos duplicados "(Cuello)" en la base: se **deriva** de
-toda aplicación con eje `proteccion` (`ESPEJO_SPF_CUELLO` en app.js), con el
-ideal de la CARA porque es literalmente la misma aplicación. Es la regla 5 —nada
-de listas duplicadas—: un SPF facial nuevo queda cubierto solo.
-⚠️ Mientras se extiendan todos los protectores, esta barra marcará lo mismo que
-Protección facial; se separa cuando aparezca uno que no se extienda.
+**El espejo del SPF — RETIRADO.** ⚠️ Corregido el 2026-08-09. Este párrafo
+describía una constante `ESPEJO_SPF_CUELLO` que **no existe en el proyecto**
+(cero coincidencias en todos los archivos). El espejo se eliminó al pasar al
+modelo función × zona. Hoy `cuello_proteccion` se alimenta de un dato explícito:
+los 12 SPF faciales llevan `'cuello'` y `'manos'` en `PRODUCT_ZONAS`, y el motor
+recorre zonas × funciones una sola vez. **Verificado: no hay doble conteo.**
+Convertir una regla oculta en dato explícito era justamente el objetivo del
+refactor — no es algo que haya que "arreglar".
 
-**Productos extendidos.** Los que se aplican en "cara, cuello y escote"
-(tretinoína, péptidos, azelaico, toners, limpiador glicólico) puntúan en **ambas**
-zonas — es una sola aplicación que sí entrega estímulo a las dos, no doble
-conteo. Pero van a **~0.85** del valor facial: la misma cantidad de producto
-sobre ~3x de superficie baja la dosis por cm² de verdad. Los exclusivos de cuello
-conservan su valor íntegro.
+**Productos extendidos — SIN factor de dilución.** ⚠️ Corregido el 2026-08-09.
+Este párrafo mandaba aplicar **~0.85** a los ejes de la zona extendida. Ese
+factor **no existe en el código y fue retirado a propósito**, a petición de la
+usuaria: solo se justificaba en productos de dosis medida, y para una crema
+simplemente te sirves más. Los productos que se aplican en "cara, cuello y
+escote" puntúan en ambas zonas con el **valor íntegro** — es una sola aplicación
+que sí entrega estímulo a las dos, no doble conteo.
 
-**19 ejes en total** (5 de cara + 9 de otras zonas + 5 de cuello). Los de manos,
+**23 ejes en total** (5 de cara + 13 de otras zonas + 5 de cuello). Los de manos,
 el de labios y los de cuello se agregaron después de la primera versión de este
 documento: las manos y los brazos pigmentan por UVA incidental y no compartían
 eje con nada.
@@ -305,7 +324,7 @@ pasarse se topa en 100 y se avisa aparte.
 
 **Recibe días con IRRITANTE, no puntos del eje `textura`.** La niacinamida, el
 azelaico y el NAG suben textura **sin irritar**; contarlos disparaba avisos falsos.
-La lista `IRRITANTES` tiene 13 productos: solo retinoides y ácidos exfoliantes.
+La lista `IRRITANTES` tiene **12** productos: solo retinoides y ácidos exfoliantes.
 Es un `Set` (no un arreglo) y se consulta con `.has(id)` — `app.js` la lee con
 guarda `typeof IRRITANTES !== 'undefined'`.
 
@@ -373,7 +392,7 @@ durante el día**. No comprar nada, no agregar pasos.
 
 | Archivo | Contenido |
 |---|---|
-| `activos-matriz.js` | `DOSE_AXES` (19 ejes), `PRODUCT_DOSE` (104 productos por id), `IRRITANTES` (`Set` de 13). **Archivo único: no volver a partirlo en "agregar" + "base".** |
+| `activos-matriz.js` | `DOSE_AXES` (**23** ejes), `PRODUCT_DOSE` (**87** productos por id), `PRODUCT_ZONAS` (87), `IRRITANTES` (`Set` de **12**), `ZONAS_APTAS_*` y `zonasAptasDe`. **Archivo único: no volver a partirlo en "agregar" + "base".** ⚠️ `activos-matriz-agregar.js` sigue existiendo: sus 11 entradas ya están pegadas, pero **2 traen el vocabulario anterior** (`cuerpo_barrera`/`cuerpo_firmeza` en vez de funciones puras, y el sérum labial vacío). Pegarlas hoy haría que esos productos puntuaran 0 en silencio. |
 | `pure.js` | `spfScoreOf`, `doseWeekPct`, `overExposureDays` |
 | `app.js` | Cálculo de dosis, render, focus card, ideales por exposición |
 | `tests-spf-agregar.js` · `tests-dosis-agregar.js` | 26 casos para `tests.html` |

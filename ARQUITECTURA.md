@@ -13,13 +13,13 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 | `index.html` | Markup: tabs, secciones, TODOS los modales. Sin lógica. |
 | `styles.css` | Todo el CSS. |
 | `pure.js` | **Solo funciones puras** (fechas, escaping, adherencia, `spfScoreOf`, `doseWeekPct`, `overExposureDays`, `buildHydration`, `resolveStepHydration`, `shiftDateStr`, `reactionSignal`). Sin DOM, sin Supabase. Compartido con `tests.html`. |
-| `activos-matriz.js` | Config de Fase B: `DOSE_AXES` (19 ejes), `PRODUCT_DOSE` (104 productos por id), `IRRITANTES`. Solo datos, sin lógica. Se carga ENTRE `pure.js` y `app.js`. **Archivo único — ver regla 28.** |
+| `activos-matriz.js` | Config de Fase B: `DOSE_AXES` (**23 ejes**), `PRODUCT_DOSE` (**87 productos**, uno por cada producto del catálogo), `PRODUCT_ZONAS` (87), `IRRITANTES` (**12**), `ZONAS_APTAS_*` y la función `zonasAptasDe` — o sea que **no es "solo datos"**, como decía este renglón. Se carga ENTRE `pure.js` y `app.js`. **Archivo único — ver regla 28.** Verificado 2026-08-09: los 87 ids cuadran exactamente con el catálogo de Supabase, sin huérfanos en ninguna dirección. |
 | `app.js` | Toda la lógica. Script clásico (no módulos), funciones globales llamadas desde `onclick` en HTML. Se carga DESPUÉS de pure.js y activos-matriz.js. |
 | `sw.js` | Service worker: cache network-first del shell + handlers de Web Push. |
 | `manifest.webmanifest`, `icon-192/512.png` | PWA instalable. |
-| `tests.html` | Tests de pure.js — abrir en navegador. |
-| `spf-push-function.ts` | Edge Function `spf_push` (deployada vía dashboard). |
-| SQL sueltos (`supabase-hardening.sql`, `migracion-*.sql`, `reparacion-*.sql`, `push-setup.sql`, `plantilla-alta-productos.sql`) | Se corren UNA vez en el SQL Editor; deben ser idempotentes (`if not exists`). |
+| `tests.html` | Tests de pure.js — abrir en navegador. **94 casos** (no 77). |
+| `spf-push-function.ts` | Edge Function `spf_push`. ⚠️ **No está en el repositorio** — vive solo en el dashboard de Supabase. Consecuencia: `tests-spf-push-paridad.js` nunca ha podido comparar nada y **sale en verde sin ejecutar una sola aserción**. Justo la prueba que existe para evitar que la app y el push se separen en silencio es la que está callada. Para que sirva, hay que traer una copia del `.ts` al repo. |
+| SQL sueltos (`supabase-hardening.sql`, `migracion-*.sql`, `reparacion-*.sql`, `push-setup.sql`, `plantilla-alta-productos.sql`) | Se corren UNA vez en el SQL Editor; deben ser idempotentes (`if not exists`). ⚠️ **Ninguno está hoy en el repositorio.** Si se necesita repetir una migración, no hay de dónde. |
 
 **Sin build, sin frameworks, sin npm.** No introducir bundlers, módulos ES ni dependencias — la única lib externa es supabase-js por CDN.
 
@@ -34,6 +34,9 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). `zone` usa las mismas claves que `PHOTO_TYPES`; `pos_x`/`pos_y` son PORCENTAJES **de la foto apuntada por `reference_photo_id`**, no de la zona en abstracto. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
 - `treatment_events` — hitos de tratamiento que NO son un producto: consultas, procedimientos, cambios de diagnóstico, exposición solar fuera de lo normal. `event_type` va con CHECK. La vista `treatment_timeline` la une con `products.started_at` y lleva `security_invoker = on` (sin eso, la vista saltaría el RLS de las tablas de abajo).
 - **RLS activo en todo** (políticas `authenticated`). La key publishable es pública en el repo — sin RLS los datos quedan expuestos. Cualquier tabla nueva DEBE nacer con RLS.
+- ⚠️ **TABLAS MUERTAS — no escribir en ellas, no "reconectarlas"** (verificado el 2026-08-09 contra `app.js`: cero referencias a cada una).
+  - `inventory` (`product_id text` PK, `status`, `updated_at`) — el stock vive en `products.status` y lo escribe la pestaña Stock. `inventory` guarda 5 filas con claves propias (`cleanser`, `toner-aha`…) que ni siquiera son uuid y no existen en `products`. Es anterior al catálogo actual. **No copiar sus valores a `products.status`**: son datos viejos, y `products.status` es lo que se mantiene al día.
+  - `daily_logs` (contadores `am_done`/`pm_done`/`body_done`/`feet_done`) — medía "pasos hechos entre pasos totales", el modelo que la v20 del service worker retiró explícitamente. La constancia diaria se calcula del motor de dosis sobre `product_applications`. La única cosa que escribía aquí era `skincare-routine-fix.html`, ya borrado.
 
 ## Reglas de oro (romperlas causa bugs ya vividos)
 
@@ -43,9 +46,11 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 4. **Hidratación de checkmarks** (qué paso ya se hizo hoy): prioridad `routine_step_id` exacto → `product_id` → categoría → nombre. Los últimos tres son fallbacks para datos viejos — no quitarlos, no promoverlos. **Vive en `pure.js`** (`buildHydration` / `resolveStepHydration`) con 21 casos en `tests.html`: era la parte más frágil del código y la única sin pruebas. Si la tocas, corre los tests.
    **Los fallbacks NO aplican a `source='reaplicacion'`.** Se respeta el origen: una reaplicación no es un paso de rutina y no debe palomear ninguno, aunque el producto sí sea paso fijo de la rutina de ese día. Antes, reaplicar protector a media tarde marcaba solo el paso de SPF de la rutina AM — y al desmarcarlo volvía, porque `unlogRoutineStep` solo borra filas con `source='rutina'`. El corte compara contra `'reaplicacion'` EXACTO, no contra `!== 'rutina'`: los registros antiguos traen `source` null o vacío y sí deben seguir hidratando.
 5. **Nada de listas duplicadas:** los selects de categoría, botones de reaplicación y la tabla comparativa SPF se **generan** de `PRODUCT_CATEGORIES` / `allProducts` / `products.tags`. Nunca hardcodear una lista que duplique lo que ya está en la base (ese patrón causó los bugs de "categoría faltante").
-6. **pure.js se mantiene puro** y cada cambio ahí actualiza `tests.html`. La matemática de adherencia y `spfScoreOf` viven ahí. Pesos SPF actuales (sunspots): base 25, pa4 +30, uva400 +35, uvalong +20 (excluyente con uva400), tinted +10.
+6. **pure.js se mantiene puro** y cada cambio ahí actualiza `tests.html`. La matemática de adherencia y `spfScoreOf` viven ahí.
+   ⚠️ **Corregido 2026-08-09:** esta regla citaba los pesos del **modelo aditivo VIEJO** ("base 25, pa4 +30, uva400 +35, uvalong +20, tinted +10") — el mismo que la regla 13 declara corregido más abajo. El documento se contradecía consigo mismo. Los pesos reales son los tres componentes NO acumulables de la regla 13: magnitud 60/43/27/**21** · espectro 30/15 · visible 10.
+   ⚠️ **La segunda mitad tampoco se cumple hoy.** `tests.html` no cubre 13 símbolos de `pure.js`; cinco están cubiertos aparte en `tests-spf-ritmo.js`. **`localDayBoundsUTC` y `spfPosiblesEnFecha` no tienen prueba en ningún lado**, y la segunda decide el ideal dinámico de SPF, o sea que alimenta directamente los porcentajes de Progreso. Los casos de `tests-zonas-agregar.js` nunca se pegaron en `tests.html` aunque solo necesitan `pure.js` — el mismo patrón que denuncia la regla 28.
 7. **Config en constantes, no regada:** `PRODUCT_CATEGORIES` (lista maestra de categorías — coincidencia EXACTA con emoji), `PM_ROTATION` (rotación de noches), `PICKER_MODALS` (qué modal y qué aviso usa cada categoría en el picker; **todas** son multi-selección — ya no existe lista blanca), `ROLE_CONFIG`/`clinical_roles` (roles: despigmentacion, regeneracion_celular, barrera, spf_facial, textura_poros).
-8. **PWA:** sw.js es network-first y SOLO intercepta same-origin GET (jamás Supabase/CDN). Al cambiar sw.js, subir versión de `CACHE` (hoy `skincare-shell-v4`). localStorage es solo para cola y preferencias — **nunca** para datos.
+8. **PWA:** sw.js es network-first y SOLO intercepta same-origin GET (jamás Supabase/CDN). Al cambiar sw.js, subir versión de `CACHE` (hoy `skincare-shell-v21`). localStorage es solo para cola y preferencias — **nunca** para datos.
    **Cola offline:** cada entrada es `{ row, attempts, queuedAt, lastError }`. `row` es lo ÚNICO que se inserta — si los metadatos se colaran al `insert`, cada reenvío fallaría. Se distingue fallo TRANSITORIO (sin señal: se reintenta callado, no cuenta intento) de PERMANENTE (RLS, producto borrado: cuenta intento y a los 3 se marca atorado). El banner `#sync-banner` se ve en todas las pestañas mientras haya algo pendiente, con Reintentar y Descartar. Antes una fila que fallaba en serio se quedaba encolada para siempre y en silencio.
 9. **Notificaciones:** en iOS solo funcionan vía `registration.showNotification` con la PWA instalada — `new Notification()` NO existe en iOS. El push real lo manda la Edge Function `spf_push` (cron cada 15 min; la función misma filtra horario 10am–7pm GDL y gap de 2 h). Con push activo, el aviso local se desactiva (`PUSH_ENABLED_KEY`) para no duplicar. La llave VAPID pública vive en app.js (correcto); la privada SOLO en secrets de Supabase — **jamás en el repo**.
    **iOS ignora el arreglo `actions`** de `showNotification`: el botón "Ya lo apliqué" NO se renderiza en iPhone. Por eso el registro cuelga del tap en la notificación completa, que sí dispara `notificationclick`. El SW hace `postMessage({type:'LOG_SPF'})` si la app está abierta, o abre `./?log=spf` si está cerrada; `app.js` registra y limpia la URL para que un refresh no duplique. No agregar `actions` esperando que funcionen en iOS.
@@ -59,7 +64,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - **Multi-picker (TODO paso con `picker_category`)**: un solo picker, `openMultiPickerByCat`, para cualquier categoría — incluidos SPF Facial y Corporal. Registra UNA fila por producto seleccionado, todas con el mismo `routine_step_id`; la hidratación concatena nombres con " · ". Reabrir el picker de un paso ya marcado **añade** registros (no reconcilia): así una reaplicación de SPF sigue sumando aplicaciones del día (reglas 13–14). Desmarcar el paso sí borra todas sus filas de ese día.
 - **Adherencia por producto:** contra su propio calendario — prioridad `schedule_days` manual → calendario de la rutina donde es paso fijo → diario. **Es vista SECUNDARIA** desde Fase B (ver regla 12).
 - **Protección solar en Progreso:** sistema de puntos por calidad × aplicaciones, no promedio simple — la rotación de protectores no castiga. El ideal diario **se modula por `sun_exposure`** (ver regla 13).
-- **Reporte dermatóloga:** `openDermReport()` usa `lastReportData` (seteado por `loadHistory`) — requiere que Progreso haya cargado.
+- **Reporte dermatóloga:** `openDermReport()` usa `lastReportData` (seteado por `loadHistory`) — requiere que Progreso haya cargado. **Desde el 2026-08-09 reporta ESTÍMULO ENTREGADO, no adherencia** (ver regla 36). `lastReportData` lleva los ejes ya aplanados (`{key, icon, label, pct, overDays}`) por zona, a propósito: el reporte no debe conocer la forma interna de `DOSE_AXES`.
 - **Hitos:** `loadHitos()` vive en su propio contenedor (`#hitos-content`), aparte
   de `loadHistory` — que tiene el orden de declaración de la regla 18 y no
   conviene tocar. Une `treatment_events` con los `started_at` de `allProducts`.
@@ -83,15 +88,21 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 
 13. **`spfScoreOf` NO suma etiquetas.** Son 3 componentes independientes: magnitud UVA (0–60), espectro (0–30), luz visible (0–10). **`pa4` y `euuva` son EQUIVALENTES** — PA++++ (PPD≥16) y el sello UVA europeo (UVA-PF ≥ SPF/3 = 16.7 en SPF50) miden lo mismo con métodos distintos. Nunca sumarlos. La falta de etiqueta PA **no** significa falta de protección: es otra normativa. Los pesos están calibrados a **lentigos**; si el diagnóstico cambia a melasma, subir luz visible a ~20 y bajar magnitud.
 
-14. **Los ideales de SPF se modulan por `sun_exposure`.** Cara: interior 2 · normal 3 · alta 4 · playa 5 (default 3). Cuerpo: interior 1 · normal 1 · alta 2 · playa 4 — **ideal propio**, porque la piel corporal va cubierta y nadie reaplica 5 veces al día. Con el ideal de la cara, ese eje marcaba 4% y medía una expectativa irreal.
+14. **Los ideales de SPF se modulan por `sun_exposure`.**
+    ⚠️ **Actualizado 2026-08-09:** el ideal FACIAL ya NO es una tabla fija. Desde el 2026-08-01 se calcula con `spfPosiblesEnFecha` (UV histórico + ocaso + hora de despertar): cuántas aplicaciones caben de verdad ese día. `IDEAL_SPF_BY_SUN` (interior 2 · normal 3 · alta 4 · playa 5 · **actividad 8**, default 3) quedó como **respaldo** para cuando falta el dato histórico.
+    ⚠️ **Desincronización conocida:** `IDEAL_BODY_SPF_BY_SUN` tiene 4 claves y **le falta `actividad`** — un día marcado 🏃 Actividad cae al default corporal de 1 sin avisar. Son cuatro listas del mismo vocabulario que hay que tocar juntas: `SUN_EXPOSURES`, `IDEAL_SPF_BY_SUN`, `IDEAL_BODY_SPF_BY_SUN` y `SPF_GAP_POR_EXPOSICION` (pure.js).
+    Cuerpo: interior 1 · normal 1 · alta 2 · playa 4 — **ideal propio**, porque la piel corporal va cubierta y nadie reaplica 5 veces al día. Con el ideal de la cara, ese eje marcaba 4% y medía una expectativa irreal.
 
 15. **La matemática de dosis vive en `pure.js`** (`doseWeekPct`, `overExposureDays`) con sus tests. Dos invariantes que no se pueden quitar: **techo diario** (aplicar dos veces no vale el doble) y **ventana semanal** (las noches de descanso del retinoide NO son falla). Sin ellos el modelo premia sobre-aplicar y vuelve a castigar la desviación.
 
 15b. **El aviso de sobre-exposición se rastrea POR ZONA, no global.** Los días
     con irritante se marcan en la zona donde se aplicó (`cara` / `cuerpo`,
     deducida del `grupo` de los ejes que toca el producto en `PRODUCT_DOSE`), y
-    **solo el eje de renovación de esa zona avisa** — `EJE_IRRITANTE_POR_GRUPO`
-    = `{cara: 'textura', cuerpo: 'cuerpo_textura'}`. Antes era un solo mapa
+    **solo el eje de renovación de esa zona avisa** — `EJE_IRRITANTE_POR_ZONA`
+    = `{cara: 'textura', cuerpo: 'cuerpo_textura', cuello: 'cuello_textura', manos: 'manos_textura'}`
+    (se llamaba `EJE_IRRITANTE_POR_GRUPO` y tenía 2 entradas; cuello y manos
+    entraron al ganar eje de textura propio — el cuello sobre todo, porque ahí
+    la tretinoína irrita ANTES que en la cara). Antes era un solo mapa
     global que cada eje comparaba contra su propio `diasIdeales`: 5 noches de
     tretinoína facial hacían que **`cabello`** (diasIdeales 3) avisara "1 día de
     más con retinoide", sin que exista un solo producto capilar irritante. Si se
@@ -179,13 +190,13 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     aplicaciones faciales: un bálsamo inflaría la métrica sin cubrir un cm² de
     mejilla), y **no usa `spfScoreOf`** porque su puntaje es mixto
     —hidratación + protección—, no protección pura. Su grupo no está en
-    `EJE_IRRITANTE_POR_GRUPO`, así que no dispara avisos de sobre-exposición:
+    `EJE_IRRITANTE_POR_ZONA`, así que no dispara avisos de sobre-exposición:
     correcto, ningún labial es irritante. Techo 110 y 7 días ideales son
     **provisionales** (no hay datos reales todavía), igual que lo fueron los de
     `manos` — recalibrar en ~1 mes.
 
 31. **Los filtros de Stock son estado de VISTA, no preferencia.** Viven en
-    variables de módulo (`invFilterCat`/`invFilterBrand`/`invFilterAxis`), nunca
+    variables de módulo (`invFilterCat`/`invFilterBrand`/`invFilterZona`/`invFilterFuncion` — el filtro por eje se partió en zona y función con el refactor función × zona; `invFilterAxis` ya no existe), nunca
     en localStorage: si sobrevivieran a la recarga, abrir Stock con un filtro
     puesto de ayer se lee como "me faltan productos". Las opciones se **generan**
     del catálogo real (regla 5) — una lista escrita a mano se desincroniza en
@@ -207,27 +218,38 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     es el eje que dispara el aviso de sobre-exposición a irritantes, y el cuello
     es donde la tretinoína irrita ANTES que en la cara.
 
-33. **`cuello_proteccion` se DERIVA, no se lista.** La usuaria extiende siempre
-    el protector facial al cuello, así que pedirle registrarlo dos veces sería
-    trabajo por un dato que ya existe. Toda aplicación con eje `proteccion`
-    entrega también `cuello_proteccion`, con el mismo `spfScoreOf` y el **ideal
-    de la cara** (no el de cuerpo: es la misma aplicación y la misma exposición).
-    Se deriva en `loadHistory` vía `ESPEJO_SPF_CUELLO` en vez de duplicar
-    productos "(Cuello)" en la base como se hizo con Manos — regla 5: un SPF
-    facial nuevo queda cubierto solo. **Los duplicados "(Manos)" y los SPF
-    corporales NO espejan**, o habría doble conteo.
-    ⚠️ Mientras se extiendan todos los protectores, esta barra marcará lo mismo
-    que Protección facial. No es un bug; se separa cuando aparezca un SPF que no
-    se extienda. Para medir solo la primera aplicación del día, poner
-    `ESPEJO_SPF_CUELLO` en false y dar a los SPF su entrada propia.
+33. **`cuello_proteccion` es DATO, no regla derivada.** La usuaria extiende
+    siempre el protector facial al cuello, así que ese estímulo tiene que
+    contarse — la pregunta es *cómo*.
+    ⚠️ **REESCRITA 2026-08-09. La versión anterior de esta regla describía un
+    mecanismo que ya no existe** y mandaba tocar una palanca inexistente. Decía
+    que `cuello_proteccion` se derivaba en `loadHistory` de toda aplicación con
+    eje `proteccion`, vía una constante `ESPEJO_SPF_CUELLO`. **Esa constante no
+    existe en el proyecto** (cero coincidencias en todos los archivos): el
+    espejo se retiró al pasar al modelo función × zona.
+    Hoy funciona así: los 12 SPF faciales llevan `'cuello'` (y `'manos'`)
+    explícito en `PRODUCT_ZONAS`, y el motor recorre zonas × funciones una sola
+    vez. **Verificado: no hay doble conteo** — cada aplicación entrega
+    `cuello_proteccion` exactamente una vez.
+    Esto es deliberado y no hay que "arreglarlo": convertir una regla oculta en
+    un dato explícito era el objetivo del refactor. Si se quitara `'cuello'` de
+    esas listas, el histórico de protección de cuello se iría a cero de golpe;
+    `tests-zonas-registro.js` tiene una prueba que lo impide.
 
-34. **Un producto extendido a otra zona puntúa en AMBAS, con factor.** La
-    tretinoína en "cara, cuello y escote" es una sola aplicación que sí entrega
-    estímulo a las dos zonas — no es doble conteo. Pero reparte la misma
-    cantidad de producto sobre ~3x de superficie, así que los ejes de cuello van
-    a **~0.85** del valor facial. No es castigo por desviarse (eso es lo que
-    Fase B eliminó): es que la dosis por cm² baja de verdad. Los productos
-    **exclusivos** de una zona conservan su valor íntegro.
+34. **Un producto extendido a otra zona puntúa en AMBAS, con el valor íntegro.**
+    La tretinoína en "cara, cuello y escote" es una sola aplicación que sí
+    entrega estímulo a las dos zonas — no es doble conteo.
+    ⚠️ **CORREGIDA 2026-08-09. La versión anterior mandaba aplicar un factor de
+    ~0.85 a los ejes de la zona extendida. Ese factor NO existe en el código y
+    fue retirado a propósito**, a petición de la usuaria: solo se justificaba en
+    productos de dosis medida, y para una crema simplemente te sirves más. El
+    único `0.85` que hay en `app.js` es una opacidad de color en el heatmap.
+    **Un asistente que obedeciera la versión anterior de esta regla
+    reintroduciría una dilución eliminada deliberadamente.** Ese fue el motivo
+    de reescribirla.
+    Nota: el texto de la tarjeta de cuello en Progreso todavía dice que los
+    productos extendidos "puntúan algo menos". Es un resto del mismo cambio y
+    conviene corregirlo.
 
 35. **Los techos se calibran contra el día REAL, no contra la suma del
     catálogo.** `cuello_textura` nació en 130 copiando la proporción de la cara y
@@ -238,6 +260,94 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
     seguir cumpliéndose es el mecanismo: llegar al techo 4 días vale lo mismo que
     llegar 7 (las noches de descanso no son falla).
 
+36. **El reporte para la dermatóloga mide DOSIS, igual que la app.** Hasta el
+    2026-08-09 `openDermReport` imprimía "Adherencia por objetivo" con los cinco
+    números del modelo de roles, mientras la app medía estímulo entregado. Ni
+    una sola barra de la Fase B llegaba a la consulta — era la mayor divergencia
+    del proyecto. Ahora el documento lleva los ejes de dosis agrupados por zona
+    (cara · cuello y escote · resto), con los días de sobre-exposición marcados
+    junto al eje que los produjo, porque es lo único del reporte que puede
+    cambiar una indicación médica. **La adherencia por rol NO vuelve a este
+    documento**: sigue viva dentro de la app, en su sección plegable, que es lo
+    que autoriza la regla 12. Un médico no necesita saber si seguiste tu propio
+    plan, sino qué recibió tu piel.
+
+37. **La "constancia" no promedia escalas distintas.** Era
+    `[prot, despig, barr, rege]`: el primero en puntos de dosis y los otros tres
+    en porcentaje de días cumplidos del modelo de roles. Sumar dos unidades y
+    dividir entre cuatro no produce una media, produce un número sin unidad — y
+    ese número se enseñaba en Progreso y en el reporte médico. Desde el
+    2026-08-09 es el promedio de los ejes de dosis de la CARA, todos en la misma
+    escala. **Si alguna vez se le suman métricas nuevas, tienen que venir del
+    mismo motor.**
+
+38. **No reintroducir el "camino de 16 semanas".** La tarjeta
+    `.pj-card` ("🗺️ Tu camino · Semana N de 16", con los hitos
+    Barrera · Brillo · Aclaran · Visible) se retiró el 2026-08-09. Avanzaba por
+    **tiempo transcurrido** (`weekNum / 16`), que es exactamente el modelo que
+    la Fase B eliminó, y sus hitos eran la cronología del tratamiento
+    anti-melasma leída como promesa de resultados por calendario. El dato que sí
+    servía —desde cuándo llevas tratamiento— sobrevive en `treatStart`, que
+    **se deriva del motor de dosis** (primer día con puntos en `aclarado` o
+    `textura` de cara) y ya no de `hasRole(...)`. Se reporta en el documento de
+    la dermatóloga. Las clases `.pj-*` siguen en `styles.css` y se pueden
+    limpiar.
+
+## Deuda conocida (auditoría del 2026-08-09)
+
+Lo verificado y todavía sin arreglar, en orden de gravedad. Cada punto está
+comprobado contra el código, no supuesto.
+
+1. **`unlogRoutineStep` puede no borrar nada y decir que sí.** Borra con
+   `.eq('source','rutina')`, pero los registros viejos traen `source` en null y
+   **sí** palomean el paso (`pure.js` solo excluye `'reaplicacion'`). La función
+   devuelve `true` igual, así que se ve "↩️ Paso desmarcado" y al recargar el
+   paso vuelve a estar hecho. El respaldo por nombre además compara contra el
+   texto del DOM, que difiere de lo guardado si el producto tiene `logged_as`.
+2. **Cambiar el estado de piel puede pisar la nota del día.** Los upserts de
+   `daily_notes` mandan `notes` leído del `<textarea>` en pantalla; si la nota se
+   escribió en otro dispositivo y aún no se cargó, se sobrescribe.
+3. **El backdate no aplica a las notas.** Los cuatro upserts a `daily_notes`
+   usan siempre `TODAY_STR`, mientras que `product_applications` sí respeta la
+   fecha elegida.
+4. **Destildar todos los roles clínicos resucita el legado.** El formulario
+   escribe `clinical_roles: []` y `hasRole` cae a `clinical_role` (singular)
+   cuando el array está vacío. Esa columna nunca se escribe desde la app.
+5. **`pa4 ≡ euuva` está implementado en un solo lado.** `pure.js` los trata como
+   equivalentes (regla 13); la tabla comparativa solo mira `pa4`, así que un
+   SPF50 europeo con sello UVA saca 60/60 de magnitud y una ✗ en la columna
+   PA++++ de la misma pantalla.
+6. **`products.sort_order` nunca se escribe** aunque el catálogo se ordene por
+   él: los productos creados desde la app quedan sin orden definido.
+7. **Dos vocabularios de zona sin una sola clave en común.** `PHOTO_TYPES`
+   (`cara-derecha`, `pecho`, `brazo`, `mano`, `pie`, `pierna`) gobierna
+   `progress_photos.photo_type` y `skin_spots.zone`; `ZONAS` (`cara`, `cuello`,
+   `cuerpo`, `manos`, `pies`, `labios`, `cabello`) gobierna los ejes de dosis.
+   No hay traducción. Consecuencia: **no se puede responder cuánto estímulo
+   recibió la zona donde está una mancha**, que es el propósito del tracker; y
+   es imposible marcar una mancha en cuello, labios o cabello. Ojo con
+   `zonaLabel` (lee `ZONAS`) y `zoneLabel` (lee `PHOTO_TYPES`), que difieren en
+   una letra. Esto es rediseño, no limpieza.
+8. **Residuos sin llamar:** `ejesDeProducto`, `quickLog`,
+   `REAPP_EXCLUDE_CATEGORIES` (lista vacía), la rama `focusRoles` de
+   `buildFocusHTML` (solo corre si la matriz está vacía, o sea nunca) con textos
+   obsoletos, `.spf-fab-none` en CSS (estado inexistente), y la categoría
+   `"✋ Manos"` declarada sin ningún producto que la use.
+9. **Constantes duplicadas** (contra la regla 5): `LEGACY_ROLE_MAP` escrito dos
+   veces carácter por carácter; `ZONA_SOLO_FUNCION` y `FUNCION_EXCLUSIVA`
+   duplicando `ZONAS[].soloFuncion`; los chips de rol clínico escritos a mano en
+   `index.html` porque `ROLE_CONFIG` vive DENTRO de `loadHistory()`.
+10. **Vestigios de melasma:** `manifest.webmanifest` todavía describe la app
+    como "adherencia para melasma" — es el único texto de melasma que la usuaria
+    ve, al instalar la PWA. La clave `melasma:` sigue nombrando las columnas de
+    `COMPARE_COLS`. `matriz-activos-revision.csv` tiene 19 ids que ya no existen
+    (5 fusionados + los 14 "(Manos)") y sus justificaciones siguen redactadas
+    contra melasma.
+11. **`activos-matriz-agregar.js` sigue en el repo.** Sus 11 entradas ya están
+    pegadas, pero **2 tienen valores del vocabulario anterior** (`cuerpo_barrera`
+    en vez de `barrera`, y el sérum labial vacío): pegarlas hoy haría que esos
+    productos puntuaran 0 en silencio. La regla 28 avisa contra este archivo.
+
 ## Al terminar cualquier cambio
 
 1. `node --check app.js pure.js sw.js` (sintaxis).
@@ -245,4 +355,5 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 3. Si tocaste sw.js → subir versión de CACHE.
 4. Si agregaste columnas → entregar migración SQL idempotente aparte.
 5. Los archivos que se deployan siempre juntos: `index.html`, `styles.css`, `app.js` (+ `sw.js`/`pure.js`/`activos-matriz.js` si cambiaron).
-6. `tests.html` tiene **77 casos** e incluye ya los de `tests-spf-agregar.js`, `tests-dosis-agregar.js` y `tests-hidratacion-agregar.js` — esos tres archivos son el historial de lo que se fue agregando, no una lista pendiente.
+6. `tests.html` tiene **94 casos** e incluye ya los de `tests-spf-agregar.js`, `tests-dosis-agregar.js` y `tests-hidratacion-agregar.js` — esos tres archivos son el historial de lo que se fue agregando, no una lista pendiente. **`tests-zonas-agregar.js` SÍ está pendiente**: sus 13 casos nunca se pegaron, aunque solo necesitan `pure.js`.
+7. Las suites de node (`tests-spf-ritmo.js`, `tests-zonas-registro.js`) se corren con `node <archivo>` desde la carpeta del repo. **Nunca fijar conteos a mano en una prueba** ("siguen siendo 86 productos"): caduca sola al dar de alta un producto y enseña a ignorar el rojo. Se corrigieron dos así el 2026-08-09.
