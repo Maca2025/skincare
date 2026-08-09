@@ -1457,16 +1457,32 @@ async function loadHistory() {
         : `<span class="spark-bar" style="height:${Math.max(8, w)}%;background:${color}" title="${w}%"></span>`
     ).join('')}</div><div class="spark-lbl">tendencia · últimas 12 semanas</div>`;
   };
-  const melasmaProducts = allProducts.filter(p => hasRole(p, 'despigmentacion') || hasRole(p, 'regeneracion_celular'));
-  let melStart = null;
-  melasmaProducts.forEach(p => {
-    const done = productDoneDates(p);
-    if (done.size) { const first = [...done].sort()[0]; if (!melStart || first < melStart) melStart = first; }
+  // ── DESDE CUÁNDO LLEVAS TRATAMIENTO ────────────────────────────────────────
+  // Antes esto se llamaba `melStart` y se calculaba con
+  // `hasRole(p,'despigmentacion'|'regeneracion_celular')`, o sea con el
+  // vocabulario del modelo de ROLES CLÍNICOS, que desde la Fase B es vista
+  // secundaria. Ahora se deriva del MISMO motor de dosis que alimenta las
+  // barras: el primer día con puntos en `aclarado` o en `textura` de cara. Es
+  // el mismo concepto —cuándo empezaste a tratar las manchas de verdad— pero
+  // leído del modelo primario, y deja de depender de que los roles clínicos
+  // estén bien puestos en el catálogo.
+  let treatStart = null;
+  Object.keys(dosePtsByDate).sort().some(ds => {
+    const d = dosePtsByDate[ds] || {};
+    if ((d.aclarado || 0) > 0 || (d.textura || 0) > 0) { treatStart = ds; return true; }
+    return false;
   });
   let weekNum = 1;
-  if (melStart && melStart <= ENDS) { let n = 0; eachDateStr(melStart, ENDS, () => n++); weekNum = Math.floor(n / 7) + 1; }
-  const journeyPct = Math.min(100, Math.round(weekNum / 16 * 100));
-  const constVals = [prot, despig, barr, rege].map(x => x ? x.pct : null).filter(x => x != null);
+  if (treatStart && treatStart <= ENDS) { let n = 0; eachDateStr(treatStart, ENDS, () => n++); weekNum = Math.floor(n / 7) + 1; }
+  // ── ESTÍMULO PROMEDIO (antes "constancia") ─────────────────────────────────
+  // Antes era `[prot, despig, barr, rege]`: el primero en PUNTOS DE DOSIS y los
+  // otros tres en PORCENTAJE DE DÍAS CUMPLIDOS del modelo de roles. Sumar dos
+  // escalas distintas y dividir entre cuatro no produce una media, produce un
+  // número sin unidad — y ese número se enseñaba en Progreso y en el reporte
+  // médico. Ahora es el promedio de los ejes de dosis de la CARA: todos en la
+  // misma escala, del mismo modelo que las barras de arriba, así que el número
+  // por fin significa algo. Cambió de valor a propósito.
+  const constVals = dosisCara.map(x => x.o.pct).filter(x => x != null);
   const constancia = constVals.length ? Math.round(constVals.reduce((a, b) => a + b, 0) / constVals.length) : null;
   // ── ESTÍMULO DIARIO (para el heatmap) ──────────────────────────────────────
   // Hasta el 2026-08-01 esto medía "% de pasos de rutina marcados como
@@ -1539,7 +1555,6 @@ async function loadHistory() {
   ${spark || ''}
 </div>`;
   };
-  const mileDots = [25, 50, 75, 100].map(p => `<span class="pj-dot${journeyPct >= p ? ' on' : ''}" style="left:${p}%"></span>`).join('');
   const focusRoles = [
     { label: 'Protección solar', icon: '🛡️', key: 'spf_facial', o: prot },
     { label: 'Despigmentación',         icon: '🎯', key: 'despigmentacion', o: despig },
@@ -1752,8 +1767,26 @@ async function loadHistory() {
   <div class="adh-sub" style="margin-top:8px">${corrNote} Entre más días registres tu estado de piel, más confiable se vuelve esto.</div>
 </div>`;
   }
-  // Datos que reutiliza el reporte para la dermatóloga.
-  lastReportData = { prot, despig, barr, rege, textura, constancia, weekNum, melStart };
+  // ── DATOS QUE REUTILIZA EL REPORTE PARA LA DERMATÓLOGA ─────────────────────
+  // Hasta el 2026-08-09 esto llevaba SOLO los cinco números del modelo de roles
+  // (`prot, despig, barr, rege, textura`), así que el documento que se lleva a
+  // consulta reportaba adherencia a rutinas mientras la app medía dosis. El
+  // motor de dosis se calculaba veinte líneas más arriba, en esta misma
+  // función, y nunca cruzaba. Ahora sí.
+  //
+  // Los ejes van APLANADOS (icono, etiqueta, %, días de sobre-exposición) a
+  // propósito: `openDermReport` no debe conocer la forma interna de DOSE_AXES
+  // ni depender de closures de `loadHistory`. Si mañana cambia la estructura de
+  // un eje, el reporte no se entera.
+  const flatDose = arr => arr.map(({ key, o }) => ({
+    key, icon: o.cfg.icon, label: o.cfg.label, pct: o.pct, overDays: o.overDays
+  }));
+  lastReportData = {
+    cara: flatDose(dosisCara),
+    cuello: flatDose(dosisCuello),
+    otros: flatDose(dosisOtros),
+    constancia, weekNum, treatStart
+  };
   // ── RENDER: ESTÍMULO ENTREGADO (dosis) ─────────────────────────────────────
   const doseRow = ({ key, o }) => {
     const c = o.cfg;
@@ -1778,21 +1811,19 @@ async function loadHistory() {
   <div class="dose-intro">Zona propia: la piel del cuello es más fina que la de la cara y envejece antes. Cuenta lo que te aplicas <strong>solo ahí</strong> más lo que extiendes desde la cara — estos últimos puntúan algo menos porque el mismo producto cubre el triple de superficie. El protector solar se registra solo, junto con el de la cara.</div>
   ${dosisCuello.map(doseRow).join('')}
 </div>` : '';
+  // NOTA (2026-08-09): aquí vivía la tarjeta "🗺️ Tu camino · Semana N de 16".
+  // Se retiró. Venía de la etapa melasma y avanzaba por TIEMPO TRANSCURRIDO
+  // (weekNum / 16), no por lo aplicado — exactamente el modelo que la Fase B
+  // eliminó. Sus cuatro hitos (Barrera · Brillo · Aclaran · Visible) eran la
+  // cronología del tratamiento anti-melasma y se leían como una promesa de
+  // resultados por calendario. El dato que sí servía —desde cuándo llevas
+  // tratamiento— sobrevive en treatStart / weekNum y se reporta en el documento
+  // de la dermatóloga. No reintroducir la barra ni los hitos.
   const dosisOtrosHTML = dosisOtros.length ? `
 <div class="adh-label">🧴 Cuerpo, pies, cabello, manos y labios</div>
 <div class="adh-card">${dosisOtros.map(doseRow).join('')}</div>` : '';
   el.innerHTML = `
 ${streaksHTML}
-<div class="pj-card">
-  <div class="pj-top">
-    <span class="pj-title">🗺️ Tu camino · manchas solares</span>
-    ${constancia != null ? `<span class="pj-const">constancia ${constancia}%</span>` : ''}
-  </div>
-  <div class="pj-week">Semana ${weekNum > 16 ? '16+' : weekNum} de 16${melStart ? ` · desde ${fmtDate(melStart)}` : ''}</div>
-  <div class="pj-track"><div class="pj-fill" style="width:${journeyPct}%"></div>${mileDots}</div>
-  <div class="pj-miles"><span>Barrera</span><span>Brillo</span><span>Aclaran</span><span>Visible</span></div>
-  <div class="pj-note">${melStart ? `Cuenta desde tu primer registro de un producto de despigmentación o renovación celular (${fmtDate(melStart)}), no desde que abriste la app. ` : ''}Calculado al cierre de ayer. Los hitos son una guía, no una promesa médica.</div>
-</div>
 <button class="report-btn" onclick="openDermReport()">📄 Generar reporte para dermatóloga</button>
 <button class="report-btn" onclick="openModal('guide-modal')">📖 Guía: manchas solares y procedimientos</button>
 ${focusHTML}
@@ -2001,8 +2032,18 @@ async function exportBackup() {
   showToast('✅ Respaldo descargado (JSON + CSV)', 'success');
 }
 // ── REPORTE PARA LA DERMATÓLOGA ──────────────────────────────────────────────
-// Abre una ventana imprimible (desde ahí se guarda como PDF) con: adherencia
-// por rol, evolución fotográfica antes/ahora por área, y notas de 30 días.
+// Abre una ventana imprimible (desde ahí se guarda como PDF) con: ESTÍMULO
+// ENTREGADO por zona, evolución fotográfica antes/ahora por área, y notas de
+// 30 días.
+//
+// Antes reportaba "adherencia por objetivo" —el modelo de roles clínicos— y esa
+// era la mayor divergencia del proyecto: la app medía dosis y el documento que
+// se llevaba a consulta medía cumplimiento de un plan. Ni una sola barra de la
+// Fase B llegaba a la dermatóloga. Desde el 2026-08-09 el reporte lee los
+// mismos ejes que ves en Progreso. La adherencia sigue existiendo dentro de la
+// app, en su sección plegable, pero NO vuelve a este documento (regla 12: es
+// vista secundaria, y un médico no necesita saber si seguiste tu propio plan,
+// sino qué recibió tu piel).
 let lastReportData = null;
 async function openDermReport() {
   if (!lastReportData) { showToast('⚠️ Espera a que cargue Progreso', 'error'); return; }
@@ -2027,11 +2068,22 @@ async function openDermReport() {
   }
   const { data: notes } = await db.from('daily_notes').select('*').order('note_date', { ascending: false }).limit(30);
   const m = lastReportData;
-  const rowT = (label, o) => o ? `<tr><td>${label}</td><td style="text-align:right;font-weight:700">${o.pct}%</td></tr>` : '';
+  // Tabla de un bloque de ejes de dosis. `overDays` se muestra junto al eje y no
+  // como nota al pie: es lo único del documento que puede cambiar una
+  // indicación médica (espaciar activos), así que va donde se lee.
+  const doseTable = (titulo, arr) => (!arr || !arr.length) ? '' :
+    `<h3>${titulo}</h3><table>${arr.map(a =>
+      `<tr><td>${a.icon} ${esc(a.label)}${a.overDays > 0
+        ? ` <span style="color:#B4501E">· ${a.overDays} día${a.overDays === 1 ? '' : 's'} de más con irritante</span>` : ''}</td>` +
+      `<td style="text-align:right;font-weight:700">${a.pct}%</td></tr>`).join('')}</table>`;
+  const ejeCara = k => (m.cara || []).find(a => a.key === k);
+  const ejeRenov = ejeCara('textura'), ejeProt = ejeCara('proteccion');
+  const sobreexpuestos = [].concat(m.cara || [], m.cuello || [], m.otros || []).filter(a => a.overDays > 0);
   // Checklist pre-cita: preguntas sugeridas generadas de los datos reales.
   const questions = [];
-  if (m.rege && m.rege.pct < 60) questions.push(`Mi constancia con tretinoína/retinol va en ${m.rege.pct}% — ¿conviene ajustar frecuencia o técnica (sandwich) para tolerarla mejor?`);
-  if (m.prot && m.prot.pct < 70) questions.push(`Mi protección solar promedia ${m.prot.pct}% del ideal — ¿qué estrategia de reaplicación me recomiendas para mi día a día?`);
+  if (ejeRenov && ejeRenov.pct < 60) questions.push(`Mi dosis de renovación celular (tretinoína/retinol) va en ${ejeRenov.pct}% del techo útil — ¿conviene ajustar frecuencia o técnica (sándwich) para tolerarla mejor?`);
+  if (ejeProt && ejeProt.pct < 70) questions.push(`Mi protección solar promedia ${ejeProt.pct}% del ideal de reaplicaciones — ¿qué estrategia me recomiendas para mi día a día?`);
+  if (sobreexpuestos.length) questions.push(`Tuve días de más con retinoide o ácido en ${sobreexpuestos.map(a => a.label.toLowerCase()).join(', ')} — ¿cómo espacio los activos sin perder resultado?`);
   pairs.forEach(p => {
     const weeks = Math.round((new Date(p.b.photo_date) - new Date(p.a.photo_date)) / (7 * 86400000));
     if (weeks >= 8) questions.push(`El área "${p.label.replace(/^[^ ]+ /, '')}" tiene fotos con ${weeks} semanas de diferencia — ¿la mejoría es la esperada o conviene valorar un procedimiento?`);
@@ -2054,16 +2106,13 @@ table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;bord
 </style></head><body>
 <button class="no-print" onclick="window.print()" style="padding:9px 18px;margin-bottom:16px;cursor:pointer">🖨️ Imprimir / guardar como PDF</button>
 <h1>Reporte de seguimiento — manchas solares (lentigos)</h1>
-<p style="font-size:12px;color:#666">Generado: ${new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })} · Semana ${m.weekNum > 16 ? '16+' : m.weekNum} de tratamiento${m.melStart ? ` (desde ${m.melStart})` : ''} · Adherencia calculada sobre los últimos 90 días</p>
-<h2>Adherencia por objetivo</h2>
-<table>
-${rowT('🛡️ Protección solar facial (calidad + reaplicaciones)', m.prot)}
-${rowT('🎯 Despigmentación', m.despig)}
-${rowT('💧 Barrera cutánea', m.barr)}
-${rowT('🔬 Renovación celular (tretinoína/retinol)', m.rege)}
-${rowT('🔍 Textura / poros', m.textura)}
-</table>
-${m.constancia != null ? `<p style="font-size:13px"><b>Constancia global: ${m.constancia}%</b></p>` : ''}
+<p style="font-size:12px;color:#666">Generado: ${new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })}${m.treatStart ? ` · Semana ${m.weekNum} de tratamiento (desde ${m.treatStart})` : ''} · Dosis calculada sobre las últimas 12 semanas</p>
+<h2>Estímulo entregado</h2>
+<p style="font-size:12px;color:#666;line-height:1.5">Mide la <b>dosis de activos que la piel recibió</b>, no el cumplimiento de un plan de rutinas: una aplicación cuenta completa aunque se haga fuera de rutina. 100% = se alcanzó el techo útil diario los días ideales de la semana. Pasarse del ideal no sube el número; se señala aparte porque irrita sin acelerar resultados.</p>
+${doseTable('Cara', m.cara)}
+${doseTable('Cuello y escote', m.cuello)}
+${doseTable('Cuerpo, manos, pies, labios y cabello', m.otros)}
+${m.constancia != null ? `<p style="font-size:13px"><b>Estímulo promedio en cara: ${m.constancia}%</b></p>` : ''}
 ${questionsHTML}
 <h2>Evolución fotográfica</h2>
 ${pairs.map(p => `<h3>${p.label}</h3><div class="pair"><div><img src="${p.a.photo_url}"><br>ANTES · ${p.a.photo_date}</div><div><img src="${p.b.photo_url}"><br>AHORA · ${p.b.photo_date}</div></div>`).join('') || '<p style="font-size:12px;color:#888">Aún no hay pares de fotos por área.</p>'}
