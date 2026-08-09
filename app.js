@@ -209,21 +209,44 @@ async function unlogRoutineStep(routineStepId, step) {
   const bd = document.getElementById('backdate-input');
   const dateStr = (bd && bd.value) ? bd.value.slice(0, 10) : TODAY_STR;
   const b = localDayBoundsUTC(dateStr);
+  const nameEl = step.querySelector('.sc-name');
+  const nombre = nameEl ? nameEl.textContent.trim() : null;
+  if (!routineStepId && !nombre) return true;
+  // ── LA COLA OFFLINE PRIMERO ────────────────────────────────────────────────
+  // Si el registro todavía está encolado, no existe en Supabase: borrar allá no
+  // haría nada y al reconectar se insertaría, con lo que el paso volvería a
+  // aparecer hecho sin que nadie lo tocara. Se saca de la cola antes.
+  const cola = readQueue();
+  const quedan = cola.filter(e => {
+    const r = (e && e.row) || {};
+    if (!r.applied_at || localDateOfISO(r.applied_at) !== dateStr) return true;
+    return routineStepId ? r.routine_step_id !== routineStepId : r.product_name !== nombre;
+  });
+  const purgadas = cola.length - quedan.length;
+  if (purgadas) writeQueue(quedan);   // writeQueue ya repinta el banner
+  // ── EL BORRADO EN LA BASE ──────────────────────────────────────────────────
+  // Antes filtraba `.eq('source','rutina')` y ese filtro dejaba fuera los
+  // registros VIEJOS, que traen `source` en null o vacío. Esos registros SÍ
+  // palomean el paso —`buildHydration` (pure.js) solo excluye
+  // `'reaplicacion'`—, así que se podía desmarcar un paso, ver el toast de
+  // éxito, y encontrarlo hecho otra vez al recargar: el borrado no había
+  // tocado nada. El filtro tiene que ser el ESPEJO EXACTO de la hidratación —
+  // se borra todo lo que marca, y solo eso. Por eso `source.is.null OR
+  // source.neq.reaplicacion` y no `.eq('rutina')`: una reaplicación no marca
+  // ningún paso (regla 4) y por lo tanto tampoco se borra desde aquí.
   let q = db.from('product_applications').delete()
-    .eq('source', 'rutina')
+    .or('source.is.null,source.neq.reaplicacion')
     .gte('applied_at', b.startISO)
     .lt('applied_at', b.endISO);
-  if (routineStepId) {
-    q = q.eq('routine_step_id', routineStepId);
-  } else {
-    const nameEl = step.querySelector('.sc-name');
-    if (!nameEl) return true;
-    q = q.eq('product_name', nameEl.textContent.trim());
-  }
-  const { error } = await q;
+  q = routineStepId ? q.eq('routine_step_id', routineStepId) : q.eq('product_name', nombre);
+  // `.select('id')` devuelve las filas borradas. Sin esto la función no tenía
+  // forma de saber si borró algo y anunciaba éxito siempre — un "listo" que a
+  // veces era mentira.
+  const { data: borradas, error } = await q.select('id');
   if (error) { showToast('❌ ' + error.message, 'error'); return false; }
   historyLoaded = false;
-  showToast('↩️ Paso desmarcado', '');
+  const n = ((borradas || []).length) + purgadas;
+  showToast(n ? '↩️ Paso desmarcado' : '↩️ Desmarcado, pero no había ningún registro guardado que borrar', '');
   return true;
 }
 function updateProgress(bodyId) {
@@ -560,14 +583,30 @@ function renderSkinStateRow() {
   <div class="skin-btn-emoji">${s.e}</div><div class="skin-btn-lbl">${s.l}</div>
 </button>`).join('');
 }
+// Fecha a la que pertenece la tarjeta de notas. Respeta el backdate igual que
+// las aplicaciones: antes estas tres escrituras usaban siempre `TODAY_STR`, así
+// que registrar para el martes guardaba las aplicaciones en el martes y la nota
+// —y el estado de piel— en hoy. Como `skin_state` es la variable con la que se
+// correlacionan las reacciones a producto, ese desfase corrompía el análisis en
+// silencio.
+function notesDateStr() {
+  const bd = document.getElementById('backdate-input');
+  return (bd && bd.value) ? bd.value.slice(0, 10) : TODAY_STR;
+}
 async function setSkinState(v) {
   const prev = selectedSkinState;
   selectedSkinState = selectedSkinState === v ? null : v;
   renderSkinStateRow();
-  // Se guarda al toque (sin esperar al botón de la nota), conservando el
-  // texto que esté en el textarea.
+  // Se guarda al toque, sin esperar al botón de la nota.
+  // Se manda SOLO esta columna. Antes también mandaba `notes` leído del
+  // <textarea>, y eso pisaba la nota del día con lo que hubiera en pantalla:
+  // si la habías escrito en otro dispositivo y `loadTodayNote` aún no la
+  // traía, tocar un botón de estado de piel la borraba. El upsert de Supabase
+  // no toca las columnas que no van en el payload — es exactamente lo que
+  // `setWakeTimeStr` ya decía en su comentario que hacían estas dos funciones,
+  // aunque no fuera cierto hasta el 2026-08-09.
   const { error } = await db.from('daily_notes').upsert(
-    { note_date: TODAY_STR, notes: document.getElementById('daily-notes').value.trim(), skin_state: selectedSkinState, updated_at: new Date().toISOString() },
+    { note_date: notesDateStr(), skin_state: selectedSkinState, updated_at: new Date().toISOString() },
     { onConflict: 'note_date' }
   );
   if (error) {
@@ -605,8 +644,11 @@ async function setSunExposure(v) {
   const prev = selectedSunExposure;
   selectedSunExposure = selectedSunExposure === v ? null : v;
   renderSunExposureRow();
+  // Igual que `setSkinState`: solo su propia columna. Antes mandaba también
+  // `notes` y `skin_state`, así que marcar la exposición del día podía pisar
+  // ambos con lo que hubiera en memoria o en pantalla.
   const { error } = await db.from('daily_notes').upsert(
-    { note_date: TODAY_STR, notes: document.getElementById('daily-notes').value.trim(), skin_state: selectedSkinState, sun_exposure: selectedSunExposure, updated_at: new Date().toISOString() },
+    { note_date: notesDateStr(), sun_exposure: selectedSunExposure, updated_at: new Date().toISOString() },
     { onConflict: 'note_date' }
   );
   if (error) {
@@ -617,17 +659,24 @@ async function setSunExposure(v) {
     showToast('✅ Exposición registrada', 'success');
   }
 }
-async function loadTodayNote() {
-  const { data } = await db.from('daily_notes').select('*').eq('note_date', TODAY_STR).maybeSingle();
+// `dateStr` permite cargar la nota del día que estés viendo con el backdate.
+// Sin parámetro se comporta como siempre: hoy.
+async function loadTodayNote(dateStr) {
+  const ds = dateStr || TODAY_STR;
+  const { data } = await db.from('daily_notes').select('*').eq('note_date', ds).maybeSingle();
   document.getElementById('daily-notes').value = (data && data.notes) ? data.notes : '';
   selectedSkinState = data ? (data.skin_state || null) : null;
   selectedSunExposure = data ? (data.sun_exposure || null) : null;
-  // Si ya guardaste tu hora de despertar de HOY desde otro dispositivo (o en
-  // otra sesión de este mismo), este localStorage todavía no la tiene — la
-  // adopta para que el resumen y el chip 🌅 no vuelvan a mostrar el default.
-  if (data && data.wake_time && !localStorage.getItem(WAKE_TIME_KEY_PREFIX + TODAY_STR)) {
+  // La hora de despertar es un dato de HOY (alimenta el ideal de SPF en vivo),
+  // así que su adopción a localStorage solo aplica cuando estamos en hoy.
+  if (ds === TODAY_STR && data && data.wake_time && !localStorage.getItem(WAKE_TIME_KEY_PREFIX + TODAY_STR)) {
     localStorage.setItem(WAKE_TIME_KEY_PREFIX + TODAY_STR, data.wake_time);
   }
+  // La etiqueta dice a qué día pertenece lo que estás escribiendo. Sin esto, la
+  // tarjeta sigue diciendo "for today" mientras registras para otro día y no hay
+  // forma de notar que la nota se está guardando en otra fecha.
+  const lbl = document.querySelector('.notes-label');
+  if (lbl) lbl.textContent = (ds === TODAY_STR) ? '📝 Notes for today' : `📝 Nota del ${fmtDate(ds)}`;
   renderSkinStateRow();
   renderSunExposureRow();
   updateTodaySummary();
@@ -638,7 +687,7 @@ async function saveNote() {
   if (!notes) { showToast('⚠️ Escribe algo antes de guardar', 'error'); return; }
   btn.disabled = true; btn.textContent = '⏳ Guardando...';
   const { error } = await db.from('daily_notes').upsert(
-    { note_date: TODAY_STR, notes, skin_state: selectedSkinState, sun_exposure: selectedSunExposure, updated_at: new Date().toISOString() },
+    { note_date: notesDateStr(), notes, skin_state: selectedSkinState, sun_exposure: selectedSunExposure, updated_at: new Date().toISOString() },
     { onConflict: 'note_date' }
   );
   btn.disabled = false; btn.textContent = '💾 Guardar nota';
@@ -2289,6 +2338,8 @@ async function onBackdateChange() {
     const label = new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
     note.textContent = `📅 Estás registrando para: ${label} — no para ahora mismo.`;
     await loadTodayRoutines(input.value.slice(0, 10));
+    // La nota, el estado de piel y la exposición solar también son de ESE día.
+    await loadTodayNote(input.value.slice(0, 10));
   } else {
     resetBtn.style.display = 'none';
     note.style.display = 'none';
@@ -2304,6 +2355,7 @@ async function resetBackdate() {
   const card = document.getElementById('backdate-card');
   if (card) card.classList.remove('active');
   await loadTodayRoutines(TODAY_STR);
+  await loadTodayNote(TODAY_STR);
   showToast('✅ Volviste a registrar en tiempo real', 'success');
 }
 
