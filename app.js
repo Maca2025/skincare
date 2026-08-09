@@ -3842,9 +3842,9 @@ const COMPARE_COLS = [
     desc:'El filtro Mexoryl 400 (patente exclusiva de L\'Oréal / LRP UVMune 400) extiende la cobertura UV hasta exactamente 400nm — el límite exacto donde termina el UV y empieza la luz visible. Ningún otro filtro llega tan lejos.',
     melasma:'La cobertura UV más completa disponible — cierra el "gap" de 380–400nm de casi todos los SPF del mercado. Para sunspots es un plus sólido (aunque menos decisivo que en melasma).' },
   { id:'pa4',
-    label:'PA++++',
-    title:'PA++++ — Sistema asiático de clasificación UVA',
-    desc:'Sistema de clasificación japonés/coreano basado en el índice PPD (Persistent Pigment Darkening). PA++++ es la categoría máxima y equivale a PPD ≥ 16. Los SPF europeos a veces usan el sello de círculo UVA en lugar del sistema PA.',
+    label:'PA++++ / UVA UE',
+    title:'PA++++ o sello UVA europeo — protección UVA de magnitud máxima',
+    desc:'Dos normativas que miden lo MISMO y por eso cuentan igual: PA++++ (sistema japonés/coreano, índice PPD ≥ 16) y el sello de círculo UVA europeo (UVA-PF ≥ SPF/3, que en un SPF50 son ≥ 16.7). Un protector europeo sin etiqueta PA no protege menos: se vende bajo otra normativa.',
     melasma:'Imprescindible: garantiza protección UVA robusta y estandarizada contra el daño acumulativo que produce y re-pigmenta los lentigos.' },
   { id:'vis',
     label:'Luz Visible',
@@ -3884,7 +3884,13 @@ function compareRowsFromProducts() {
       uvb: 1,
       uva400: cls.has('uva400') ? 1 : 0,
       uvalong: (cls.has('uvalong') || cls.has('uva400')) ? 1 : 0,
-      pa4: cls.has('pa4') ? 1 : 0,
+      // `euuva` cuenta igual que `pa4`. Son el MISMO dato medido con dos
+      // normativas: PA++++ es PPD ≥ 16 (ISO 24442) y el sello UVA europeo es
+      // UVA-PF ≥ SPF/3, que en un SPF50 es ≥ 16.7 (ISO 24443). `spfScoreOf`
+      // (pure.js) ya los trataba como equivalentes desde la regla 13, pero esta
+      // tabla solo miraba `pa4`: un SPF50 europeo con sello UVA sacaba 60/60 de
+      // magnitud en el puntaje y una ✗ en esta columna, en la misma pantalla.
+      pa4: (cls.has('pa4') || cls.has('euuva')) ? 1 : 0,
       vis: cls.has('tinted') ? 1 : 0,
       ira: cls.has('ira') ? 1 : 0,
       act: cls.has('treats') ? 1 : 0,
@@ -4238,7 +4244,11 @@ function openEditProductModal(id) {
   document.getElementById('pf-started').value = p.started_at || '';
   document.getElementById('pf-pao').value    = p.pao_months || '';
   resetPfClinicalFields();
-  const roles = (p.clinical_roles && p.clinical_roles.length) ? p.clinical_roles : (p.clinical_role ? [LEGACY_ROLE_MAP[p.clinical_role]] : []);
+  // `.filter(Boolean)`: si el valor legado no está en el mapa, `LEGACY_ROLE_MAP`
+  // devuelve undefined y sin este filtro se escribiría `[undefined]` en la base.
+  const roles = (p.clinical_roles && p.clinical_roles.length)
+    ? p.clinical_roles
+    : (p.clinical_role ? [LEGACY_ROLE_MAP[p.clinical_role]].filter(Boolean) : []);
   roles.filter(Boolean).forEach(role => {
     const cb = document.querySelector(`#pf-clinical-roles input[value="${role}"]`);
     if (cb) { cb.checked = true; cb.closest('.clinrole-chip').classList.add('on'); }
@@ -4290,7 +4300,15 @@ async function saveCustomProduct() {
       emoji, name, brand: brand || null, category: cat,
       note: note || null, how_to_apply: how || null, why_it_works: why || null,
       clinical_roles: clinicalRoles, schedule_days: scheduleDays,
-      opened_at: openedAt, pao_months: paoMonths, started_at: startedAt, started_at: startedAt
+      opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
+      // Se apaga la columna VIEJA en cuanto editas el producto. `hasRole` cae a
+      // `clinical_role` (singular) cuando `clinical_roles` viene vacío, y el
+      // formulario escribe `[]` al destildar todos los roles: sin esta línea,
+      // destildarlos no los apagaba — resucitaba el valor legado, que la app
+      // nunca escribe y por lo tanto no puedes cambiar desde la interfaz.
+      // El valor no se pierde: al abrir el editor los chips ya vienen marcados
+      // desde el legado, así que al guardar queda migrado a `clinical_roles`.
+      clinical_role: null
     }).eq('id', editingProductId).select().single();
     btn.disabled = false; btn.textContent = 'Guardar cambios';
     if (error) { showToast('❌ ' + error.message, 'error'); return; }
@@ -4308,7 +4326,14 @@ async function saveCustomProduct() {
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
     clinical_roles: clinicalRoles, schedule_days: scheduleDays,
     opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
-    tier: 'ok', tags: [], status: 'ok'
+    tier: 'ok', tags: [], status: 'ok',
+    // El catálogo se lee con `.order('sort_order')` pero la app nunca escribía
+    // esta columna, así que todo producto creado desde aquí quedaba con el
+    // mismo valor por defecto y su posición en Stock era indefinida. Se coloca
+    // al final, igual que hacen `saveNewRoutine` y `saveNewStep`.
+    sort_order: allProducts.length
+      ? Math.max(...allProducts.map(x => Number(x.sort_order) || 0)) + 1
+      : 0
   }).select().single();
   btn.disabled = false; btn.textContent = 'Guardar producto';
   if (error) { showToast('❌ ' + error.message, 'error'); return; }

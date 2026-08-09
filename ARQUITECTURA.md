@@ -295,58 +295,79 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 
 ## Deuda conocida (auditoría del 2026-08-09)
 
-Lo verificado y todavía sin arreglar, en orden de gravedad. Cada punto está
-comprobado contra el código, no supuesto.
+Lo verificado y **todavía sin arreglar**, en orden de gravedad. Cada punto está
+comprobado contra el código, no supuesto. Lo que se fue resolviendo se quitó de
+esta lista — si vuelve a aparecer, es que se rompió otra vez.
 
-1. **`unlogRoutineStep` puede no borrar nada y decir que sí.** Borra con
-   `.eq('source','rutina')`, pero los registros viejos traen `source` en null y
-   **sí** palomean el paso (`pure.js` solo excluye `'reaplicacion'`). La función
-   devuelve `true` igual, así que se ve "↩️ Paso desmarcado" y al recargar el
-   paso vuelve a estar hecho. El respaldo por nombre además compara contra el
-   texto del DOM, que difiere de lo guardado si el producto tiene `logged_as`.
-2. **Cambiar el estado de piel puede pisar la nota del día.** Los upserts de
-   `daily_notes` mandan `notes` leído del `<textarea>` en pantalla; si la nota se
-   escribió en otro dispositivo y aún no se cargó, se sobrescribe.
-3. **El backdate no aplica a las notas.** Los cuatro upserts a `daily_notes`
-   usan siempre `TODAY_STR`, mientras que `product_applications` sí respeta la
-   fecha elegida.
-4. **Destildar todos los roles clínicos resucita el legado.** El formulario
-   escribe `clinical_roles: []` y `hasRole` cae a `clinical_role` (singular)
-   cuando el array está vacío. Esa columna nunca se escribe desde la app.
-5. **`pa4 ≡ euuva` está implementado en un solo lado.** `pure.js` los trata como
-   equivalentes (regla 13); la tabla comparativa solo mira `pa4`, así que un
-   SPF50 europeo con sello UVA saca 60/60 de magnitud y una ✗ en la columna
-   PA++++ de la misma pantalla.
-6. **`products.sort_order` nunca se escribe** aunque el catálogo se ordene por
-   él: los productos creados desde la app quedan sin orden definido.
-7. **Dos vocabularios de zona sin una sola clave en común.** `PHOTO_TYPES`
-   (`cara-derecha`, `pecho`, `brazo`, `mano`, `pie`, `pierna`) gobierna
-   `progress_photos.photo_type` y `skin_spots.zone`; `ZONAS` (`cara`, `cuello`,
-   `cuerpo`, `manos`, `pies`, `labios`, `cabello`) gobierna los ejes de dosis.
-   No hay traducción. Consecuencia: **no se puede responder cuánto estímulo
-   recibió la zona donde está una mancha**, que es el propósito del tracker; y
-   es imposible marcar una mancha en cuello, labios o cabello. Ojo con
-   `zonaLabel` (lee `ZONAS`) y `zoneLabel` (lee `PHOTO_TYPES`), que difieren en
-   una letra. Esto es rediseño, no limpieza.
-8. **Residuos sin llamar:** `ejesDeProducto`, `quickLog`,
-   `REAPP_EXCLUDE_CATEGORIES` (lista vacía), la rama `focusRoles` de
-   `buildFocusHTML` (solo corre si la matriz está vacía, o sea nunca) con textos
-   obsoletos, `.spf-fab-none` en CSS (estado inexistente), y la categoría
-   `"✋ Manos"` declarada sin ningún producto que la use.
-9. **Constantes duplicadas** (contra la regla 5): `LEGACY_ROLE_MAP` escrito dos
-   veces carácter por carácter; `ZONA_SOLO_FUNCION` y `FUNCION_EXCLUSIVA`
-   duplicando `ZONAS[].soloFuncion`; los chips de rol clínico escritos a mano en
-   `index.html` porque `ROLE_CONFIG` vive DENTRO de `loadHistory()`.
-10. **Vestigios de melasma:** `manifest.webmanifest` todavía describe la app
-    como "adherencia para melasma" — es el único texto de melasma que la usuaria
-    ve, al instalar la PWA. La clave `melasma:` sigue nombrando las columnas de
-    `COMPARE_COLS`. `matriz-activos-revision.csv` tiene 19 ids que ya no existen
-    (5 fusionados + los 14 "(Manos)") y sus justificaciones siguen redactadas
-    contra melasma.
-11. **`activos-matriz-agregar.js` sigue en el repo.** Sus 11 entradas ya están
-    pegadas, pero **2 tienen valores del vocabulario anterior** (`cuerpo_barrera`
-    en vez de `barrera`, y el sérum labial vacío): pegarlas hoy haría que esos
-    productos puntuaran 0 en silencio. La regla 28 avisa contra este archivo.
+1. **Dos vocabularios de zona sin una sola clave en común.** `PHOTO_TYPES`
+   (`cara-derecha`, `cara-izquierda`, `cara-frente`, `pecho`, `brazo`, `mano`,
+   `pie`, `pierna`) gobierna `progress_photos.photo_type` y `skin_spots.zone`;
+   `ZONAS` (`cara`, `cuello`, `cuerpo`, `manos`, `pies`, `labios`, `cabello`)
+   gobierna `product_applications.zones` y los ejes de dosis. **No hay
+   traducción entre ellos.** Consecuencias: no se puede responder *cuánto
+   estímulo recibió la zona donde está una mancha* —que es el propósito del
+   tracker—, es imposible marcar una mancha en cuello, labios o cabello (el
+   `<select>` se llena con `PHOTO_TYPES`), y no hay eje de dosis para `pierna`.
+   Ojo con `zonaLabel` (lee `ZONAS`) y `zoneLabel` (lee `PHOTO_TYPES`): difieren
+   en una letra. **Esto es rediseño, no limpieza** — decidirlo antes de
+   construir más encima.
+2. **`spf-push-function.ts` no está en el repositorio** (vive solo en el
+   dashboard de Supabase), así que `tests-spf-push-paridad.js` sale en verde sin
+   ejecutar una sola aserción. Es la prueba que existe para evitar que la app y
+   el push se separen en silencio, y es la única que nunca ha corrido.
+   Sospecha concreta: la corrección del ritmo de 1.5 h → 2 h del 2026-08-01 pudo
+   no haberse replicado en la Edge Function.
+3. **`IDEAL_BODY_SPF_BY_SUN` no tiene `actividad`.** Un día marcado 🏃 Actividad
+   cae al default corporal de 1 sin avisar. Son cuatro listas del mismo
+   vocabulario que hay que tocar juntas (ver regla 14).
+4. **Si el embed de rutinas fallara, nadie se enteraría.** `loadHistory` pide
+   `routine_steps.select('product_id, routines(schedule_days)')` y consume el
+   resultado sin revisar `.error`: la adherencia por producto caería a "diaria"
+   en silencio.
+5. **Residuos sin llamar:** `REAPP_EXCLUDE_CATEGORIES` (lista vacía: un filtro
+   que nunca filtra) y la rama `focusRoles` de `buildFocusHTML`, que solo corre
+   si la matriz está vacía —o sea nunca— y arrastra textos obsoletos ("el ideal
+   son 5", "rutina AM + 4 reaplicaciones") de cuando el ideal era fijo.
+   ⚠️ `ejesDeProducto` **no** es código muerto aunque `app.js` no la llame: la
+   usa `verificacion-multipicker.js`.
+6. **Constantes que siguen duplicadas** (regla 5): `ZONA_SOLO_FUNCION` y
+   `FUNCION_EXCLUSIVA` repiten lo que ya vive en `ZONAS[].soloFuncion`; los
+   cinco chips de rol clínico están escritos a mano en `index.html` porque
+   `ROLE_CONFIG` se declara DENTRO de `loadHistory()` y no se alcanza desde el
+   formulario. Sacar `ROLE_CONFIG` a ámbito de módulo resolvería lo segundo.
+7. **Tres criterios distintos de "esto irrita":** el `Set IRRITANTES`, los
+   `legacyRegex` de `ROLE_CONFIG`, y el regex propio de `stepActiveKinds` en el
+   editor de rutinas. Un producto puede ser irritante para un aviso y no para el
+   otro.
+8. **Vestigios de melasma que quedan:** la clave `melasma:` sigue nombrando las
+   columnas de `COMPARE_COLS` (los textos ya están reescritos a lentigos) y las
+   variables `melasmaProducts` / `melStart` desaparecieron con la tarjeta del
+   camino, pero **17 productos de `matriz-activos-revision.csv` no tienen
+   justificación y 6 la tienen redactada contra melasma** — la hoja regenerada
+   los marca sola en su columna `flags`.
+9. **`legacyRegex` sigue inventando protección** para registros sin `product_id`:
+   score asumido de 60 en el eje con menos margen. Convive con `PRODUCT_DOSE`,
+   que no lo hace. Es el mismo mecanismo que la regla 20 corrigió en el ✓ de los
+   pasos.
+10. **Columnas de `products` que la app nunca escribe** y solo se pueden editar
+    a mano en Supabase: `logged_as`, `no_reapp`, `tier`, `tags`. Y cuatro que no
+    se usan en absoluto: `price`, `store`, `purchased_at`, `currency` — no hay
+    ninguna pantalla de compras.
+11. **`routines.active` se escribe siempre `true` y se filtra por `true`**: no
+    hay forma de desactivar una rutina desde la app.
+
+### Resuelto en la sesión del 2026-08-09
+
+Borrado `skincare-routine-fix.html` · dos suites que estaban en rojo · el reporte
+médico y la "constancia" leyendo el motor de dosis · retirada la tarjeta del
+camino de 16 semanas · `unlogRoutineStep` que no borraba registros viejos y aun
+así reportaba éxito (y que ignoraba la cola offline) · el estado de piel y la
+exposición solar que pisaban la nota del día · el backdate que no aplicaba a las
+notas · el `clinical_role` legado que resucitaba al destildar los roles ·
+`pa4 ≡ euuva` en la tabla comparativa · `sort_order` al crear un producto ·
+`LEGACY_ROLE_MAP` duplicado · `quickLog` y `.spf-fab-none` retirados · el
+`manifest` que decía "melasma" · `matriz-activos-revision.csv` regenerado desde
+la matriz viva · `activos-matriz-agregar.js` borrado · esta documentación.
 
 ## Al terminar cualquier cambio
 
