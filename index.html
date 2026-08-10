@@ -130,7 +130,7 @@
     <div class="upload-card">
       <h3>📸 Agregar foto de progreso</h3>
       <div class="photo-type-section">
-        <div class="photo-type-label">Área del cuerpo</div>
+        <div class="photo-type-label">Encuadre</div>
         <div class="photo-type-grid" id="photo-type-grid"></div>
       </div>
       <div class="photo-drop">
@@ -530,8 +530,18 @@
         <div class="field-hint">Un nombre que reconozcas dentro de seis meses.</div>
       </div>
       <div class="prod-field">
-        <label class="prod-label">Zona</label>
-        <select class="prod-input prod-select" id="sp-zone" onchange="onSpotZoneChange()"></select>
+        <label class="prod-label">Zona de tratamiento</label>
+        <select class="prod-input prod-select" id="sp-territorio" onchange="onSpotTerritorioChange()"></select>
+        <div class="field-hint">Es la zona a la que le aplicas producto. Con esto la mancha puede decirte cuánto estímulo ha recibido.</div>
+      </div>
+      <div class="prod-field" id="sp-encuadre-field">
+        <label class="prod-label">Encuadre de la foto</label>
+        <select class="prod-input prod-select" id="sp-encuadre" onchange="onSpotEncuadreChange()"></select>
+        <div class="field-hint">Desde qué ángulo la fotografías. Es lo que permite recortar la misma región en cada foto.</div>
+      </div>
+      <div class="prod-field" id="sp-lateralidad-field">
+        <label class="prod-label">Lado</label>
+        <select class="prod-input prod-select" id="sp-lateralidad"></select>
       </div>
       <div class="prod-field">
         <label class="prod-label">Ubicación</label>

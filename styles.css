@@ -763,3 +763,12 @@ body {
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
 .crop-date { font-size: 9.5px; color: #A09090; margin-top: 3px; white-space: nowrap; }
 .crop-hint { font-size: 10.5px; color: #A09090; line-height: 1.45; margin-top: 3px; }
+
+/* ── Estímulo entregado al territorio de una mancha ────────────────────────
+   Aparece bajo el encabezado de cada zona en "Mis manchas". Es el cruce entre
+   el motor de dosis y el mapa de manchas: el campo tratado y la lesión diana,
+   juntos. */
+.spot-dose { margin: 2px 0 12px; padding: 9px 11px; background: #FBF6F4; border: 1px solid #EFE2DE; border-radius: 10px; }
+.spot-dose-hdr { font-size: 10.5px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 7px; }
+.spot-dose-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.spot-dose-chip { font-size: 11.5px; font-weight: 700; color: #6A5450; background: #FFF; border: 1px solid #EADCD8; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }

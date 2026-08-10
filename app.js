@@ -709,26 +709,66 @@ async function saveNote() {
 }
 
 // ── PHOTO TYPES ──────────────────────────────────────────────────────────────
-const PHOTO_TYPES = [
-  { key:'cara-derecha',   label:'👤 Cara derecha' },
-  { key:'cara-izquierda', label:'👤 Cara izquierda' },
-  { key:'cara-frente',    label:'👤 Cara frente' },
-  { key:'pecho',          label:'💜 Pecho' },
-  { key:'brazo',          label:'💪 Brazo' },
-  { key:'mano',           label:'✋ Mano' },
-  { key:'pie',            label:'🦶 Pie' },
-  { key:'pierna',         label:'🦵 Pierna' },
+// ── ENCUADRES FOTOGRÁFICOS ────────────────────────────────────────────
+// Un encuadre NO es una zona del cuerpo: es un ÁNGULO DE CÁMARA. "Cara 45°
+// derecha" y "Cara frente" son la MISMA región vista distinto — son las tres
+// posiciones del VISIA de Canfield (izq 33° / centro 0° / der 33°).
+//
+// Confundir las dos cosas fue el error de diseño que este bloque retira. Hasta
+// el 2026-08-09, `skin_spots.zone` guardaba un ENCUADRE, así que una mancha
+// jamás podía cruzarse con la dosis entregada a su TERRITORIO: el mapa de
+// manchas y el motor de dosis eran dos apps distintas dentro de la misma app.
+//
+// El estándar médico separa igual: en DICOM la región anatómica viaja en su
+// propio campo, independiente de la geometría de la toma, y la lateralidad va
+// en un TERCER campo (CID 245: izquierda / derecha / mediana). Por eso aquí hay
+// tres ejes y no uno.
+//
+// `seguimiento:true` marca el set del ritual: corresponde a las cuatro
+// localizaciones que el SCINEXA puntúa para léntigos solares — cuello, cara,
+// dorso de manos y antebrazos. El resto son encuadres disponibles, no rutina.
+const ENCUADRES = [
+  { key:'cara-frente',   label:'👤 Cara · frente',        territorio:'cara',   seguimiento:true },
+  { key:'cara-45-der',   label:'👤 Cara · 45° derecha',   territorio:'cara',   seguimiento:true },
+  { key:'cara-45-izq',   label:'👤 Cara · 45° izquierda', territorio:'cara',   seguimiento:true },
+  { key:'cuello',        label:'🦢 Cuello · frente',      territorio:'cuello', seguimiento:true },
+  { key:'escote',        label:'💜 Escote',               territorio:'cuello', seguimiento:true },
+  { key:'mano-der',      label:'✋ Dorso mano derecha',    territorio:'manos',  seguimiento:true },
+  { key:'mano-izq',      label:'🤚 Dorso mano izquierda', territorio:'manos',  seguimiento:true },
+  { key:'antebrazo-der', label:'💪 Antebrazo derecho',    territorio:'manos',  seguimiento:true },
+  { key:'antebrazo-izq', label:'💪 Antebrazo izquierdo',  territorio:'manos',  seguimiento:true },
+  { key:'torso',         label:'🧴 Torso',                territorio:'cuerpo' },
+  { key:'pierna-der',    label:'🦵 Pierna derecha',       territorio:'cuerpo' },
+  { key:'pierna-izq',    label:'🦵 Pierna izquierda',     territorio:'cuerpo' },
+  { key:'pie-der',       label:'🦶 Pie derecho',          territorio:'pies' },
+  { key:'pie-izq',       label:'🦶 Pie izquierdo',        territorio:'pies' },
 ];
-let selectedPhotoType = null;
+// Puente encuadre → territorio. Se DERIVA de la lista de arriba (no se escribe
+// a mano) para que añadir un encuadre no exija acordarse de otro sitio.
+const ENCUADRE_A_TERRITORIO = ENCUADRES.reduce(function (m, e) { m[e.key] = e.territorio; return m; }, {});
+// Que labios y cabello no tengan encuadre no es un olvido: no se fotografían.
+const TERRITORIOS_SIN_FOTO = ['labios', 'cabello'];
+const LATERALIDAD = { izq: 'Izquierda', der: 'Derecha', centro: 'Centro / línea media' };
+// Cuando el encuadre ya dice el lado (mano-der, cara-45-izq…) la lateralidad no
+// se pregunta: se deduce. Solo se pregunta en encuadres que abarcan los dos
+// lados — cara de frente, cuello, escote, torso.
+function lateralidadDeEncuadre(k) {
+  if (/-der$/.test(k || '')) return 'der';
+  if (/-izq$/.test(k || '')) return 'izq';
+  return null;
+}
+const encuadresDeTerritorio = t => ENCUADRES.filter(e => e.territorio === t);
+const encuadreLabel = k => (ENCUADRES.find(e => e.key === k) || { label: k }).label;
+let selectedEncuadre = null;
 function renderPhotoTypeGrid() {
-  document.getElementById('photo-type-grid').innerHTML = PHOTO_TYPES.map(t =>
+  document.getElementById('photo-type-grid').innerHTML = ENCUADRES.map(t =>
     `<button class="photo-type-btn" onclick="selectPhotoType(this,'${t.key}')">${t.label}</button>`
   ).join('');
 }
 function selectPhotoType(btn, key) {
   document.querySelectorAll('.photo-type-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-  selectedPhotoType = key;
+  selectedEncuadre = key;
   updateUploadBtn();
   loadGhostPhoto(key);
 }
@@ -764,7 +804,7 @@ function updateGuideBtn() {
 }
 function updateUploadBtn() {
   const hasPhoto = document.getElementById('photo-input').files.length > 0;
-  document.getElementById('upload-btn').disabled = !hasPhoto || !selectedPhotoType;
+  document.getElementById('upload-btn').disabled = !hasPhoto || !selectedEncuadre;
 }
 
 // ── PHOTO HANDLING ───────────────────────────────────────────────────────────
@@ -835,7 +875,7 @@ function extractStoragePath(stored) {
 }
 async function uploadPhoto() {
   const input = document.getElementById('photo-input');
-  if (!input.files[0] || !selectedPhotoType) return;
+  if (!input.files[0] || !selectedEncuadre) return;
   const btn = document.getElementById('upload-btn');
   btn.disabled = true; btn.textContent = '⏳ Subiendo...';
   showToast('Comprimiendo...', '');
@@ -847,7 +887,7 @@ async function uploadPhoto() {
   if (upErr) { showToast('❌ ' + upErr.message, 'error'); btn.disabled = false; btn.textContent = 'Subir foto'; return; }
   const caption = document.getElementById('photo-caption').value.trim();
   const { error: dbErr } = await db.from('progress_photos').insert({
-    photo_date: TODAY_STR, photo_url: filename, caption, photo_type: selectedPhotoType
+    photo_date: TODAY_STR, photo_url: filename, caption, photo_type: selectedEncuadre
   });
   if (dbErr) { showToast('❌ ' + dbErr.message, 'error'); btn.disabled = false; btn.textContent = 'Subir foto'; return; }
   btn.disabled = false; btn.textContent = 'Subir foto';
@@ -856,7 +896,7 @@ async function uploadPhoto() {
   document.getElementById('photo-preview').src = '';
   document.getElementById('photo-preview-wrap').style.display = 'none';
   document.getElementById('photo-caption').value = '';
-  selectedPhotoType = null;
+  selectedEncuadre = null;
   document.querySelectorAll('.photo-type-btn').forEach(b => b.classList.remove('selected'));
   updateUploadBtn();
   historyLoaded = false;
@@ -908,7 +948,7 @@ async function loadPhotoGallery() {
     if (!byType[t]) byType[t] = [];
     byType[t].push(p);
   }
-  const typesWithPhotos = PHOTO_TYPES.filter(t => byType[t.key] && byType[t.key].length > 0);
+  const typesWithPhotos = ENCUADRES.filter(t => byType[t.key] && byType[t.key].length > 0);
   const compareHTML = typesWithPhotos.length === 0
     ? '<div class="empty-state">No hay fotos aún.<br>Sube la primera arriba.</div>'
     : typesWithPhotos.map(t => {
@@ -950,7 +990,7 @@ async function loadPhotoGallery() {
     `<div class="gallery-thumb-wrap">
     <img class="gallery-thumb" src="${esc(p.photo_url)}" title="${esc(p.caption || fmtDate(p.photo_date))}"
      onclick="window.open(this.src,'_blank')" loading="lazy">
-    <button class="gallery-thumb-edit" onclick="event.stopPropagation(); openReclassifyModal('${p.id}','${esc(p.photo_type||'')}')" title="Reclasificar área">✏️</button>
+    <button class="gallery-thumb-edit" onclick="event.stopPropagation(); openReclassifyModal('${p.id}','${esc(p.photo_type||'')}')" title="Reclasificar encuadre">✏️</button>
     <button class="gallery-thumb-del" onclick="event.stopPropagation(); deletePhoto('${p.id}','${jsAttrEsc(p._path||'')}')" title="Eliminar foto">🗑️</button>
   </div>`
   ).join('')}</div>
@@ -971,7 +1011,7 @@ function openSliderCompare(typeKey) {
   _sliderType = typeKey;
   const arr = _photosByType[typeKey] || [];
   if (arr.length < 2) return;
-  const t = PHOTO_TYPES.find(x => x.key === typeKey);
+  const t = ENCUADRES.find(x => x.key === typeKey);
   document.getElementById('slider-title').textContent = `🔀 ${t ? t.label : 'Comparar'}`;
   const opts = (sel) => arr.map((p, i) =>
     `<option value="${i}"${i === sel ? ' selected' : ''}>${p.photo_date}${p.caption ? ' · ' + esc(p.caption).slice(0, 25) : ''}</option>`).join('');
@@ -1023,7 +1063,7 @@ let reclassifyPhotoId = null;
 function openReclassifyModal(photoId, currentType) {
   reclassifyPhotoId = photoId;
   const body = document.getElementById('reclassify-body');
-  body.innerHTML = `<div class="photo-type-grid">${PHOTO_TYPES.map(t =>
+  body.innerHTML = `<div class="photo-type-grid">${ENCUADRES.map(t =>
     `<button class="photo-type-btn${t.key === currentType ? ' selected' : ''}" onclick="reclassifyPhoto('${t.key}')">${t.label}</button>`
   ).join('')}</div>`;
   openModal('reclassify-modal');
@@ -1842,6 +1882,10 @@ async function loadHistory() {
   const flatDose = arr => arr.map(({ key, o }) => ({
     key, icon: o.cfg.icon, label: o.cfg.label, pct: o.pct, overDays: o.overDays
   }));
+  // Un eje por territorio, para la ficha de cada mancha. Se deriva de ZONAS y
+  // no de una lista escrita a mano: añadir un territorio no exige tocar esto.
+  doseByZona = {};
+  Object.keys(ZONAS).forEach(z => { doseByZona[z] = flatDose(dosisDe([z])); });
   lastReportData = {
     cara: flatDose(dosisCara),
     cuello: flatDose(dosisCuello),
@@ -2106,6 +2150,11 @@ async function exportBackup() {
 // vista secundaria, y un médico no necesita saber si seguiste tu propio plan,
 // sino qué recibió tu piel).
 let lastReportData = null;
+// Estímulo entregado, desglosado por TERRITORIO. Es el puente entre el motor de
+// dosis y el mapa de manchas: sin esto, la ficha de una mancha no puede decir
+// cuánta dosis recibió la zona donde vive. Lo llena `loadHistory`; lo consume
+// `loadSpots`. Nulo hasta que Progreso corra al menos una vez.
+let doseByZona = null;
 async function openDermReport() {
   if (!lastReportData) { showToast('⚠️ Espera a que cargue Progreso', 'error'); return; }
   showToast('⏳ Preparando reporte...', '');
@@ -2113,7 +2162,7 @@ async function openDermReport() {
   const byType = {};
   (photos || []).forEach(p => { const t = p.photo_type || 'general'; (byType[t] = byType[t] || []).push(p); });
   const pairs = [];
-  for (const t of PHOTO_TYPES) {
+  for (const t of ENCUADRES) {
     const arr = byType[t.key];
     if (!arr || arr.length < 2) continue;
     pairs.push({ label: t.label, a: arr[0], b: arr[arr.length - 1] });
@@ -2815,7 +2864,6 @@ let spotsCache = [], obsCache = {}, zonePhotos = {}, _spotPos = { x: null, y: nu
 let _spotRef = { id: null, url: null, date: null };
 let selectedShade = null;
 
-const zoneLabel = k => (PHOTO_TYPES.find(t => t.key === k) || { label: k }).label;
 
 // ── TIRA DE RECORTES ────────────────────────────────────────────────────────
 // Amplía la MISMA región en cada foto del área y las pone en fila por fecha,
@@ -2852,7 +2900,7 @@ async function loadSpots() {
   const el = document.getElementById('spots-content');
   if (!el) return;
   const [spotsRes, obsRes] = await Promise.all([
-    db.from('skin_spots').select('*').order('zone').order('name'),
+    db.from('skin_spots').select('*').order('territorio').order('name'),
     db.from('spot_observations').select('*').order('observed_at', { ascending: false })
   ]);
   if (spotsRes.error) {
@@ -2867,9 +2915,15 @@ async function loadSpots() {
   // Fotos de las zonas que tienen manchas ubicadas, para armar las tiras.
   // Una sola consulta y UNA sola llamada a createSignedUrls (nunca una por
   // foto — regla de oro de progress_photos).
+  // El estímulo por territorio vive en `loadHistory`. Si Progreso no ha corrido
+  // en esta carga de página, se corre aquí: es la misma fuente de datos y es
+  // barato comparado con mostrar una ficha muda.
+  if (!doseByZona) { try { await loadHistory(); } catch (e) { /* la ficha se muestra sin estímulo */ } }
   zonePhotos = {};
+  // Las fotos se buscan por ENCUADRE, no por territorio: una mancha de cara
+  // marcada en la oblicua derecha solo se puede recortar sobre esa oblicua.
   const zonasConPos = [...new Set(spotsCache
-    .filter(s => s.pos_x != null && s.reference_photo_id).map(s => s.zone))];
+    .filter(s => s.pos_x != null && s.reference_photo_id).map(s => s.encuadre))];
   if (zonasConPos.length) {
     const { data: fotos } = await db.from('progress_photos')
       .select('id, photo_type, photo_url, photo_date')
@@ -2887,10 +2941,16 @@ async function loadSpots() {
       });
     }
   }
+  // Se agrupa por TERRITORIO (el vocabulario del motor de dosis), en el orden
+  // declarado en ZONAS — no alfabético, para que cara y cuello encabecen.
   const porZona = {};
-  spotsCache.forEach(s => { (porZona[s.zone] = porZona[s.zone] || []).push(s); });
-  const grupos = Object.keys(porZona).sort().map(z =>
-    `<div class="spot-zone-hdr">${esc(zoneLabel(z))}</div>` +
+  spotsCache.forEach(s => {
+    const t = s.territorio || ENCUADRE_A_TERRITORIO[s.encuadre] || 'cara';
+    (porZona[t] = porZona[t] || []).push(s);
+  });
+  const grupos = Object.keys(ZONAS).filter(z => porZona[z]).map(z =>
+    `<div class="spot-zone-hdr">${esc(zonaLabel(z))}</div>` +
+    estimuloTerritorioHTML(z) +
     porZona[z].map(spotRowHTML).join('')
   ).join('');
   el.innerHTML = `<div class="week-card">
@@ -2898,6 +2958,23 @@ async function loadSpots() {
   <div class="spot-intro">Seguimiento de cada mancha por separado. Lo que registras es cómo la ves tú, no una medición — sirve para ver la dirección a lo largo de meses y para llegar a consulta con datos.</div>
   <button class="mini-action-btn" onclick="openSpotModal()">＋ Agregar mancha</button>
   ${grupos || '<div class="empty-state">Aún no hay manchas registradas.</div>'}
+</div>`;
+}
+
+// El cruce que da sentido al tracker: cuánta dosis recibió el territorio donde
+// vive la mancha. Es el patrón del ensayo clínico de léntigos de mano (PLOS
+// One, D-pigment): el producto se aplica al CAMPO completo y el resultado se
+// mide sobre la LESIÓN DIANA. Aquí el campo es el territorio y la diana es la
+// mancha.
+function estimuloTerritorioHTML(territorio) {
+  if (!territorio || !doseByZona) return '';
+  const ejes = doseByZona[territorio] || [];
+  if (!ejes.length) return '';
+  const chips = ejes.map(x =>
+    `<span class="spot-dose-chip" title="${esc(x.label)}">${x.icon} ${x.pct}%</span>`).join('');
+  return `<div class="spot-dose">
+  <div class="spot-dose-hdr">💪 Estímulo entregado a esta zona · últimas 12 semanas</div>
+  <div class="spot-dose-chips">${chips}</div>
 </div>`;
 }
 
@@ -2929,7 +3006,7 @@ function spotRowHTML(s) {
       <button class="hito-del" onclick="deleteSpot('${s.id}')" title="Eliminar">🗑️</button>
     </div>
   </div>
-  <div class="spot-meta">${esc(st.l)}${s.first_noticed ? ' · desde ' + fmtDate(s.first_noticed) : ''} · ${esc(hoy)}</div>
+  <div class="spot-meta">${esc(st.l)}${s.encuadre ? ' · ' + esc(encuadreLabel(s.encuadre)) : ''}${s.lateralidad && s.lateralidad !== 'centro' ? ' · ' + esc(LATERALIDAD[s.lateralidad] || '') : ''}${s.first_noticed ? ' · desde ' + fmtDate(s.first_noticed) : ''} · ${esc(hoy)}</div>
   ${tendencia}
   ${s.notes ? `<div class="spot-notes">${fmtRich(s.notes)}</div>` : ''}
   ${tira}
@@ -2942,7 +3019,7 @@ function spotRowHTML(s) {
 // en orden cronológico. Marca cuál foto es la referencia donde se ubicó.
 function cropStripHTML(s) {
   if (s.pos_x == null || s.pos_y == null || !s.reference_photo_id) return '';
-  const fotos = zonePhotos[s.zone] || [];
+  const fotos = zonePhotos[s.encuadre] || [];
   if (fotos.length < 2) {
     return `<div class="crop-hint">La tira de comparación aparece a partir de la segunda foto de esta zona.</div>`;
   }
@@ -2972,7 +3049,7 @@ async function fetchSignedPhoto(row) {
 // Cambiar de referencia BORRA la posición: unas coordenadas marcadas sobre otro
 // encuadre no significan nada, y arrastrarlas sería peor que perderlas.
 async function loadSpotZonePhoto(forzarUltima) {
-  const zone = document.getElementById('sp-zone').value;
+  const zone = document.getElementById('sp-encuadre').value;
   const img  = document.getElementById('sp-map-img');
   const hint = document.getElementById('sp-map-hint');
   const wrap = document.getElementById('sp-map-wrap');
@@ -2995,7 +3072,9 @@ async function loadSpotZonePhoto(forzarUltima) {
   }
   if (!row) {
     _spotRef = { id: null, url: null, date: null };
-    hint.textContent = 'Aún no tienes foto de esta zona — la ubicación se puede marcar después.';
+    hint.textContent = zone
+      ? 'Aún no tienes foto de este encuadre — la ubicación se puede marcar después.'
+      : 'Esta zona no se fotografía, así que no lleva ubicación.';
     return;
   }
   const p = await fetchSignedPhoto(row);
@@ -3012,11 +3091,20 @@ async function loadSpotZonePhoto(forzarUltima) {
   renderSpotMarker();
 }
 
-// Cambiar de zona invalida la referencia: es otra foto y otro encuadre.
-function onSpotZoneChange() {
+// Cambiar de encuadre invalida la referencia: es otra foto y otro ángulo, así
+// que las coordenadas viejas dejarían la marca en cualquier lado.
+function onSpotEncuadreChange() {
   _spotRef = { id: null, url: null, date: null };
   _spotPos = { x: null, y: null };
+  renderLateralidadField();
   loadSpotZonePhoto(true);
+}
+
+// Cambiar de territorio arrastra al encuadre: los encuadres de cuello no
+// existen dentro de manos.
+function onSpotTerritorioChange() {
+  renderEncuadreOptions(document.getElementById('sp-territorio').value, null);
+  onSpotEncuadreChange();
 }
 
 // Re-anclar a la foto más reciente. Es explícito a propósito: la referencia
@@ -3053,6 +3141,44 @@ function renderSpotMarker() {
   m.style.display = 'block';
 }
 
+// El encuadre se filtra por territorio: ofrecer "Dorso mano derecha" cuando la
+// mancha es de cuello solo invita a equivocarse. Los territorios que no se
+// fotografían (labios, cabello) no ofrecen encuadre en absoluto.
+function renderEncuadreOptions(territorio, sel) {
+  const el = document.getElementById('sp-encuadre');
+  const wrap = document.getElementById('sp-encuadre-field');
+  const opts = encuadresDeTerritorio(territorio);
+  if (!opts.length) {
+    wrap.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'block';
+  const elegido = opts.some(o => o.key === sel) ? sel : opts[0].key;
+  el.innerHTML = opts.map(o =>
+    `<option value="${o.key}"${o.key === elegido ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+}
+
+// La lateralidad solo se PREGUNTA cuando el encuadre no la dice ya. En "Dorso
+// mano derecha" el lado es obvio y preguntarlo es ruido; en "Cara · frente" no
+// lo es, porque salen las dos mejillas. Es la post-coordinación de DICOM
+// (CID 245) aplicada a lo mínimo.
+function renderLateralidadField(sel) {
+  const wrap = document.getElementById('sp-lateralidad-field');
+  const el = document.getElementById('sp-lateralidad');
+  const enc = document.getElementById('sp-encuadre').value;
+  const deducida = lateralidadDeEncuadre(enc);
+  if (deducida) {
+    wrap.style.display = 'none';
+    el.innerHTML = `<option value="${deducida}" selected>${esc(LATERALIDAD[deducida])}</option>`;
+    return;
+  }
+  wrap.style.display = 'block';
+  const val = (sel && LATERALIDAD[sel]) ? sel : 'centro';
+  el.innerHTML = Object.keys(LATERALIDAD).map(k =>
+    `<option value="${k}"${k === val ? ' selected' : ''}>${esc(LATERALIDAD[k])}</option>`).join('');
+}
+
 function openSpotModal(id) {
   const s = id ? spotsCache.find(x => x.id === id) : null;
   document.getElementById('spot-modal-title').textContent = s ? '✏️ Editar mancha' : '＋ Nueva mancha';
@@ -3061,8 +3187,14 @@ function openSpotModal(id) {
   document.getElementById('sp-status').value = s ? s.status : 'activa';
   document.getElementById('sp-first').value = s ? (s.first_noticed || '') : '';
   document.getElementById('sp-notes').value = s ? (s.notes || '') : '';
-  document.getElementById('sp-zone').innerHTML =
-    PHOTO_TYPES.map(t => `<option value="${t.key}"${s && s.zone === t.key ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
+  // TERRITORIO primero: es lo que conecta la mancha con el motor de dosis, y
+  // ahora sí incluye cuello, labios y cabello — antes el menú se llenaba con
+  // encuadres y esas tres zonas eran imposibles de registrar.
+  const terr = (s && s.territorio) || 'cara';
+  document.getElementById('sp-territorio').innerHTML = Object.keys(ZONAS).map(z =>
+    `<option value="${z}"${z === terr ? ' selected' : ''}>${esc(zonaLabel(z))}</option>`).join('');
+  renderEncuadreOptions(terr, s && s.encuadre);
+  renderLateralidadField(s && s.lateralidad);
   _spotPos = s ? { x: s.pos_x, y: s.pos_y } : { x: null, y: null };
   _spotRef = { id: s ? (s.reference_photo_id || null) : null, url: null, date: null };
   openModal('spot-modal');
@@ -3071,9 +3203,17 @@ function openSpotModal(id) {
 
 async function saveSpot() {
   const id = document.getElementById('sp-id').value;
+  const territorio = document.getElementById('sp-territorio').value;
+  const encuadre = document.getElementById('sp-encuadre').value || null;
   const row = {
     name:   document.getElementById('sp-name').value.trim(),
-    zone:   document.getElementById('sp-zone').value,
+    territorio: territorio,
+    encuadre: encuadre,
+    lateralidad: lateralidadDeEncuadre(encuadre) || document.getElementById('sp-lateralidad').value || 'centro',
+    // `zone` es la columna legada: sigue siendo NOT NULL en la base y se
+    // retira en el paso de contracción, cuando ya nadie la lea. Mientras tanto
+    // se escribe con el encuadre, que es lo que siempre guardó de verdad.
+    zone:   encuadre || territorio,
     status: document.getElementById('sp-status').value,
     first_noticed: document.getElementById('sp-first').value || null,
     notes:  document.getElementById('sp-notes').value.trim() || null,

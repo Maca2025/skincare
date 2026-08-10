@@ -31,7 +31,7 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - `daily_notes` — nota + `skin_state` (1–5) + `sun_exposure` (interior/normal/alta/playa), key `note_date`.
 - `progress_photos` — `photo_url` guarda SOLO el nombre de archivo; bucket `progress-photos` es PRIVADO → URLs firmadas con `createSignedUrls` (batch, nunca una por una).
 - `push_subscriptions` — suscripciones Web Push (+`last_notified_at` para no duplicar avisos).
-- `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). `zone` usa las mismas claves que `PHOTO_TYPES`; `pos_x`/`pos_y` son PORCENTAJES **de la foto apuntada por `reference_photo_id`**, no de la zona en abstracto. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
+- `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). Desde el 2026-08-10 una mancha lleva **tres ejes separados**: `territorio` (clave de `ZONAS` — es lo que la conecta con el motor de dosis), `encuadre` (clave de `ENCUADRES` — es lo que permite recortarla sobre la misma foto) y `lateralidad` (`izq`/`der`/`centro`). `zone` es la columna LEGADA: sigue siendo `NOT NULL` y se escribe con el encuadre hasta el paso de contracción. `pos_x`/`pos_y` son PORCENTAJES **de la foto apuntada por `reference_photo_id`**, no de la zona en abstracto. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
 - `treatment_events` — hitos de tratamiento que NO son un producto: consultas, procedimientos, cambios de diagnóstico, exposición solar fuera de lo normal. `event_type` va con CHECK. La vista `treatment_timeline` la une con `products.started_at` y lleva `security_invoker = on` (sin eso, la vista saltaría el RLS de las tablas de abajo).
 - **RLS activo en todo** (políticas `authenticated`). La key publishable es pública en el repo — sin RLS los datos quedan expuestos. Cualquier tabla nueva DEBE nacer con RLS.
 - ⚠️ **TABLAS MUERTAS — no escribir en ellas, no "reconectarlas"** (verificado el 2026-08-09 contra `app.js`: cero referencias a cada una).
@@ -299,24 +299,20 @@ Lo verificado y **todavía sin arreglar**, en orden de gravedad. Cada punto est�
 comprobado contra el código, no supuesto. Lo que se fue resolviendo se quitó de
 esta lista — si vuelve a aparecer, es que se rompió otra vez.
 
-1. **Dos vocabularios de zona sin una sola clave en común.** `PHOTO_TYPES`
-   (`cara-derecha`, `cara-izquierda`, `cara-frente`, `pecho`, `brazo`, `mano`,
-   `pie`, `pierna`) gobierna `progress_photos.photo_type` y `skin_spots.zone`;
-   `ZONAS` (`cara`, `cuello`, `cuerpo`, `manos`, `pies`, `labios`, `cabello`)
-   gobierna `product_applications.zones` y los ejes de dosis. **No hay
-   traducción entre ellos.** Consecuencias: no se puede responder *cuánto
-   estímulo recibió la zona donde está una mancha* —que es el propósito del
-   tracker—, es imposible marcar una mancha en cuello, labios o cabello (el
-   `<select>` se llena con `PHOTO_TYPES`), y no hay eje de dosis para `pierna`.
-   Ojo con `zonaLabel` (lee `ZONAS`) y `zoneLabel` (lee `PHOTO_TYPES`): difieren
-   en una letra. **Esto es rediseño, no limpieza** — decidirlo antes de
-   construir más encima.
-2. **`spf-push-function.ts` no está en el repositorio** (vive solo en el
-   dashboard de Supabase), así que `tests-spf-push-paridad.js` sale en verde sin
-   ejecutar una sola aserción. Es la prueba que existe para evitar que la app y
-   el push se separen en silencio, y es la única que nunca ha corrido.
-   Sospecha concreta: la corrección del ritmo de 1.5 h → 2 h del 2026-08-01 pudo
-   no haberse replicado en la Edge Function.
+1. **La columna legada `skin_spots.zone` sigue viva.** El rediseño de zonas se
+   hizo en tres tiempos (ampliar → migrar → contraer) y **falta el tercero**:
+   `zone` sigue siendo `NOT NULL` en Supabase y `saveSpot` la escribe con el
+   encuadre solo para satisfacer esa restricción. Cuando la app nueva lleve unos
+   días en uso: `alter table skin_spots drop column zone;` y quitar la línea de
+   `saveSpot` (está comentada como tal). **Mientras no se haga, hay dos columnas
+   diciendo lo mismo — que es exactamente el patrón que este rediseño vino a
+   eliminar.**
+2. **No hay eje de dosis para piernas ni para torso por separado.** Los
+   encuadres `torso`, `pierna-der` y `pierna-izq` caen todos en el territorio
+   `cuerpo`. Es deliberado: los techos de `DOSE_AXES` se recalibraron con datos
+   reales el 2026-07-23 y abrir territorios nuevos significa ejes sin techo
+   calibrado, o sea barras que mienten hasta juntar meses de registros. Si
+   alguna vez hay volumen de datos en piernas, se puede reconsiderar.
 3. **`IDEAL_BODY_SPF_BY_SUN` no tiene `actividad`.** Un día marcado 🏃 Actividad
    cae al default corporal de 1 sin avisar. Son cuatro listas del mismo
    vocabulario que hay que tocar juntas (ver regla 14).
@@ -355,6 +351,48 @@ esta lista — si vuelve a aparecer, es que se rompió otra vez.
     ninguna pantalla de compras.
 11. **`routines.active` se escribe siempre `true` y se filtra por `true`**: no
     hay forma de desactivar una rutina desde la app.
+
+### Resuelto en la sesión del 2026-08-10
+
+**El rediseño de zonas.** `PHOTO_TYPES` era un vocabulario de *encuadre
+fotográfico* disfrazado de vocabulario de zona: `cara-derecha` / `cara-izquierda`
+/ `cara-frente` no son tres regiones, son los tres ángulos del VISIA de Canfield
+(izq 33° / centro 0° / der 33°). Por eso no había traducción posible con `ZONAS`:
+era un error de categoría, no de sinónimos.
+
+Se separó en los **tres ejes que usa el estándar médico** (DICOM guarda la región
+anatómica en un campo, la geometría de la toma en otro y la lateralidad en un
+tercero, CID 245):
+
+| Eje | Constante | Gobierna |
+|---|---|---|
+| Territorio | `ZONAS` (7, sin cambios) | `product_applications.zones`, `DOSE_AXES`, `skin_spots.territorio` |
+| Encuadre | `ENCUADRES` (14, nueva) | `progress_photos.photo_type`, `skin_spots.encuadre` |
+| Lateralidad | `LATERALIDAD` (3, nueva) | `skin_spots.lateralidad` |
+
+`ENCUADRE_A_TERRITORIO` se **deriva** de `ENCUADRES` (no se escribe a mano).
+`lateralidadDeEncuadre` la deduce cuando el encuadre ya dice el lado, así que
+solo se pregunta en encuadres que abarcan los dos (cara de frente, cuello,
+escote, torso). Los nueve encuadres con `seguimiento:true` corresponden a las
+cuatro localizaciones que el **SCINEXA** puntúa para léntigos solares: cuello,
+cara, dorso de manos y antebrazos.
+
+Lo que esto habilita, y era el propósito del tracker: **la ficha de cada mancha
+muestra el estímulo entregado a su territorio** (`doseByZona`, que llena
+`loadHistory` y consume `loadSpots`). Es el patrón del ensayo clínico de léntigos
+de mano (PLOS One, D-pigment): el producto se aplica al CAMPO y el resultado se
+mide sobre la LESIÓN DIANA. De paso, ya se pueden marcar manchas en cuello,
+labios y cabello — antes el `<select>` se llenaba con encuadres y esas tres zonas
+eran imposibles de registrar.
+
+`zoneLabel` desapareció (se llamaba casi igual que `zonaLabel` y leía la lista
+equivocada); ahora es `encuadreLabel`, declarada junto a la lista que lee.
+El arnés pasó de 37 a **52 aserciones**: el bloque 4 protege la separación de los
+tres ejes.
+
+**Resuelto también:** `spf-push-function.ts` ya está en el repositorio, así que
+`tests-spf-push-paridad.js` corre de verdad sus 33 aserciones (era el punto 2 de
+esta lista y llevaba desde el 2026-08-09 arreglado sin quitarse de aquí).
 
 ### Resuelto en la sesión del 2026-08-09
 
