@@ -5374,3 +5374,59 @@ async function doLogout() {
     if (e.key === 'Enter') doLogin();
   });
 })();
+
+// ── TEMA CLARO / OSCURO ──────────────────────────────────────────────────────
+// Tres estados: 'auto' (el que casi siempre quieres), 'light' y 'dark'.
+//
+// En automático el tema NO sigue el ajuste del sistema sino LA HORA, y es a
+// propósito: el sistema puede estar en claro a las 11 de la noche, y el momento
+// en que se registra la rutina de noche —a oscuras, en el baño— es justo cuando
+// una pantalla blanca deslumbra. Oscuro de 19:00 a 06:59.
+//
+// La preferencia se guarda en localStorage. El único valor que importa es el
+// que la usuaria eligió a mano; 'auto' se recalcula en cada arranque y cada vez
+// que la app vuelve a primer plano (si la dejaste abierta desde la tarde, al
+// retomarla de noche ya está oscura).
+const TEMA_KEY = 'skincare-tema';
+const TEMA_CICLO = ['auto', 'light', 'dark'];
+const TEMA_ICONO = { auto: '🌗', light: '☀️', dark: '🌙' };
+const TEMA_NOMBRE = { auto: 'automático', light: 'claro', dark: 'oscuro' };
+// El color de la barra de estado del sistema tiene que seguir al tema o queda
+// una franja del color anterior arriba de la pantalla.
+const TEMA_BARRA = { light: '#F7F1EC', dark: '#141317' };
+
+function temaGuardado() {
+  try { const v = localStorage.getItem(TEMA_KEY); return TEMA_CICLO.indexOf(v) !== -1 ? v : 'auto'; }
+  catch (e) { return 'auto'; }
+}
+// Oscuro de 19:00 a 06:59, hora local.
+function temaPorHora(h) {
+  const hora = (h == null) ? new Date().getHours() : h;
+  return (hora >= 19 || hora < 7) ? 'dark' : 'light';
+}
+function temaEfectivo(pref, hora) {
+  const p = pref || temaGuardado();
+  return p === 'auto' ? temaPorHora(hora) : p;
+}
+function aplicaTema() {
+  const pref = temaGuardado();
+  const efectivo = temaEfectivo(pref);
+  document.documentElement.setAttribute('data-theme', efectivo);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', TEMA_BARRA[efectivo]);
+  const btn = document.getElementById('theme-btn');
+  if (btn) {
+    btn.textContent = TEMA_ICONO[pref];
+    btn.title = 'Tema: ' + TEMA_NOMBRE[pref] + (pref === 'auto' ? ' (ahora ' + TEMA_NOMBRE[efectivo] + ')' : '');
+  }
+  return efectivo;
+}
+function cicloTema() {
+  const siguiente = TEMA_CICLO[(TEMA_CICLO.indexOf(temaGuardado()) + 1) % TEMA_CICLO.length];
+  try { localStorage.setItem(TEMA_KEY, siguiente); } catch (e) {}
+  const efectivo = aplicaTema();
+  showToast('Tema ' + TEMA_NOMBRE[siguiente] + (siguiente === 'auto' ? ' · ahora ' + TEMA_NOMBRE[efectivo] : ''), '');
+}
+// Antes de pintar nada, para que no haya un fogonazo blanco al abrir de noche.
+aplicaTema();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) aplicaTema(); });

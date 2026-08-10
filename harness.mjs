@@ -155,6 +155,9 @@ window.__T = {
   saveSpot: () => saveSpot(),
   doseByZona: () => doseByZona,
   renderInv: () => renderInventory(),
+  temaPorHora: hh => temaPorHora(hh),
+  temaEfectivo: (pref, hh) => temaEfectivo(pref, hh),
+  setTema: v => { try { localStorage.setItem(TEMA_KEY, v); } catch (e) {} return aplicaTema(); },
   stars: n => starsHTML(n),
   label: p => prodLabelHTML(p),
   labelStars: p => prodLabelHTML(p, { stars: true }),
@@ -429,6 +432,68 @@ const opsNuevo = await ops(`
 const insN = opsNuevo.find(o => o.table === 'products' && (o.chain || []).some(c => c.m === 'insert'));
 const payN = insN ? insN.chain.find(c => c.m === 'insert').a[0] : null;
 t('crear producto: guarda la calificación elegida en el formulario', !!payN && payN.my_rating === 3);
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOQUE 6 — tema claro / oscuro (2026-08-10)
+//
+// Lo que se protege: que el automático siga LA HORA (no el ajuste del sistema),
+// que la preferencia manual gane siempre, y —lo importante de verdad— que en
+// oscuro las zonas donde se JUZGA la piel sigan sobre fondo claro. Si un día
+// alguien "arregla" esa inconsistencia aparente, rompe la razón de ser de esas
+// pantallas: el color que rodea una foto altera cómo se percibe el tono.
+// ════════════════════════════════════════════════════════════════════════════
+const th = await page.evaluate(() => ({
+  nueve: window.__T.temaPorHora(9),   veintiuna: window.__T.temaPorHora(21),
+  seis: window.__T.temaPorHora(6),    diecinueve: window.__T.temaPorHora(19),
+  autoNoche: window.__T.temaEfectivo('auto', 23),
+  manualClaro: window.__T.temaEfectivo('light', 23),
+  manualOscuro: window.__T.temaEfectivo('dark', 9)
+}));
+t('tema: de día en automático es claro', th.nueve === 'light' && th.seis === 'dark');
+t('tema: de noche en automático es oscuro', th.veintiuna === 'dark' && th.diecinueve === 'dark');
+t('tema: automático a las 23 h da oscuro', th.autoNoche === 'dark');
+t('tema: la preferencia manual gana sobre la hora',
+  th.manualClaro === 'light' && th.manualOscuro === 'dark');
+
+const aplicado = await page.evaluate(() => {
+  const efe = window.__T.setTema('dark');
+  const cs = getComputedStyle(document.documentElement);
+  const attr = document.documentElement.getAttribute('data-theme');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  return { efe, attr, bg: cs.getPropertyValue('--bg').trim(),
+           ink: cs.getPropertyValue('--ink').trim(),
+           panel: cs.getPropertyValue('--panel').trim(),
+           barra: meta ? meta.getAttribute('content') : null };
+});
+t('tema: aplicar oscuro marca <html data-theme="dark">', aplicado.attr === 'dark' && aplicado.efe === 'dark');
+t('tema: en oscuro el fondo es oscuro y la tinta clara',
+  aplicado.bg === '#141317' && aplicado.ink === '#F0EDEA');
+t('tema: la barra de estado del sistema sigue al tema', aplicado.barra === '#141317');
+
+const claro = await page.evaluate(() => {
+  window.__T.setTema('light');
+  const cs = getComputedStyle(document.documentElement);
+  return { bg: cs.getPropertyValue('--bg').trim(), ink: cs.getPropertyValue('--ink').trim() };
+});
+t('tema: volver a claro restituye la paleta', claro.bg === '#F7F1EC' && claro.ink === '#2A2420');
+
+// El corazón del asunto: fotos y manchas NO se oscurecen.
+const panelEnOscuro = await page.evaluate(() => {
+  window.__T.setTema('dark');
+  const el = document.getElementById('spots-content');
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  return { card: cs.getPropertyValue('--card').trim(), ink: cs.getPropertyValue('--ink').trim() };
+});
+t('tema: en oscuro, Manchas conserva fondo CLARO (el marco no debe opinar sobre el tono de piel)',
+  !!panelEnOscuro && panelEnOscuro.card === '#FBFAF8' && panelEnOscuro.ink === '#221F1D');
+const panelFotos = await page.evaluate(() => {
+  const el = document.getElementById('tab-photos');
+  return el ? getComputedStyle(el).getPropertyValue('--card').trim() : null;
+});
+t('tema: en oscuro, toda la pestaña de Fotos conserva fondo CLARO', panelFotos === '#FBFAF8');
+await page.evaluate(() => window.__T.setTema('light'));
 
 
 console.log('\n── Ejes que llegan al reporte ──');

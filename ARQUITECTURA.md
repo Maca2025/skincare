@@ -355,6 +355,41 @@ esta lista — si vuelve a aparecer, es que se rompió otra vez.
 
 ### Resuelto en la sesión del 2026-08-10
 
+**Sistema de color y tema claro / oscuro.** `styles.css` tenía **123 colores
+literales** escritos a mano —al menos cinco rosas emparentados, cinco grises de
+línea, cuatro degradados de encabezado que nadie decidió a propósito—. No era
+una paleta: era sedimento de cinco etapas de la app. Se sustituyeron **469
+apariciones** por **~45 tokens semánticos** en `:root`, con dos temas completos.
+
+**Regla nueva: en `styles.css` no se vuelve a escribir un color literal.** Si
+hace falta un tono que no existe, se agrega el token con su valor claro y su
+valor oscuro. Un color suelto es una excepción que nadie sabrá mantener.
+
+El tema tiene tres estados (`cicloTema`, botón en el encabezado): `auto`,
+`light`, `dark`, persistidos en `localStorage` bajo `skincare-tema`. **En
+automático NO se sigue el ajuste del sistema sino LA HORA** (oscuro de 19:00 a
+06:59) — el sistema puede estar en claro a las 11 pm, y ese es justo el momento
+en que se registra la rutina de noche a oscuras. Se reaplica en
+`visibilitychange`, así que una sesión abierta desde la tarde se oscurece sola.
+`aplicaTema()` corre al final de `app.js`, antes de pintar, para que no haya
+fogonazo blanco al abrir de noche; también mueve el `<meta name="theme-color">`.
+
+**La excepción deliberada:** en oscuro, `#tab-photos` completo —subida de fotos,
+galería, comparativa y manchas— vuelve a fondo claro redefiniendo los tokens
+sobre el contenedor. **No es una inconsistencia: es la razón de ser de esas
+pantallas.** El color que rodea una foto de piel altera cómo se percibe el tono
+(contraste simultáneo), y ese juicio —*"¿está más clara que hace dos meses?"*—
+es exactamente lo que la app existe para ayudar a hacer. El marco no opina.
+Hay cuatro aserciones del arnés cuidando esto; si alguien "arregla" la
+inconsistencia aparente, se rompe el propósito.
+
+También: los cuatro degradados de encabezado de rutina son ahora una barra
+lateral de 3 px del color de la sección, los degradados de botón se aplanaron,
+las sombras difusas de `.section` son línea fina, y los rótulos de sección y las
+cifras de dosis pasaron a serif. El arnés pasó de 62 a **72 aserciones**.
+
+### Resuelto también en la sesión del 2026-08-10
+
 **El rediseño de zonas.** `PHOTO_TYPES` era un vocabulario de *encuadre
 fotográfico* disfrazado de vocabulario de zona: `cara-derecha` / `cara-izquierda`
 / `cara-frente` no son tres regiones, son los tres ángulos del VISIA de Canfield
