@@ -29,7 +29,8 @@ PWA de skincare tracking de una sola usuaria (Macarena, Guadalajara, UTC-6). Foc
 - `routines` + `routine_steps` — rutinas por sección (am/pm/body/feet) con `schedule_days`; pasos con `product_id` fijo O `picker_category` (rotar) O informativos.
 - `product_applications` — **fuente única de verdad.** Todo lo demás (Progreso, Historial, rachas, checkmarks) se CALCULA de aquí. Campos: `product_name`, `product_id`, `applied_at` (UTC), `source` ('rutina'/'reaplicacion'), `routine_step_id`.
 - `daily_notes` — nota + `skin_state` (1–5) + `sun_exposure` (interior/normal/alta/playa), key `note_date`.
-- `progress_photos` — `photo_url` guarda SOLO el nombre de archivo; bucket `progress-photos` es PRIVADO → URLs firmadas con `createSignedUrls` (batch, nunca una por una).
+- `progress_photos` — `photo_url` guarda SOLO el nombre de archivo; bucket `progress-photos` es PRIVADO → URLs firmadas con `createSignedUrls` (batch, nunca una por una). `photo_type` es un **encuadre** (clave de `ENCUADRES`), no una zona.
+- `products.my_rating` (smallint 1–5, nullable) — **calificación personal, subjetiva.** No entra en ningún cálculo. `null` = sin calificar, que NO es lo mismo que 1. **No confundir con `products.tier`** (ok/good/best): eso es la calidad OBJETIVA de un SPF —calibración UVA— y pinta el borde de color del selector de protectores. Se ven distinto a propósito: `tier` es borde, `my_rating` son estrellas. No fusionarlas.
 - `push_subscriptions` — suscripciones Web Push (+`last_notified_at` para no duplicar avisos).
 - `skin_spots` + `spot_observations` — seguimiento de manchas INDIVIDUALES (las fotos rastrean áreas, esto rastrea lesiones). Desde el 2026-08-10 una mancha lleva **tres ejes separados**: `territorio` (clave de `ZONAS` — es lo que la conecta con el motor de dosis), `encuadre` (clave de `ENCUADRES` — es lo que permite recortarla sobre la misma foto) y `lateralidad` (`izq`/`der`/`centro`). `zone` es la columna LEGADA: sigue siendo `NOT NULL` y se escribe con el encuadre hasta el paso de contracción. `pos_x`/`pos_y` son PORCENTAJES **de la foto apuntada por `reference_photo_id`**, no de la zona en abstracto. `spot_observations` tiene `unique (spot_id, observed_at)`: corregir el mismo día actualiza en vez de duplicar.
 - `treatment_events` — hitos de tratamiento que NO son un producto: consultas, procedimientos, cambios de diagnóstico, exposición solar fuera de lo normal. `event_type` va con CHECK. La vista `treatment_timeline` la une con `products.started_at` y lleva `security_invoker = on` (sin eso, la vista saltaría el RLS de las tablas de abajo).
@@ -387,8 +388,16 @@ eran imposibles de registrar.
 
 `zoneLabel` desapareció (se llamaba casi igual que `zonaLabel` y leía la lista
 equivocada); ahora es `encuadreLabel`, declarada junto a la lista que lee.
-El arnés pasó de 37 a **52 aserciones**: el bloque 4 protege la separación de los
-tres ejes.
+El arnés pasó de 37 a **62 aserciones**: el bloque 4 protege la separación de
+los tres ejes y el bloque 5 la calificación personal.
+
+**Calificación personal (★1–5).** Columna `products.my_rating`, editable tocando
+las estrellas directo en Stock (optimista con rollback, igual que `setInvStatus`)
+y desde el formulario del producto. `starsHTML` para listados, `starsCompactHTML`
+(`★4`) para listas densas como los pasos de rutina, `starPickerHTML` para las
+tocables. En `prodLabelHTML` son **opt-in** (`{ stars: true }`): dentro de una
+frase estorban, en un listado ayudan. Tocar la estrella ya puesta la apaga — es
+la única salida de vuelta a "sin calificar".
 
 **Resuelto también:** `spf-push-function.ts` ya está en el repositorio, así que
 `tests-spf-push-paridad.js` corre de verdad sus 33 aserciones (era el punto 2 de

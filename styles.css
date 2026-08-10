@@ -772,3 +772,17 @@ body {
 .spot-dose-hdr { font-size: 10.5px; font-weight: 700; color: #9A8888; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 7px; }
 .spot-dose-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .spot-dose-chip { font-size: 11.5px; font-weight: 700; color: #6A5450; background: #FFF; border: 1px solid #EADCD8; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+
+/* ── Calificación personal (★ 1–5) ─────────────────────────────────────────
+   Subjetiva, del 1 al 5. Deliberadamente discreta: acompaña al nombre, no
+   compite con él. Y deliberadamente distinta de `.spf-item.tier-*`, que es la
+   calidad objetiva de un SPF y se expresa como borde de color. */
+.stars { font-size: 11px; letter-spacing: 0.5px; color: #C9A227; margin-left: 5px; white-space: nowrap; vertical-align: 1px; }
+.stars-off { color: #E6DFD8; }
+.stars-compact { font-weight: 700; font-size: 11px; }
+.star-pick { display: inline-flex; gap: 1px; margin-left: 6px; vertical-align: 1px; }
+.star-pick-i { font-size: 13px; line-height: 1; color: #E6DFD8; cursor: pointer; padding: 2px 1px; transition: color .12s, transform .12s; }
+.star-pick-i.on { color: #C9A227; }
+.star-pick-i:active { transform: scale(1.25); }
+.star-pick-lg { display: flex; gap: 4px; margin: 4px 0 0; }
+.star-pick-lg .star-pick-i { font-size: 26px; padding: 4px 2px; }

@@ -39,7 +39,7 @@ const dir = process.cwd();
 
 // ── CATÁLOGO SINTÉTICO (ids reales, para que PRODUCT_DOSE los reconozca) ─────
 const P = [
-  { id: '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577', name: 'Retin-A Tretinoína 0.025%', emoji: '🔬', brand: 'Janssen', category: '💊 Activos', tags: [], tier: 'best', status: 'ok', clinical_roles: ['regeneracion_celular'], schedule_days: null, started_at: null, sort_order: 1 },
+  { id: '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577', name: 'Retin-A Tretinoína 0.025%', emoji: '🔬', brand: 'Janssen', category: '💊 Activos', tags: [], tier: 'best', status: 'ok', clinical_roles: ['regeneracion_celular'], schedule_days: null, started_at: null, sort_order: 1, my_rating: 4 },
   { id: '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e', name: 'Anthelios UVMune 400 SPF50', emoji: '🌞', brand: 'La Roche-Posay', category: '🌞 SPF Facial', tags: [{ cls: 'pa4' }, { cls: 'uva400' }], tier: 'best', status: 'ok', clinical_roles: ['spf_facial'], schedule_days: null, started_at: null, sort_order: 2 },
   { id: 'ecef5283-7bdd-460b-a9a8-ccb917942c4c', name: 'Finacea Ácido Azelaico 15%', emoji: '💊', brand: 'Galderma', category: '💊 Activos', tags: [], tier: 'best', status: 'ok', clinical_roles: ['despigmentacion'], schedule_days: null, started_at: null, sort_order: 3 },
   { id: 'd6f17e28-ccb7-4267-a588-5812bdfa2fde', name: 'Toleriane Double Repair', emoji: '💧', brand: 'La Roche-Posay', category: '💧 Hidratantes', tags: [], tier: 'best', status: 'ok', clinical_roles: ['barrera'], schedule_days: null, started_at: null, sort_order: 4 },
@@ -154,6 +154,10 @@ window.__T = {
   openSpot: id => openSpotModal(id),
   saveSpot: () => saveSpot(),
   doseByZona: () => doseByZona,
+  renderInv: () => renderInventory(),
+  stars: n => starsHTML(n),
+  label: p => prodLabelHTML(p),
+  labelStars: p => prodLabelHTML(p, { stars: true }),
   encuadresDe: t => encuadresDeTerritorio(t).map(e => e.key)
 };
 </script></body>`);
@@ -375,6 +379,56 @@ t('guardar mancha: escribe encuadre', !!paySpot && paySpot.encuadre === 'escote'
 t('guardar mancha: escribe lateralidad', !!paySpot && paySpot.lateralidad === 'centro');
 t('guardar mancha: sigue llenando la columna legada `zone` (es NOT NULL hasta la contracción)',
   !!paySpot && paySpot.zone === 'escote');
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOQUE 5 — calificación personal (2026-08-10)
+//
+// `my_rating` es subjetiva y no debe tocar NADA del motor de dosis. Lo que se
+// protege aquí es que se pinte donde toca, que "sin calificar" siga siendo
+// distinto de "una estrella", y que tocar la estrella puesta la apague — sin
+// esa salida, calificar sería irreversible desde la interfaz.
+// ════════════════════════════════════════════════════════════════════════════
+const st0 = await page.evaluate(() => window.__T.stars(null));
+const st3 = await page.evaluate(() => window.__T.stars(3));
+t('estrellas: sin calificar no pinta nada (no es lo mismo que una estrella)', st0 === '');
+t('estrellas: 3 pinta 3 llenas y 2 apagadas',
+  (st3.match(/★/g) || []).length === 5 && /stars-off">★★</.test(st3));
+
+const lbls = await page.evaluate(() => {
+  const p = { emoji: '🔬', name: 'Retin-A', brand: 'Janssen', my_rating: 4 };
+  return { frase: window.__T.label(p), lista: window.__T.labelStars(p) };
+});
+t('estrellas: NO se cuelan en el nombre usado dentro de una frase', !/★/.test(lbls.frase));
+t('estrellas: sí aparecen cuando se pide explícitamente en un listado', /★/.test(lbls.lista));
+
+const inv = await page.evaluate(() => { window.__T.renderInv(); return document.getElementById('inventory-content').innerHTML; });
+t('Stock: pinta las estrellas tocables junto al nombre', /star-pick/.test(inv));
+t('Stock: el producto calificado con 4 tiene 4 encendidas',
+  (((inv.match(/id="stars-70f8c5ee-c241-41d4-bfe4-2cf4d52a7577"[\s\S]*?<\/span>\s*<\/span>/) || [''])[0]).match(/star-pick-i on/g) || []).length === 4);
+
+const opsRate = await ops("return setMyRating('57ff2048-f0d3-42a6-a9e5-8e56fb8a564e', 5)");
+const updRate = opsRate.find(o => o.table === 'products' && (o.chain || []).some(c => c.m === 'update'));
+const payRate = updRate ? updRate.chain.find(c => c.m === 'update').a[0] : null;
+t('calificar: guarda el número en my_rating', !!payRate && payRate.my_rating === 5);
+t('calificar: no toca ninguna otra columna', !!payRate && Object.keys(payRate).length === 1);
+
+const opsUnrate = await ops("return setMyRating('70f8c5ee-c241-41d4-bfe4-2cf4d52a7577', 4)");
+const updUn = opsUnrate.find(o => o.table === 'products' && (o.chain || []).some(c => c.m === 'update'));
+const payUn = updUn ? updUn.chain.find(c => c.m === 'update').a[0] : null;
+t('calificar: tocar la estrella que ya estaba puesta la APAGA (vuelta a sin calificar)',
+  !!payUn && payUn.my_rating === null);
+
+const opsNuevo = await ops(`
+  openAddProductModal();
+  document.getElementById('pf-name').value = 'Producto calificado';
+  document.getElementById('pf-cat').value = '💊 Activos';
+  setPfRating(3);
+  return window.__T.saveProduct();
+`);
+const insN = opsNuevo.find(o => o.table === 'products' && (o.chain || []).some(c => c.m === 'insert'));
+const payN = insN ? insN.chain.find(c => c.m === 'insert').a[0] : null;
+t('crear producto: guarda la calificación elegida en el formulario', !!payN && payN.my_rating === 3);
 
 
 console.log('\n── Ejes que llegan al reporte ──');

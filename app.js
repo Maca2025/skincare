@@ -2340,6 +2340,68 @@ function productIdForLoggedName(name) {
 // OJO: esto es solo PRESENTACIÓN. Lo que se guarda en product_applications
 // sigue siendo `logged_as` o "emoji nombre" — meter la marca ahí rompería la
 // hidratación de checkmarks y el histórico ya registrado.
+// ── CALIFICACIÓN PERSONAL (★ 1–5) ─────────────────────────────────────
+// `products.my_rating` es SUBJETIVA: qué tanto te gusta el producto. No entra
+// en el motor de dosis, no afecta la potencia clínica, no mueve ninguna barra.
+//
+// NO confundir con `products.tier` (ok/good/best), que es la calidad OBJETIVA
+// de un protector solar —su calibración UVA— y pinta el borde de color del
+// selector de SPF. Son dos cosas distintas y por eso se ven distinto: `tier`
+// es un borde de color, `my_rating` son estrellas. No fusionarlas.
+//
+// `null` = SIN CALIFICAR, que no es lo mismo que una estrella. Un producto
+// nuevo entra vacío: con 87 productos en el catálogo, obligar a calificarlos
+// todos de golpe garantizaría que no se califique ninguno.
+const RATING_MAX = 5;
+function starsHTML(n) {
+  const v = Math.round(Number(n) || 0);
+  if (v < 1) return '';
+  const llenas = Math.min(RATING_MAX, v);
+  return `<span class="stars" title="Tu calificación: ${llenas} de ${RATING_MAX}">`
+       + '★'.repeat(llenas)
+       + `<span class="stars-off">${'★'.repeat(RATING_MAX - llenas)}</span></span>`;
+}
+// Versión de una estrella + número, para listas densas. Cinco caracteres
+// repetidos quince veces en una pantalla se vuelven ruido y se dejan de leer.
+function starsCompactHTML(n) {
+  const v = Math.round(Number(n) || 0);
+  if (v < 1) return '';
+  return `<span class="stars stars-compact" title="Tu calificación: ${v} de ${RATING_MAX}">★${v}</span>`;
+}
+// Estrellas tocables. Se califica desde donde ya estás mirando: si hay que
+// abrir un formulario para poner una estrella, no se califica nada.
+function starPickerHTML(productId, n) {
+  const v = Math.round(Number(n) || 0);
+  let out = `<span class="star-pick" id="stars-${productId}" onclick="event.stopPropagation()">`;
+  for (let i = 1; i <= RATING_MAX; i++) {
+    out += `<span class="star-pick-i${i <= v ? ' on' : ''}" onclick="event.stopPropagation();setMyRating('${productId}',${i})" title="${i} de ${RATING_MAX}">★</span>`;
+  }
+  return out + '</span>';
+}
+function pintaEstrellas(productId, v) {
+  const el = document.getElementById('stars-' + productId);
+  if (!el) return;
+  const n = Math.round(Number(v) || 0);
+  [...el.children].forEach((c, i) => { c.className = 'star-pick-i' + (i < n ? ' on' : ''); });
+}
+// Optimista con rollback, igual que `setInvStatus`: la estrella se enciende al
+// instante y solo se apaga si la base rechazó el cambio.
+async function setMyRating(productId, valor) {
+  const prod = allProducts.find(p => p.id === productId);
+  const prev = prod ? prod.my_rating : null;
+  // Tocar la estrella que YA estaba puesta la apaga. Es la única salida de
+  // vuelta a "sin calificar"; sin ella, calificar sería irreversible.
+  const nuevo = (Number(prev) === Number(valor)) ? null : Number(valor);
+  if (prod) prod.my_rating = nuevo;
+  pintaEstrellas(productId, nuevo);
+  const { error } = await db.from('products').update({ my_rating: nuevo }).eq('id', productId);
+  if (error) {
+    if (prod) prod.my_rating = prev;
+    pintaEstrellas(productId, prev);
+    showToast('❌ No se guardó la calificación', 'error');
+  }
+}
+
 function prodLabelHTML(p, opts) {
   if (!p) return '';
   const o = opts || {};
@@ -2348,7 +2410,10 @@ function prodLabelHTML(p, opts) {
   return [
     emoji ? esc(emoji) : '',
     brand ? `<span class="p-brand">${esc(brand)}</span>` : '',
-    esc(p.name || '')
+    esc(p.name || ''),
+    // Opt-in: en un LISTADO las estrellas ayudan, dentro de una FRASE
+    // ("el que más se te dificulta es ★★★☆☆ X") estorban.
+    o.stars ? starsHTML(p.my_rating) : ''
   ].filter(Boolean).join(' ');
 }
 // Versión plana: <option>, toasts y cualquier sitio que use textContent, donde
@@ -3833,7 +3898,7 @@ function multiPickItemHTML(p, degradado) {
   const nota = degradado
     ? `<div class="spf-item-noreapp">· no suele reaplicarse — regístralo igual si te lo pusiste</div>` : '';
   return `<div class="spf-item tier-${cssSafe(p.tier)} multi-pick${degradado ? ' multi-pick-degradado' : ''}" data-name="${esc(logName)}" data-search="${searchKeyOf(p)}" onclick="toggleMultiPick(this)">
-  <div class="spf-item-name"><span class="multi-pick-check">○</span> ${prodLabelHTML(p)}</div>
+  <div class="spf-item-name"><span class="multi-pick-check">○</span> ${prodLabelHTML(p, { stars: true })}</div>
   ${nota}
   <div class="spf-item-tags">${tagsOf(p).map(t => `<span class="spf-tag spf-tag-${cssSafe(t.cls)}">${esc(t.label)}</span>`).join('')}</div>
   <div class="spf-item-note">${fmtRich(p.note || '')}</div>
@@ -4314,7 +4379,7 @@ function invItemHTML(item) {
   <div class="inv-row" onclick="toggleInvDetail('${domId}')">
     <div class="inv-emoji">${esc(item.emoji)}</div>
     <div class="inv-info">
-      <div class="inv-name">${esc(item.name)}</div>
+      <div class="inv-name">${esc(item.name)} ${starPickerHTML(item.id, item.my_rating)}</div>
       <div class="inv-brand">${esc(item.brand || '')}${paoBadge(item)}</div>
     </div>
     <div class="inv-chips" onclick="event.stopPropagation()">
@@ -4334,6 +4399,21 @@ function toggleInvDetail(domId) {
   if (el) el.classList.toggle('open');
 }
 let editingProductId = null;
+let pfRating = null;
+function setPfRating(i) {
+  // Mismo gesto que en Stock: tocar la que ya está puesta la quita.
+  pfRating = (pfRating === i) ? null : i;
+  renderPfStars();
+}
+function renderPfStars() {
+  const el = document.getElementById('pf-rating');
+  if (!el) return;
+  let out = '';
+  for (let i = 1; i <= RATING_MAX; i++) {
+    out += `<span class="star-pick-i${i <= (pfRating || 0) ? ' on' : ''}" onclick="setPfRating(${i})">★</span>`;
+  }
+  el.innerHTML = out;
+}
 let pfFreq = 'daily';
 let pfDays = new Set();
 function selectPfFreq(freq) {
@@ -4363,6 +4443,7 @@ function openAddProductModal() {
     if (el) { el.value = ''; if (id === 'pf-cat-custom') el.style.display = 'none'; }
   });
   document.getElementById('pf-cat').value = '';
+  pfRating = null; renderPfStars();
   resetPfClinicalFields();
   document.getElementById('emoji-preview').textContent = '🧴';
   document.querySelector('#add-product-modal .modal-title').textContent = '＋ Nuevo producto';
@@ -4383,6 +4464,7 @@ function openEditProductModal(id) {
   document.getElementById('pf-opened').value = p.opened_at || '';
   document.getElementById('pf-started').value = p.started_at || '';
   document.getElementById('pf-pao').value    = p.pao_months || '';
+  pfRating = p.my_rating || null; renderPfStars();
   resetPfClinicalFields();
   // `.filter(Boolean)`: si el valor legado no está en el mapa, `LEGACY_ROLE_MAP`
   // devuelve undefined y sin este filtro se escribiría `[undefined]` en la base.
@@ -4441,6 +4523,7 @@ async function saveCustomProduct() {
       note: note || null, how_to_apply: how || null, why_it_works: why || null,
       clinical_roles: clinicalRoles, schedule_days: scheduleDays,
       opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
+      my_rating: pfRating,
       // Se apaga la columna VIEJA en cuanto editas el producto. `hasRole` cae a
       // `clinical_role` (singular) cuando `clinical_roles` viene vacío, y el
       // formulario escribe `[]` al destildar todos los roles: sin esta línea,
@@ -4466,6 +4549,7 @@ async function saveCustomProduct() {
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
     clinical_roles: clinicalRoles, schedule_days: scheduleDays,
     opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
+    my_rating: pfRating,
     tier: 'ok', tags: [], status: 'ok',
     // El catálogo se lee con `.order('sort_order')` pero la app nunca escribía
     // esta columna, así que todo producto creado desde aquí quedaba con el
@@ -4995,7 +5079,7 @@ function dbStepHTML(s, index, todayHydration, sectionKey) {
     <span class="sn-num">${n}</span><span class="sn-check">✓</span>
   </div>
   <div class="sc" onclick="toggleStep('step_${id}','${id}')">
-    <div class="sc-top"><span class="sc-name">${esc(dEmoji)} ${esc(dName)}</span></div>
+    <div class="sc-top"><span class="sc-name">${esc(dEmoji)} ${esc(dName)}</span>${starsCompactHTML(_prod && _prod.my_rating)}</div>
     <div class="sc-brand">${esc(dBrand)}</div>
     <div class="sc-detail" id="${id}">
       <div class="det-title">How to apply</div>${fmtRich(s.how_to_apply||'')}${why}${warn}
