@@ -4,6 +4,9 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v28 — la fila del piso en Progreso: siete puntos de días activos + el conteo
+//       contra diasPiso. Toca app.js y styles.css, y baja los pisos de cuerpo,
+//       manos, pies, cabello y labios en activos-matriz.js.
 // v27 — motor de cadencia, primera pieza: `diasIdeales` se parte en `diasPiso` y
 //       `diasTecho`. OBLIGATORIO subir la caché aquí: activos-matriz.js, pure.js
 //       y app.js cambian JUNTOS y no se pueden servir mezclados. Un app.js nuevo
@@ -47,7 +50,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v27';
+const CACHE = 'skincare-shell-v28';
 const SHELL = [
   './',
   './index.html',

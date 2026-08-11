@@ -1443,15 +1443,17 @@ async function loadHistory() {
     const overDays = esEjeDeAviso
       ? overExposureDays(ultimaSemana.map(ds => (irritantByDateZona[ds] || {})[cfg.zona] || 0), cfg.diasTecho)
       : 0;
-    // PISO: días activos que faltan esta semana. Se prorratea con Math.floor
-    // porque la semana en curso está incompleta — el miércoles no puede
-    // reclamarte los 5 días de un piso semanal. Con floor, un piso de 5 pide 2
-    // días activos cuando han pasado 3. Todavía no se dibuja en ningún lado:
-    // esto es la plomería para la marca de la barra y el despachador del día.
-    const pisoProrrateado = Math.floor(cfg.diasPiso * (ultimaSemana.length / 7));
-    const pisoFalta = pisoShortfallDays(
-      ultimaSemana.map(ds => (dosePtsByDate[ds] || {})[axKey] || 0), pisoProrrateado);
-    return { pct, weekly, overDays, pisoFalta, cfg };
+    // PISO: avance de la semana EN CURSO contra la meta semanal, en días
+    // activos. NO se prorratea — ver el comentario de `pisoAtRisk` en pure.js:
+    // prorratear mentía en los dos extremos de la semana. Se muestra el avance
+    // real ("2/3 días") y sólo se avisa cuando los días que faltan ya no caben
+    // en los que quedan.
+    const pisoPts = ultimaSemana.map(ds => (dosePtsByDate[ds] || {})[axKey] || 0);
+    const pisoDias = pisoPts.map(p => p > 0);
+    const pisoActivos = pisoDias.filter(Boolean).length;
+    const pisoFalta = pisoShortfallDays(pisoPts, cfg.diasPiso);
+    const pisoRiesgo = pisoAtRisk(pisoPts, cfg.diasPiso);
+    return { pct, weekly, overDays, pisoDias, pisoActivos, pisoFalta, pisoRiesgo, cfg };
   };
   // Las listas de ejes se DERIVAN de DOSE_AXES por su `zona` — ya no se
   // escriben a mano (regla 5). Antes eran tres arrays literales y cada eje
@@ -1900,6 +1902,43 @@ async function loadHistory() {
     otros: flatDose(dosisOtros),
     constancia, weekNum, treatStart
   };
+  // ── RENDER: LA FILA DEL PISO ───────────────────────────────────────────────
+  // Los siete puntitos son DÍAS DE CALENDARIO (lunes→domingo, las mismas
+  // columnas que el heatmap) y muestran el RITMO, que es lo que importa cuando
+  // hay irritantes: tres noches seguidas no son lo mismo que tres espaciadas.
+  //
+  // EL PISO NO SE DIBUJA COMO POSICIÓN EN ESA FILA. Es un conteo de días, no un
+  // día concreto: marcar el tercer puntito insinuaría que los primeros tres días
+  // son los que cuentan. Por eso el piso va como número aparte.
+  //
+  // Y por eso tampoco va como marca en la barra de dosis: se midió el 11-ago
+  // contra 41 días reales y la marca contradecía a la alarma en 15 de 60
+  // semanas-eje — semanas con el piso cumplido en días y la barra por detrás de
+  // la marca. Detalle en claude/calibracion-datos-reales.md §2.
+  const pisoRowHTML = (o) => {
+    const c = o.cfg;
+    if (!c.diasPiso) return '';   // piso 0 (cuerpo_aclarado): mide, no reclama
+    // Los 4 ejes de PROTECCIÓN no llevan fila de piso. El SPF ya tiene su motor
+    // (`spfPosiblesEnFecha`: UV histórico, ocaso, hora de despertar) y su propio
+    // diagnóstico en `doseDiag`. Un piso de días encima sería un SEGUNDO modelo
+    // midiendo lo mismo con menos información — el error que esta app pagó tres
+    // veces. Su diasPiso 7 existe sólo para que el eje no quede sin número.
+    if (c.funcion === 'proteccion') return '';
+    const pips = o.pisoDias.map(on =>
+      `<span class="piso-pip${on ? ' on' : ''}"${on ? ` style="background:${c.color}"` : ''}></span>`).join('');
+    const pend = Array.from({ length: Math.max(0, 7 - o.pisoDias.length) },
+      () => '<span class="piso-pip pend"></span>').join('');
+    const cumplido = o.pisoFalta === 0;
+    const cls = cumplido ? 'ok' : (o.pisoRiesgo ? 'riesgo' : '');
+    const txt = cumplido
+      ? `${o.pisoActivos}/${c.diasPiso} días ✓`
+      : (o.pisoRiesgo
+          ? `${o.pisoActivos}/${c.diasPiso} días · esta semana ya no da`
+          : `${o.pisoActivos}/${c.diasPiso} días · falta${o.pisoFalta === 1 ? '' : 'n'} ${o.pisoFalta}`);
+    return `<div class="piso-row" title="Tu piso son ${c.diasPiso} día${c.diasPiso === 1 ? '' : 's'} a la semana. Los puntos son los días de esta semana.">`
+      + `<span class="piso-pips">${pips}${pend}</span>`
+      + `<span class="piso-txt ${cls}">${txt}</span></div>`;
+  };
   // ── RENDER: ESTÍMULO ENTREGADO (dosis) ─────────────────────────────────────
   const doseRow = ({ key, o }) => {
     const c = o.cfg;
@@ -1908,6 +1947,7 @@ async function loadHistory() {
     return `<div class="adh-row">
   <div class="adh-top"><span class="adh-name"><span class="adh-ic">${c.icon}</span>${esc(c.label)}${warn}</span><span class="adh-val" style="color:${c.color}">${o.pct}%</span></div>
   <div class="adh-track"><div class="adh-fill" style="width:${o.pct}%;background:${c.color}"></div></div>
+  ${pisoRowHTML(o)}
   <div class="adh-sub">${doseDiag(key, o)}</div>
   ${spark || ''}
 </div>`;

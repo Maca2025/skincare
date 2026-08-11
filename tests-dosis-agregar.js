@@ -64,6 +64,22 @@ t('piso: pasarse del piso no da crédito negativo',
 t('piso: un piso de 0 (cuerpo_aclarado) nunca reclama',
   pisoShortfallDays([0, 0, 0, 0, 0, 0, 0], 0), 0);
 
+// ── PISO EN RIESGO: los días que faltan no caben en los que quedan ─────────
+// Reemplaza al prorrateo, que mentía en los dos extremos de la semana.
+t('riesgo: miércoles con 0 de 3 todavía alcanza',
+  pisoAtRisk([0, 0, 0], 3), false);
+t('riesgo: jueves con 0 de 3 alcanza justo (quedan 3)',
+  pisoAtRisk([0, 0, 0, 0], 3), false);
+t('riesgo: viernes con 0 de 3 ya no alcanza',
+  pisoAtRisk([0, 0, 0, 0, 0], 3), true);
+t('riesgo: piso cumplido nunca está en riesgo',
+  pisoAtRisk([10, 10, 10, 0, 0, 0, 0], 3), false);
+t('riesgo: semana cerrada con 2 de 3 avisa',
+  pisoAtRisk([10, 10, 0, 0, 0, 0, 0], 3), true);
+t('riesgo: un piso de 0 nunca está en riesgo',
+  pisoAtRisk([0, 0, 0, 0, 0, 0, 0], 0), false);
+t('riesgo: entrada inválida no avisa', pisoAtRisk(null, 3), false);
+
 // ── GUARDAS ────────────────────────────────────────────────────────────────
 t('dosis: entrada inválida devuelve null', doseWeekPct(null, 85, 6), null);
 t('dosis: sin config devuelve null', doseWeekPct([10], 0, 6), null);

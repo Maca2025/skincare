@@ -197,6 +197,27 @@ function pisoShortfallDays(dailyPoints, diasPiso) {
   const activos = dailyPoints.filter(p => (p || 0) > 0).length;
   return Math.max(0, diasPiso - activos);
 }
+
+// ¿El piso de esta semana ya es INALCANZABLE? Los días que faltan no caben en
+// los días que quedan.
+//
+// Por qué existe, en vez de prorratear el piso: prorratear era la primera
+// implementación (`Math.floor(diasPiso × transcurridos/7)`) y mentía en los dos
+// extremos. El martes, un piso de 5 prorrateaba a 1 y la app decía "vas bien"
+// cuando ya era matemáticamente imposible llegar a 5. Y el domingo con 4 de 5
+// decía "te falta 1" como si aún se pudiera, cuando ya no queda día.
+//
+// `dailyPoints.length` son los días TRANSCURRIDOS de la semana en curso — las
+// semanas calendario de `doseWeeks` vienen recortadas en el día de hoy. Así que
+// los restantes son `7 − length`, y el aviso sale solo cuando de verdad no da.
+//
+// El miércoles con 0 de 3 no avisa (quedan 4 días, alcanza). El sábado con 0 de
+// 3 sí avisa (queda 1). Ni antes ni después.
+function pisoAtRisk(dailyPoints, diasPiso) {
+  if (!Array.isArray(dailyPoints) || !diasPiso) return false;
+  const restantes = Math.max(0, 7 - dailyPoints.length);
+  return pisoShortfallDays(dailyPoints, diasPiso) > restantes;
+}
 // ============================================================================
 // AGREGAR AL FINAL DE pure.js
 // ============================================================================

@@ -485,6 +485,16 @@ body {
 .spark-lbl { font-size: 9px; color: var(--ink-4); margin-top: 2px; }
 /* DOSIS / ESTÍMULO ENTREGADO (Fase B) */
 .dose-intro { font-size: 11.5px; color: var(--ink-3); line-height: 1.6; background: var(--bg-soft); border-radius: 8px; padding: 9px 11px; margin-bottom: 12px; }
+/* FILA DEL PISO — días activos de la semana. Los puntos son días de calendario
+   (ritmo); el conteo del piso va en texto porque un piso es un número de días,
+   no un día concreto. Ver pisoRowHTML en app.js. */
+.piso-row { display: flex; align-items: center; gap: 8px; margin: 0 0 5px; }
+.piso-pips { display: flex; gap: 3px; flex: none; }
+.piso-pip { width: 7px; height: 7px; border-radius: 99px; background: var(--line-2); }
+.piso-pip.pend { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.piso-txt { font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
+.piso-txt.ok { color: var(--ok); }
+.piso-txt.riesgo { color: var(--warn-dk); }
 .dose-warn { font-size: 10px; font-weight: 700; color: var(--warn-dk); background: var(--err-soft); border-radius: 6px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
 .adh-secondary { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
 .adh-secondary-sum { font-size: 12.5px; font-weight: 700; color: var(--accent-ink); cursor: pointer; list-style: none; padding: 6px 0; -webkit-tap-highlight-color: transparent; }

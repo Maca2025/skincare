@@ -80,6 +80,12 @@ const ZONAS = {
 //              `cuerpo_aclarado` va en 0 a propósito: ZONAS_APTAS_OVERRIDE fija
 //              los productos de kójico en 'manos', así que el eje no tiene con
 //              qué llenarse y un piso ahí sería una alarma inapagable.
+//              Los pisos de cuerpo_barrera, manos, pies, cabello y labios se
+//              BAJARON el 11-ago contra 41 días de datos reales: estaban puestos
+//              en 3-5 días y Maca lleva semanas en 0-2. Siete alarmas simultáneas
+//              el día uno no son un empujón, son ruido — y un indicador que se
+//              ignora ya no es un indicador. Se suben cuando sean hábito. El
+//              detalle, semana por semana, en claude/calibracion-datos-reales.md.
 // diasTecho  = LÍMITE. Denominador de la barra (100% = techoDiario × diasTecho)
 //              y umbral del aviso de sobre-exposición. Pasarse del piso NO
 //              penaliza; pasarse del techo avisa.
@@ -101,16 +107,16 @@ const DOSE_AXES = {
   cuerpo_proteccion: { zona: 'cuerpo', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasPiso: 7, diasTecho: 7 },
   cuerpo_aclarado: { zona: 'cuerpo', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasPiso: 0, diasTecho: 7 },  // PROVISIONAL — sin datos reales todavía
   cuerpo_textura: { zona: 'cuerpo', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 80, diasPiso: 2, diasTecho: 3 },
-  cuerpo_barrera: { zona: 'cuerpo', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 95, diasPiso: 5, diasTecho: 7 },
+  cuerpo_barrera: { zona: 'cuerpo', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 95, diasPiso: 3, diasTecho: 7 },
   cuerpo_firmeza: { zona: 'cuerpo', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 75, diasPiso: 2, diasTecho: 5 },
   manos_proteccion: { zona: 'manos', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasPiso: 7, diasTecho: 7 },
-  manos: { zona: 'manos', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasPiso: 3, diasTecho: 7 },
+  manos: { zona: 'manos', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasPiso: 1, diasTecho: 7 },
   manos_textura: { zona: 'manos', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 80, diasPiso: 2, diasTecho: 3 },  // PROVISIONAL — sin datos reales todavía
   manos_barrera: { zona: 'manos', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 90, diasPiso: 5, diasTecho: 7 },  // PROVISIONAL — sin datos reales todavía
   manos_firmeza: { zona: 'manos', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 75, diasPiso: 2, diasTecho: 6 },  // PROVISIONAL — sin datos reales todavía
-  pies: { zona: 'pies', funcion: 'queratolitico', icon: '🦶', label: 'Queratolítico', color: '#8A6A00', techoDiario: 85, diasPiso: 4, diasTecho: 7 },
-  labios: { zona: 'labios', funcion: 'labial', icon: '💋', label: 'Cuidado labial', color: '#A8455E', techoDiario: 110, diasPiso: 5, diasTecho: 7 },
-  cabello: { zona: 'cabello', funcion: 'capilar', icon: '💇', label: 'Cuidado capilar', color: '#5B8FA8', techoDiario: 70, diasPiso: 2, diasTecho: 3 },
+  pies: { zona: 'pies', funcion: 'queratolitico', icon: '🦶', label: 'Queratolítico', color: '#8A6A00', techoDiario: 85, diasPiso: 1, diasTecho: 7 },
+  labios: { zona: 'labios', funcion: 'labial', icon: '💋', label: 'Cuidado labial', color: '#A8455E', techoDiario: 110, diasPiso: 2, diasTecho: 7 },
+  cabello: { zona: 'cabello', funcion: 'capilar', icon: '💇', label: 'Cuidado capilar', color: '#5B8FA8', techoDiario: 70, diasPiso: 1, diasTecho: 3 },
 };
 
 // ── POTENCIA POR FUNCIÓN (sin zona) ─────────────────────────────────────────
