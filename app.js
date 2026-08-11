@@ -4363,16 +4363,24 @@ function renderInventory() {
 //
 // ORDEN — primero por TIPO (products.category, el mismo agrupamiento que usa
 // renderInventory, para que la hoja y la pantalla se lean igual) y dentro de
-// cada tipo por CALIFICACIÓN TÉCNICA, que son dos criterios encadenados:
+// cada tipo por CALIFICACIÓN TÉCNICA, que NO significa lo mismo para todos:
 //
-//   1) products.tier (best > good > ok). Es lo único que califica a los SPF:
-//      su potencia en PRODUCT_DOSE es null A PROPÓSITO, porque su dosis la
-//      calcula el motor de SPF con el UV del día. Los dos criterios se
-//      complementan, no compiten.
-//   2) el PERFIL de potencias comparado en orden lexicográfico: primero el
-//      puntaje más alto; si empatan, el segundo; si vuelven a empatar, el
-//      tercero. NO SE SUMAN. Sumar haría que un 40·40·40 (=120) le ganara a un
-//      95, y tres cosas mediocres no valen más que una excelente.
+//   · SPF → manda products.tier (best > good > ok). Es lo único que los
+//     califica: su potencia en PRODUCT_DOSE es null A PROPÓSITO, porque la
+//     dosis la calcula el motor con el UV del día. Van primeros dentro de su
+//     tipo, porque no se pueden comparar por potencia con algo que sí tiene
+//     número.
+//   · Todo lo demás → manda el PERFIL de potencias, comparado en orden
+//     lexicográfico: primero el puntaje más alto; si empatan, el segundo; si
+//     vuelven a empatar, el tercero. NO SE SUMAN — sumar haría que un 40·40·40
+//     (=120) le ganara a un 95, y tres cosas mediocres no valen más que una
+//     excelente. El tier solo desempata.
+//
+// POR QUÉ EL TIER NO MANDA FUERA DE LOS SPF (decidido el 11 ago 2026, mirando
+// datos reales): casi todos los productos tienen tier, pero solo en un
+// protector es una medición técnica (espectro, PA, UVA400); en un tóner es una
+// apreciación. Con el tier mandando en todo, una bruma de 15 quedaba arriba de
+// una esencia de 70 — un criterio riguroso en 12 productos ordenando los 87.
 const STOCK_TIER_RANK   = { best: 0, good: 1, ok: 2 };
 const STOCK_STATUS_ICON = { ok: '✅', low: '⚠️', out: '❌' };
 // Etiquetas cortas: en la hoja impresa "Renovación, textura y poros" no cabe
@@ -4395,16 +4403,27 @@ function stockPerfil(p) {
     .sort((a, b) => b.orden - a.orden);
 }
 
+function stockEsSPF(p) {
+  return stockPerfil(p).some(x => x.v === null);
+}
+
 function stockCmp(a, b) {
+  const sa = stockEsSPF(a), sb = stockEsSPF(b);
   const ta = STOCK_TIER_RANK[a.tier] != null ? STOCK_TIER_RANK[a.tier] : 2;
   const tb = STOCK_TIER_RANK[b.tier] != null ? STOCK_TIER_RANK[b.tier] : 2;
-  if (ta !== tb) return ta - tb;
+  // Un SPF y un no-SPF no se pueden comparar por potencia: la del SPF no existe
+  // como número. Los protectores suben primero dentro de su tipo.
+  if (sa !== sb) return sa ? -1 : 1;
+  // Entre SPF manda el tier, la única calificación técnica que tienen.
+  if (sa && sb && ta !== tb) return ta - tb;
+  // Todo lo demás: manda la potencia; el tier solo desempata.
   const pa = stockPerfil(a), pb = stockPerfil(b);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const va = pa[i] ? pa[i].orden : -1;
     const vb = pb[i] ? pb[i].orden : -1;
     if (va !== vb) return vb - va;
   }
+  if (ta !== tb) return ta - tb;
   return (a.name || '').localeCompare(b.name || '');
 }
 
@@ -4497,7 +4516,7 @@ td{padding:5px 4px;border-bottom:1px solid #eee;vertical-align:middle}
 <button class="no-print" onclick="window.print()" style="padding:9px 18px;margin-bottom:16px;cursor:pointer">🖨️ Imprimir / guardar como PDF</button>
 <h1>Stock · ${n} productos</h1>
 <p class="sub">${STOCK_STATUS_ICON.ok} ${cOk} tengo · ${STOCK_STATUS_ICON.low} ${cLow} reponer · ${STOCK_STATUS_ICON.out} ${cOut} sin stock · generado ${new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })}<br>
-Agrupado por tipo. Dentro de cada tipo, por calificación técnica: primero el <i>tier</i> (best · good · ok), luego el perfil de potencias comparado de mayor a menor. Los SPF marcan <b>din.</b> porque su dosis la calcula el motor con el UV del día.</p>
+Agrupado por tipo. Dentro de cada tipo van primero los SPF, ordenados por <i>tier</i> (best · good · ok) porque su dosis no es un número fijo: marcan <b>din.</b> y la calcula el motor con el UV del día. El resto va por potencia, de mayor a menor, con su perfil completo.</p>
 ${gruposHTML}
 ${fueraHTML}
 <p style="font-size:10px;color:#999;margin-top:26px">Generado por Skincare Tracker · los puntajes salen de PRODUCT_DOSE en activos-matriz.js.</p>
