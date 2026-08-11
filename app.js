@@ -4319,6 +4319,8 @@ function renderInventory() {
     ? `<div class="inv-filter-meta">Mostrando <strong>${visibles.length}</strong> de ${allProducts.length} productos</div>`
     : '';
   const addBtn = `<button class="add-prod-btn" onclick="openAddProductModal()">＋ Agregar producto</button>`;
+  // El PDF sale del catálogo COMPLETO, no de lo filtrado (ver openStockReport).
+  const pdfBtn = `<button class="report-btn" onclick="openStockReport()">📄 Generar PDF del stock</button>`;
   // ── AVISO DE DERIVA DE LA MATRIZ DE DOSIS ─────────────────────────────────
   // PRODUCT_DOSE es un archivo estático; el catálogo vive en Supabase. Cada
   // producto nuevo nace INVISIBLE para el motor de dosis hasta que se le agrega
@@ -4351,8 +4353,158 @@ function renderInventory() {
   ${items.map(invItemHTML).join('')}
 </div>`).join('')
     : `<div class="inv-empty">Ningún producto coincide con estos filtros.<br><button class="inv-filter-clear" onclick="clearInvFilters()">✕ Limpiar filtros</button></div>`;
-  el.innerHTML = summaryHTML + driftHTML + filterBar + metaHTML + addBtn + groupsHTML;
+  el.innerHTML = summaryHTML + driftHTML + filterBar + metaHTML + addBtn + pdfBtn + groupsHTML;
 }
+// ── PDF DEL STOCK ───────────────────────────────────────────────────────────
+// Mismo patrón que openDermReport(): ventana nueva con el documento y un botón
+// de imprimir. Se imprime SIEMPRE el catálogo completo, ignorando los filtros
+// que estén puestos en pantalla: una hoja filtrada que se ve completa es la
+// forma más fácil de comprar algo que ya tienes.
+//
+// ORDEN — primero por TIPO (products.category, el mismo agrupamiento que usa
+// renderInventory, para que la hoja y la pantalla se lean igual) y dentro de
+// cada tipo por CALIFICACIÓN TÉCNICA, que son dos criterios encadenados:
+//
+//   1) products.tier (best > good > ok). Es lo único que califica a los SPF:
+//      su potencia en PRODUCT_DOSE es null A PROPÓSITO, porque su dosis la
+//      calcula el motor de SPF con el UV del día. Los dos criterios se
+//      complementan, no compiten.
+//   2) el PERFIL de potencias comparado en orden lexicográfico: primero el
+//      puntaje más alto; si empatan, el segundo; si vuelven a empatar, el
+//      tercero. NO SE SUMAN. Sumar haría que un 40·40·40 (=120) le ganara a un
+//      95, y tres cosas mediocres no valen más que una excelente.
+const STOCK_TIER_RANK   = { best: 0, good: 1, ok: 2 };
+const STOCK_STATUS_ICON = { ok: '✅', low: '⚠️', out: '❌' };
+// Etiquetas cortas: en la hoja impresa "Renovación, textura y poros" no cabe
+// debajo de un número. El label largo de FUNCIONES se queda para la pantalla.
+const STOCK_FUNC_CORTA = {
+  proteccion: 'protección', aclarado: 'aclarado', textura: 'renovación',
+  barrera: 'barrera', firmeza: 'firmeza', queratolitico: 'queratolítico',
+  labial: 'labios', capilar: 'cabello',
+};
+
+// Perfil completo de un producto: TODAS sus funciones, de más a menos potente.
+// Un multitasking sale con sus tres números, no solo con el mayor — es lo que
+// distingue la herramienta especializada de la navaja suiza cuando abres el
+// cajón. El null del SPF ordena por encima de cualquier número: no es un cero.
+function stockPerfil(p) {
+  const pot = (typeof PRODUCT_DOSE !== 'undefined' && p && p.id) ? PRODUCT_DOSE[p.id] : null;
+  if (!pot) return [];
+  return Object.entries(pot)
+    .map(([f, v]) => ({ f, v, orden: v === null ? 1000 : (Number(v) || 0) }))
+    .sort((a, b) => b.orden - a.orden);
+}
+
+function stockCmp(a, b) {
+  const ta = STOCK_TIER_RANK[a.tier] != null ? STOCK_TIER_RANK[a.tier] : 2;
+  const tb = STOCK_TIER_RANK[b.tier] != null ? STOCK_TIER_RANK[b.tier] : 2;
+  if (ta !== tb) return ta - tb;
+  const pa = stockPerfil(a), pb = stockPerfil(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const va = pa[i] ? pa[i].orden : -1;
+    const vb = pb[i] ? pb[i].orden : -1;
+    if (va !== vb) return vb - va;
+  }
+  return (a.name || '').localeCompare(b.name || '');
+}
+
+function stockStarsTxt(n) {
+  const v = Math.round(Number(n) || 0);
+  if (v < 1) return '';
+  return '★'.repeat(Math.min(RATING_MAX, v)) + '☆'.repeat(Math.max(0, RATING_MAX - v));
+}
+
+function openStockReport() {
+  if (!Array.isArray(allProducts) || !allProducts.length) {
+    showToast('⚠️ Espera a que cargue Stock', 'error'); return;
+  }
+  const w = window.open('', '_blank');
+  if (!w) { showToast('❌ Permite ventanas emergentes para generar el PDF', 'error'); return; }
+
+  // Los que no están en PRODUCT_DOSE van a una sección aparte, no mezclados:
+  // son invisibles para el motor de dosis y la hoja impresa es el mejor lugar
+  // para que eso salte a la vista. Mismo espíritu que el aviso de deriva.
+  const enMatriz = [], fueraMatriz = [];
+  allProducts.forEach(p => (stockPerfil(p).length ? enMatriz : fueraMatriz).push(p));
+
+  const groups = {};
+  enMatriz.forEach(p => {
+    const c = p.category || 'Sin categoría';
+    (groups[c] = groups[c] || []).push(p);
+  });
+  Object.values(groups).forEach(arr => arr.sort(stockCmp));
+
+  const perfilHTML = p => stockPerfil(p).map(x => {
+    const larga = (typeof FUNCIONES !== 'undefined' && FUNCIONES[x.f]) || {};
+    const lbl = STOCK_FUNC_CORTA[x.f] || larga.label || x.f;
+    return `<span class="pf"><b>${larga.icon || ''}</b><u>${x.v === null ? 'din.' : x.v}</u><em>${esc(lbl)}</em></span>`;
+  }).join('');
+
+  const tierTag = p => (p.tier && p.tier !== 'ok')
+    ? ` <span class="tg ${esc(p.tier)}">${esc(p.tier)}</span>` : '';
+
+  const filaHTML = p => {
+    const st = p.status || 'ok';
+    return `<tr class="st-${esc(st)}">
+  <td class="ic">${STOCK_STATUS_ICON[st] || '✅'}</td>
+  <td class="nm">${esc(p.emoji || '')} ${esc(p.name || '')}${tierTag(p)}<span class="br">${esc(p.brand || '')}</span><span class="sr">${stockStarsTxt(p.my_rating)}</span></td>
+  <td class="pfs">${perfilHTML(p)}</td>
+</tr>`;
+  };
+
+  const gruposHTML = Object.entries(groups).map(([cat, items]) => `<div class="grp">
+  <h2>${esc(cat)} <span class="cnt">${items.length}</span></h2>
+  <table>${items.map(filaHTML).join('')}</table>
+</div>`).join('');
+
+  const fueraHTML = fueraMatriz.length ? `<div class="grp fuera">
+  <h2>Fuera de la matriz de dosis <span class="cnt">${fueraMatriz.length}</span></h2>
+  <p class="nota">Existen en el catálogo pero no tienen fila en <code>activos-matriz.js</code>: <b>no cuentan para ningún eje de Progreso.</b></p>
+  <table>${fueraMatriz.map(filaHTML).join('')}</table>
+</div>` : '';
+
+  const n = allProducts.length;
+  const cOk  = allProducts.filter(p => (p.status || 'ok') === 'ok').length;
+  const cLow = allProducts.filter(p => p.status === 'low').length;
+  const cOut = allProducts.filter(p => p.status === 'out').length;
+
+  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Stock — por tipo y calificación técnica</title>
+<style>
+body{font-family:Georgia,serif;max-width:760px;margin:24px auto;color:#2A2420;padding:0 16px}
+h1{font-size:20px;margin:0 0 4px}
+h2{font-size:12px;margin:0 0 6px;border-bottom:1px solid #ddd;padding-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
+.cnt{float:right;font-weight:400;color:#999;letter-spacing:0}
+.sub{font-size:12px;color:#666;margin:0 0 18px;line-height:1.55}
+.grp{margin-bottom:20px;page-break-inside:avoid}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td{padding:5px 4px;border-bottom:1px solid #eee;vertical-align:middle}
+.ic{width:18px}
+.nm{line-height:1.3}
+.br{color:#8A8078;font-size:11px;display:block}
+.sr{color:#C4818A;font-size:10.5px;letter-spacing:1px}
+.tg{font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:1px 5px;border-radius:9px;border:1px solid #3A8A3A;color:#3A8A3A;vertical-align:2px}
+.tg.good{border-color:#C4818A;color:#C4818A}
+.pfs{text-align:right;white-space:nowrap;width:250px}
+.pf{display:inline-block;margin-left:11px;text-align:center;font-size:11px}
+.pf b{font-weight:400;font-size:10px;display:block;line-height:1}
+.pf u{text-decoration:none;font-weight:700;font-size:12.5px;display:block;line-height:1.25}
+.pf em{font-style:normal;font-size:8.5px;text-transform:uppercase;letter-spacing:.04em;color:#8A8078;display:block}
+.st-out .nm,.st-out .pfs{opacity:.45}
+.fuera h2{color:#B4501E;border-color:#E8C0AE}
+.nota{font-size:11px;color:#666;margin:0 0 8px;line-height:1.5}
+@media print{.no-print{display:none}body{margin:0}}
+</style></head><body>
+<button class="no-print" onclick="window.print()" style="padding:9px 18px;margin-bottom:16px;cursor:pointer">🖨️ Imprimir / guardar como PDF</button>
+<h1>Stock · ${n} productos</h1>
+<p class="sub">${STOCK_STATUS_ICON.ok} ${cOk} tengo · ${STOCK_STATUS_ICON.low} ${cLow} reponer · ${STOCK_STATUS_ICON.out} ${cOut} sin stock · generado ${new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })}<br>
+Agrupado por tipo. Dentro de cada tipo, por calificación técnica: primero el <i>tier</i> (best · good · ok), luego el perfil de potencias comparado de mayor a menor. Los SPF marcan <b>din.</b> porque su dosis la calcula el motor con el UV del día.</p>
+${gruposHTML}
+${fueraHTML}
+<p style="font-size:10px;color:#999;margin-top:26px">Generado por Skincare Tracker · los puntajes salen de PRODUCT_DOSE en activos-matriz.js.</p>
+</body></html>`);
+  w.document.close();
+}
+
 function invItemDetailHTML(item) {
   let html = item.note ? `<div>${fmtRich(item.note)}</div>` : '';
   if (item.how_to_apply) html += `<div class="inv-detail-section"><div class="inv-detail-section-title">Cómo aplicar</div>${fmtRich(item.how_to_apply)}</div>`;
