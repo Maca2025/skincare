@@ -1,0 +1,6 @@
+# Basura que macOS deja en cada carpeta. Se regenera sola; versionarla
+# ensuciaría cada commit con ruido que no es del proyecto.
+.DS_Store
+
+# Lo mismo, en subcarpetas.
+**/.DS_Store
