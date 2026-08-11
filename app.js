@@ -1319,7 +1319,7 @@ async function loadHistory() {
   // ── SOBRE-EXPOSICIÓN A IRRITANTES: SE RASTREA POR ZONA, NO GLOBAL ─────────
   // Antes era un solo mapa `ds → 1` que TODOS los ejes consultaban contra su
   // propio `diasIdeales`. Resultado: 5 noches de tretinoína facial hacían que
-  // el eje `cabello` (diasIdeales 3) avisara "1 día de más con retinoide",
+  // el eje `cabello` (techo 3) avisara "1 día de más con retinoide",
   // cuando ningún producto capilar es irritante. Aplicarte un retinoide en la
   // cara no dice nada sobre tu pelo.
   // Ahora el día se marca en la ZONA donde de verdad se aplicó, deducida de los
@@ -1428,8 +1428,8 @@ async function loadHistory() {
       if (!pts.some(p => p > 0)) return null;
       // La semana en curso está incompleta: se prorratea el ideal por los días
       // transcurridos. Si no, el lunes parecería un desplome del 90% al 10%.
-      const idealDias = cfg.diasIdeales * (days.length / 7);
-      return doseWeekPct(pts, cfg.techoDiario, idealDias);
+      const techoDias = cfg.diasTecho * (days.length / 7);
+      return doseWeekPct(pts, cfg.techoDiario, techoDias);
     });
     const firstIdx = weekly.findIndex(w => w != null);
     if (firstIdx === -1) return null;
@@ -1441,9 +1441,17 @@ async function loadHistory() {
     // cabello nunca avisan, porque ningún irritante actúa ahí.
     const esEjeDeAviso = EJE_IRRITANTE_POR_ZONA[cfg.zona] === axKey;
     const overDays = esEjeDeAviso
-      ? overExposureDays(ultimaSemana.map(ds => (irritantByDateZona[ds] || {})[cfg.zona] || 0), cfg.diasIdeales)
+      ? overExposureDays(ultimaSemana.map(ds => (irritantByDateZona[ds] || {})[cfg.zona] || 0), cfg.diasTecho)
       : 0;
-    return { pct, weekly, overDays, cfg };
+    // PISO: días activos que faltan esta semana. Se prorratea con Math.floor
+    // porque la semana en curso está incompleta — el miércoles no puede
+    // reclamarte los 5 días de un piso semanal. Con floor, un piso de 5 pide 2
+    // días activos cuando han pasado 3. Todavía no se dibuja en ningún lado:
+    // esto es la plomería para la marca de la barra y el despachador del día.
+    const pisoProrrateado = Math.floor(cfg.diasPiso * (ultimaSemana.length / 7));
+    const pisoFalta = pisoShortfallDays(
+      ultimaSemana.map(ds => (dosePtsByDate[ds] || {})[axKey] || 0), pisoProrrateado);
+    return { pct, weekly, overDays, pisoFalta, cfg };
   };
   // Las listas de ejes se DERIVAN de DOSE_AXES por su `zona` — ya no se
   // escriben a mano (regla 5). Antes eran tres arrays literales y cada eje
@@ -1976,7 +1984,7 @@ function debugDoseAxis(axKey = 'proteccion') {
   }
   const cfg = (typeof DOSE_AXES !== 'undefined') ? DOSE_AXES[axKey] : null;
   if (!cfg) { console.log('Eje no encontrado:', axKey, '— revisa DOSE_AXES en activos-matriz.js para ver las claves válidas.'); return null; }
-  console.log(`── ${cfg.label} (eje "${axKey}") — techoDiario=${cfg.techoDiario} · diasIdeales=${cfg.diasIdeales} ──`);
+  console.log(`── ${cfg.label} (eje "${axKey}") — techoDiario=${cfg.techoDiario} · diasPiso=${cfg.diasPiso} · diasTecho=${cfg.diasTecho} ──`);
   const filas = [];
   const semanas = weeks.map((days, wi) => {
     if (!days.length) return null;
@@ -1987,11 +1995,13 @@ function debugDoseAxis(axKey = 'proteccion') {
       return { ds, crudo };
     });
     if (!diario.some(d => d.crudo > 0)) return null;
-    const idealDias = cfg.diasIdeales * (days.length / 7);
+    const techoDias = cfg.diasTecho * (days.length / 7);
     const totalSemana = diario.reduce((a, d) => a + Math.min(d.crudo, cfg.techoDiario), 0);
-    const techoSemana = Math.round(cfg.techoDiario * idealDias);
+    const techoSemana = Math.round(cfg.techoDiario * techoDias);
     const pct = Math.min(100, Math.round(totalSemana / techoSemana * 100));
-    return { semana: wi + 1, dias_con_dato: days.length, idealDias: Math.round(idealDias * 10) / 10, puntos_semana: totalSemana, techo_semana: techoSemana, pct_semana: pct };
+    const diasActivos = diario.filter(d => d.crudo > 0).length;
+    const pisoProrrateado = Math.floor(cfg.diasPiso * (days.length / 7));
+    return { semana: wi + 1, dias_con_dato: days.length, techoDias: Math.round(techoDias * 10) / 10, puntos_semana: totalSemana, techo_semana: techoSemana, pct_semana: pct, dias_activos: diasActivos, piso: pisoProrrateado, piso_falta: Math.max(0, pisoProrrateado - diasActivos) };
   });
   console.log('Detalle día por día:');
   console.table(filas);

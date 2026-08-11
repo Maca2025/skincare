@@ -66,32 +66,51 @@ const ZONAS = {
 // monofunción usan su propio nombre.
 //
 // techoDiario  = dosis máxima útil en un día (rendimientos decrecientes).
-// diasIdeales  = días/semana para llegar al 100%. Pasarse NO penaliza el
-//                puntaje (se topa), pero dispara el aviso de sobre-exposición.
+//
+// diasPiso y diasTecho reemplazan al viejo `diasIdeales`, que hacía DOS trabajos
+// incompatibles: era a la vez la meta y el límite. Un solo número no puede ser
+// las dos cosas, y esa era la causa técnica de la rigidez: con textura en 4,
+// seis noches de tretinoína ya disparaban "1 día de más con retinoide" — la app
+// contaba como exceso justo lo que se quería hacer.
+//
+// diasPiso   = META. Días ACTIVOS por semana que se buscan como mínimo. Se mide
+//              en días con cualquier dosis (no en dosis acumulada): así un piso
+//              siempre es cumplible con el producto que haya. Alimenta la marca
+//              en la barra y la urgencia de la sugerencia del día.
+//              `cuerpo_aclarado` va en 0 a propósito: ZONAS_APTAS_OVERRIDE fija
+//              los productos de kójico en 'manos', así que el eje no tiene con
+//              qué llenarse y un piso ahí sería una alarma inapagable.
+// diasTecho  = LÍMITE. Denominador de la barra (100% = techoDiario × diasTecho)
+//              y umbral del aviso de sobre-exposición. Pasarse del piso NO
+//              penaliza; pasarse del techo avisa.
+//
+// Verificado el 11-ago-2026: sólo `textura` y `cuello_textura` cambian de
+// denominador (4 → 6). Los otros 21 ejes ya tenían diasIdeales = diasTecho, así
+// que sus barras históricas no se mueven.
 const DOSE_AXES = {
-  proteccion: { zona: 'cara', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasIdeales: 7 },
-  aclarado: { zona: 'cara', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 370, diasIdeales: 7 },
-  textura: { zona: 'cara', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 265, diasIdeales: 4 },
-  barrera: { zona: 'cara', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 460, diasIdeales: 7 },
-  firmeza: { zona: 'cara', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 200, diasIdeales: 6 },
-  cuello_proteccion: { zona: 'cuello', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasIdeales: 7 },
-  cuello_aclarado: { zona: 'cuello', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 135, diasIdeales: 7 },
-  cuello_textura: { zona: 'cuello', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 110, diasIdeales: 4 },
-  cuello_barrera: { zona: 'cuello', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 150, diasIdeales: 7 },
-  cuello_firmeza: { zona: 'cuello', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 170, diasIdeales: 6 },
-  cuerpo_proteccion: { zona: 'cuerpo', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasIdeales: 7 },
-  cuerpo_aclarado: { zona: 'cuerpo', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasIdeales: 7 },  // PROVISIONAL — sin datos reales todavía
-  cuerpo_textura: { zona: 'cuerpo', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 80, diasIdeales: 3 },
-  cuerpo_barrera: { zona: 'cuerpo', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 95, diasIdeales: 7 },
-  cuerpo_firmeza: { zona: 'cuerpo', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 75, diasIdeales: 5 },
-  manos_proteccion: { zona: 'manos', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasIdeales: 7 },
-  manos: { zona: 'manos', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasIdeales: 7 },
-  manos_textura: { zona: 'manos', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 80, diasIdeales: 3 },  // PROVISIONAL — sin datos reales todavía
-  manos_barrera: { zona: 'manos', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 90, diasIdeales: 7 },  // PROVISIONAL — sin datos reales todavía
-  manos_firmeza: { zona: 'manos', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 75, diasIdeales: 6 },  // PROVISIONAL — sin datos reales todavía
-  pies: { zona: 'pies', funcion: 'queratolitico', icon: '🦶', label: 'Queratolítico', color: '#8A6A00', techoDiario: 85, diasIdeales: 7 },
-  labios: { zona: 'labios', funcion: 'labial', icon: '💋', label: 'Cuidado labial', color: '#A8455E', techoDiario: 110, diasIdeales: 7 },
-  cabello: { zona: 'cabello', funcion: 'capilar', icon: '💇', label: 'Cuidado capilar', color: '#5B8FA8', techoDiario: 70, diasIdeales: 3 },
+  proteccion: { zona: 'cara', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasPiso: 7, diasTecho: 7 },
+  aclarado: { zona: 'cara', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 370, diasPiso: 5, diasTecho: 7 },
+  textura: { zona: 'cara', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 265, diasPiso: 3, diasTecho: 6 },
+  barrera: { zona: 'cara', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 460, diasPiso: 6, diasTecho: 7 },
+  firmeza: { zona: 'cara', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 200, diasPiso: 4, diasTecho: 6 },
+  cuello_proteccion: { zona: 'cuello', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasPiso: 7, diasTecho: 7 },
+  cuello_aclarado: { zona: 'cuello', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 135, diasPiso: 3, diasTecho: 7 },
+  cuello_textura: { zona: 'cuello', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 110, diasPiso: 2, diasTecho: 6 },
+  cuello_barrera: { zona: 'cuello', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 150, diasPiso: 5, diasTecho: 7 },
+  cuello_firmeza: { zona: 'cuello', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 170, diasPiso: 3, diasTecho: 6 },
+  cuerpo_proteccion: { zona: 'cuerpo', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasPiso: 7, diasTecho: 7 },
+  cuerpo_aclarado: { zona: 'cuerpo', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasPiso: 0, diasTecho: 7 },  // PROVISIONAL — sin datos reales todavía
+  cuerpo_textura: { zona: 'cuerpo', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 80, diasPiso: 2, diasTecho: 3 },
+  cuerpo_barrera: { zona: 'cuerpo', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 95, diasPiso: 5, diasTecho: 7 },
+  cuerpo_firmeza: { zona: 'cuerpo', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 75, diasPiso: 2, diasTecho: 5 },
+  manos_proteccion: { zona: 'manos', funcion: 'proteccion', icon: '🛡️', label: 'Protección solar', color: '#C4818A', techoDiario: 500, diasPiso: 7, diasTecho: 7 },
+  manos: { zona: 'manos', funcion: 'aclarado', icon: '🎯', label: 'Aclarado / pigmentación', color: '#C47A00', techoDiario: 90, diasPiso: 3, diasTecho: 7 },
+  manos_textura: { zona: 'manos', funcion: 'textura', icon: '🔬', label: 'Renovación, textura y poros', color: '#7E6BB0', techoDiario: 80, diasPiso: 2, diasTecho: 3 },  // PROVISIONAL — sin datos reales todavía
+  manos_barrera: { zona: 'manos', funcion: 'barrera', icon: '💧', label: 'Barrera e hidratación', color: '#3A8A7A', techoDiario: 90, diasPiso: 5, diasTecho: 7 },  // PROVISIONAL — sin datos reales todavía
+  manos_firmeza: { zona: 'manos', funcion: 'firmeza', icon: '🧬', label: 'Firmeza / colágeno', color: '#B0567E', techoDiario: 75, diasPiso: 2, diasTecho: 6 },  // PROVISIONAL — sin datos reales todavía
+  pies: { zona: 'pies', funcion: 'queratolitico', icon: '🦶', label: 'Queratolítico', color: '#8A6A00', techoDiario: 85, diasPiso: 4, diasTecho: 7 },
+  labios: { zona: 'labios', funcion: 'labial', icon: '💋', label: 'Cuidado labial', color: '#A8455E', techoDiario: 110, diasPiso: 5, diasTecho: 7 },
+  cabello: { zona: 'cabello', funcion: 'capilar', icon: '💇', label: 'Cuidado capilar', color: '#5B8FA8', techoDiario: 70, diasPiso: 2, diasTecho: 3 },
 };
 
 // ── POTENCIA POR FUNCIÓN (sin zona) ─────────────────────────────────────────

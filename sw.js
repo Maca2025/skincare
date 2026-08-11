@@ -4,6 +4,11 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v27 — motor de cadencia, primera pieza: `diasIdeales` se parte en `diasPiso` y
+//       `diasTecho`. OBLIGATORIO subir la caché aquí: activos-matriz.js, pure.js
+//       y app.js cambian JUNTOS y no se pueden servir mezclados. Un app.js nuevo
+//       leyendo un activos-matriz.js viejo recibe `cfg.diasTecho === undefined`,
+//       doseWeekPct devuelve null y las barras de Progreso desaparecen.
 // v21 — filtro por ZONA en "Historial de aplicaciones", en cascada con los
 // filtros de tipo de producto y producto específico ya existentes. Resuelve
 // zona con el mismo respaldo (r.zones → PRODUCT_ZONAS) que usa el motor de
@@ -42,7 +47,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v26';
+const CACHE = 'skincare-shell-v27';
 const SHELL = [
   './',
   './index.html',

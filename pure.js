@@ -143,27 +143,59 @@ function spfScoreOf(p) {
 //     midiera día por día, las noches de descanso contarían como falla y
 //     volveríamos a castigar la desviación, que es justo lo que queremos evitar.
 //
-// Pasarse del ideal NO baja el puntaje (se topa en 100): sobre-aplicar se avisa
+// Pasarse del techo NO baja el puntaje (se topa en 100): sobre-aplicar se avisa
 // aparte con `overExposureDays`, no se castiga con el número.
 //
+// El denominador es `diasTecho`, el LÍMITE del eje — no su meta. Así el 100% de
+// la barra significa "llegué al máximo útil de la semana", y la meta (el piso)
+// se dibuja como una marca en el camino. Antes el denominador era el viejo
+// `diasIdeales`, que era meta y límite a la vez: la barra se llenaba al llegar
+// a la meta y ya no había forma de ver el margen que quedaba antes del exceso.
+//
 // dailyPoints: array de puntos crudos por día (7 posiciones = una semana).
-function doseWeekPct(dailyPoints, techoDiario, diasIdeales) {
-  if (!Array.isArray(dailyPoints) || !techoDiario || !diasIdeales) return null;
+function doseWeekPct(dailyPoints, techoDiario, diasTecho) {
+  if (!Array.isArray(dailyPoints) || !techoDiario || !diasTecho) return null;
   const total = dailyPoints.reduce((a, p) => a + Math.min(p || 0, techoDiario), 0);
-  return Math.min(100, Math.round(total / (techoDiario * diasIdeales) * 100));
+  return Math.min(100, Math.round(total / (techoDiario * diasTecho) * 100));
 }
 
-// Días de la semana con IRRITANTES por encima de la frecuencia ideal. Es un
-// AVISO (riesgo de irritación), no una penalización del puntaje. Se tolera 1
-// día de margen antes de avisar.
+// Días de la semana con IRRITANTES por encima del TECHO del eje. Es un AVISO
+// (riesgo de irritación), no una penalización del puntaje.
+//
+// YA NO tolera +1 día de margen. Ese margen existía porque `diasIdeales` era la
+// meta, y avisar en cuanto se pasaba de la meta era demasiado pronto. Con un
+// techo explícito el margen ya está dentro del número: `textura` tiene techo 6
+// justamente para que seis noches de tretinoína sean válidas y la séptima avise.
+// Dejar el +1 encima haría que el techo real fuera 7 y el aviso nunca sonara.
 //
 // OJO: recibe días con retinoide o ácido exfoliante (ver IRRITANTES), NO los
 // puntos del eje `textura`. La niacinamida, el azelaico y el NAG suben textura
 // sin irritar; contarlos aquí disparaba avisos falsos.
-function overExposureDays(irritantDays, diasIdeales) {
-  if (!Array.isArray(irritantDays) || !diasIdeales) return 0;
+function overExposureDays(irritantDays, diasTecho) {
+  if (!Array.isArray(irritantDays) || !diasTecho) return 0;
   const activos = irritantDays.filter(p => (p || 0) > 0).length;
-  return Math.max(0, activos - (diasIdeales + 1));
+  return Math.max(0, activos - diasTecho);
+}
+
+// Días que faltan para cumplir el PISO semanal del eje. Es la contraparte de
+// `overExposureDays`: uno mira hacia arriba (me pasé del techo), este hacia
+// abajo (no llegué a la meta).
+//
+// SE MIDE EN DÍAS ACTIVOS, NO EN DOSIS ACUMULADA. Decisión del 11-ago-2026, y
+// es la que hace que el motor sea cumplible. Si el piso se midiera como
+// fracción de la barra —o sea `diasPiso × techoDiario` de dosis— haría falta
+// llegar al techo diario CADA día del piso, y eso exige amontonar productos:
+// `aclarado` con piso 5 pediría 21 días de Finacea sola, u 11 con los dos más
+// potentes. Imposible dentro de una semana. Contando días activos, un solo
+// producto basta para cumplir cualquier piso, que es como se decidieron los 23
+// números: pensando en días de calendario.
+//
+// Un piso de 0 (hoy sólo `cuerpo_aclarado`) nunca reclama: el eje sigue
+// midiendo lo que llegue, pero no puede generar una alarma inapagable.
+function pisoShortfallDays(dailyPoints, diasPiso) {
+  if (!Array.isArray(dailyPoints) || !diasPiso) return 0;
+  const activos = dailyPoints.filter(p => (p || 0) > 0).length;
+  return Math.max(0, diasPiso - activos);
 }
 // ============================================================================
 // AGREGAR AL FINAL DE pure.js
