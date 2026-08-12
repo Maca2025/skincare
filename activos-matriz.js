@@ -128,6 +128,7 @@ const PRODUCT_DOSE = {
   '5a327857-b34e-439d-95dc-b9461e8e8c62': { proteccion: null },  // Anthelios Spray Invisible SPF50+ Corporal
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': { proteccion: null, aclarado: 25 },  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': { proteccion: null },  // Anthelios UVMune 400 SPF50
+  '7006be2c-a220-428a-8a73-5bd13e0169dd': { proteccion: null },  // Anthelios UVMune 400 Fluido Tintado SPF50+
   '1b656610-fce5-45a6-b6e8-8ec33e209653': { aclarado: 70, barrera: 25 },  // Anti-Pigment Contorno de Ojos
   '9b91d98e-c293-4e27-8cf1-b5faae440bad': { textura: 20 },  // BALANCEFUL Pore Cleansing Foam
   'f5419858-d505-4621-9379-bdedad67dd50': { queratolitico: 85 },  // Barra Urea 60% (Aguacate + Jojoba)
@@ -252,6 +253,7 @@ const PRODUCT_ZONAS = {
   '5a327857-b34e-439d-95dc-b9461e8e8c62': ['cuerpo', 'manos'],  // Anthelios Spray Invisible SPF50+ Corporal
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': ['cara', 'cuello', 'manos'],  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': ['cara', 'cuello', 'manos'],  // Anthelios UVMune 400 SPF50
+  '7006be2c-a220-428a-8a73-5bd13e0169dd': ['cara', 'cuello', 'manos'],  // Anthelios UVMune 400 Fluido Tintado SPF50+
   '1b656610-fce5-45a6-b6e8-8ec33e209653': ['cara'],  // Anti-Pigment Contorno de Ojos
   '9b91d98e-c293-4e27-8cf1-b5faae440bad': ['cara'],  // BALANCEFUL Pore Cleansing Foam
   'f5419858-d505-4621-9379-bdedad67dd50': ['pies'],  // Barra Urea 60% (Aguacate + Jojoba)
