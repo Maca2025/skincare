@@ -125,6 +125,7 @@ const PRODUCT_DOSE = {
   '4a9ab636-db1f-424f-bcfc-7abc237c673c': { barrera: 45 },  // 345 Relief Cream Mist
   '7454f16a-51b3-44c9-b392-4d97b50038b8': { barrera: 35 },  // Aceite de Ducha PH5
   '6447629f-d5f2-4a83-b011-006b25cf18e3': { queratolitico: 90 },  // Aceite Urea 60%
+  '5a327857-b34e-439d-95dc-b9461e8e8c62': { proteccion: null },  // Anthelios Spray Invisible SPF50+ Corporal
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': { proteccion: null, aclarado: 25 },  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': { proteccion: null },  // Anthelios UVMune 400 SPF50
   '1b656610-fce5-45a6-b6e8-8ec33e209653': { aclarado: 70, barrera: 25 },  // Anti-Pigment Contorno de Ojos
@@ -181,6 +182,7 @@ const PRODUCT_DOSE = {
   '1e59f9b3-18b8-4a98-91a0-376a0f8f72f8': { firmeza: 80, textura: 30, barrera: 15 },  // Multi-Peptide + Copper Peptides 1% Serum
   '6b2ab52e-8479-4016-a8eb-2a61864491f7': { firmeza: 55, barrera: 40 },  // Neck and Chest Firming Cream
   'c74e3fdb-3665-438e-9cbb-574459d0e87f': { textura: 65, aclarado: 55, barrera: 50 },  // Niacinamide 10% + Zinc 1% Serum
+  '279908b4-2a58-4478-9bc0-2d067018e78a': { firmeza: 50, barrera: 45, aclarado: 30 },  // No.9 NAD+ Collagen Under Eye Patches
   '6d30d838-50c9-461c-a93a-7e32eba414f0': { proteccion: null },  // Nivea Sun Silky UV Stick SPF50
   '83f81d90-df90-4b65-897c-029c479acb62': { firmeza: 65, barrera: 45, aclarado: 25 },  // Numbuzin Toner No.9 NAD+ PDRN
   'be7a694e-0211-4d3f-b9ed-0c2d83f05943': { labial: 60 },  // Ollie Lip Hydrating Balm SPF50
@@ -223,6 +225,7 @@ const PRODUCT_DOSE = {
   '21a728f9-3cfa-43eb-a3fe-8a57d417240f': { barrera: 85 },  // Sleeping Pack Ceramidas + Cica
   '0dfd4acf-5300-4822-aa77-f048fa588cd8': { barrera: 30, textura: 15 },  // Spray Ácido Hipocloroso
   'b06008de-44b8-4d11-b6a8-0de0dc543bed': { aclarado: 85, firmeza: 60, textura: 20 },  // Suero Vitamina C 20%
+  'c444b554-0e34-4da9-b28e-c3fb085ad9a6': { proteccion: null },  // Sunforgettable Total Protection Face Shield FLEX SPF 50
   '9c30b24f-9e2b-422c-8518-0536579cf894': { aclarado: 55, barrera: 40, textura: 35 },  // The Ordinary Saccharomyces Ferment 30% Milky Toner
   'f95c263b-102e-46c9-bc24-485bf192cdc9': { barrera: 40, firmeza: 35, aclarado: 30 },  // Tocobo Collagen Eye Gel Cream
   '2026eae7-7ae3-4596-b61f-8b3bb5cd2088': { proteccion: null },  // Tocobo Sun Stick Cotton Soft SPF50
@@ -246,6 +249,7 @@ const PRODUCT_ZONAS = {
   '4a9ab636-db1f-424f-bcfc-7abc237c673c': ['cara'],  // 345 Relief Cream Mist
   '7454f16a-51b3-44c9-b392-4d97b50038b8': ['cuerpo'],  // Aceite de Ducha PH5
   '6447629f-d5f2-4a83-b011-006b25cf18e3': ['pies'],  // Aceite Urea 60%
+  '5a327857-b34e-439d-95dc-b9461e8e8c62': ['cuerpo', 'manos'],  // Anthelios Spray Invisible SPF50+ Corporal
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': ['cara', 'cuello', 'manos'],  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': ['cara', 'cuello', 'manos'],  // Anthelios UVMune 400 SPF50
   '1b656610-fce5-45a6-b6e8-8ec33e209653': ['cara'],  // Anti-Pigment Contorno de Ojos
@@ -302,6 +306,7 @@ const PRODUCT_ZONAS = {
   '1e59f9b3-18b8-4a98-91a0-376a0f8f72f8': ['cara', 'cuello'],  // Multi-Peptide + Copper Peptides 1% Serum
   '6b2ab52e-8479-4016-a8eb-2a61864491f7': ['cuello'],  // Neck and Chest Firming Cream
   'c74e3fdb-3665-438e-9cbb-574459d0e87f': ['cara'],  // Niacinamide 10% + Zinc 1% Serum
+  '279908b4-2a58-4478-9bc0-2d067018e78a': ['cara'],  // No.9 NAD+ Collagen Under Eye Patches
   '6d30d838-50c9-461c-a93a-7e32eba414f0': ['cara', 'cuello', 'manos'],  // Nivea Sun Silky UV Stick SPF50
   '83f81d90-df90-4b65-897c-029c479acb62': ['cara'],  // Numbuzin Toner No.9 NAD+ PDRN
   'be7a694e-0211-4d3f-b9ed-0c2d83f05943': ['labios'],  // Ollie Lip Hydrating Balm SPF50
@@ -333,6 +338,7 @@ const PRODUCT_ZONAS = {
   '21a728f9-3cfa-43eb-a3fe-8a57d417240f': ['cara'],  // Sleeping Pack Ceramidas + Cica
   '0dfd4acf-5300-4822-aa77-f048fa588cd8': ['cara'],  // Spray Ácido Hipocloroso
   'b06008de-44b8-4d11-b6a8-0de0dc543bed': ['cara'],  // Suero Vitamina C 20%
+  'c444b554-0e34-4da9-b28e-c3fb085ad9a6': ['cara', 'cuello', 'manos'],  // Sunforgettable Total Protection Face Shield FLEX SPF 50
   // 'cuello' entra por la fusión con b6026bce (el mismo tónico catalogado como
   // exfoliante), que sí lo declaraba. Registros anteriores fijados a {cara} en
   // la migración. La POTENCIA no se fusionó: se conserva la del sobreviviente
