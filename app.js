@@ -1135,8 +1135,20 @@ async function loadHistory() {
   allProducts.forEach(p => { _prodById[p.id] = p; });
   const appProd = r => (r.product_id && _prodById[r.product_id]) || { id: null, name: r.product_name || '', emoji: '', category: '', clinical_roles: [], clinical_role: null, schedule_days: null };
   const allAppsWithProd = apps.map(r => ({ r, rp: appProd(r) }));
+  // La CATEGORÍA manda sobre el nombre. Antes esta regla solo miraba el nombre:
+  // clasificaba como SPF FACIAL cualquier producto con "spf" o "solar" que no
+  // dijera corporal/cuerpo/body, sin mirar dónde estaba catalogado. El Isdin
+  // Fotoprotector Wet Skin, que vive en ☀️ SPF Corporal, caía ahí — y cada vez
+  // que se registraba en cuerpo subía también la barra de protección de la CARA.
+  // Ver claude/auditoria-protectores-solares.md §1.5.
+  //
+  // La heurística por nombre se CONSERVA, pero solo alcanza a las categorías que
+  // podrían ser faciales. Es deliberado: los registros viejos sin `product_id`
+  // llegan con category '' (ver `appProd` arriba) y sin ella su histórico de
+  // protección facial se iría a cero de golpe.
+  const CATS_NUNCA_FACIALES = new Set(['☀️ SPF Corporal', '🧴 Cuerpo', '✋ Manos', '🦶 Pies', '💋 Labios']);
   const ROLE_CONFIG = {
-    spf_facial:           { label: 'Protección solar', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (x.category !== '💋 Labios' && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body|labios|\blip\b/i.test(x.name || '')) },
+    spf_facial:           { label: 'Protección solar', icon: '🛡️', color: '#C4818A', legacyRegex: x => x.category === '🌞 SPF Facial' || (!CATS_NUNCA_FACIALES.has(x.category) && /spf|solar/i.test(x.name || '') && !/corporal|cuerpo|body|labios|\blip\b/i.test(x.name || '')) },
     despigmentacion:      { label: 'Despigmentación',         icon: '🎯', color: '#C47A00', legacyRegex: x => /finacea|azela|melascreen|antipigment|despigmentante/i.test(x.name || '') },
     barrera:              { label: 'Barrera sana',            icon: '💧', color: '#3A8A7A', legacyRegex: x => x.category === '💧 Hidratantes' || /hydro boost|barrier|rice|niacinamide|ceramide/i.test(x.name || '') },
     regeneracion_celular: { label: 'Renovación celular',      icon: '🔬', color: '#7E6BB0', legacyRegex: x => /tretino|retin-a/i.test(x.name || '') && !/corporal|cuerpo|body/i.test(x.name || '') },
@@ -4089,8 +4101,8 @@ const COMPARE_COLS = [
   { id:'uvalong',
     label:'UVA Largos',
     title:'UVA de Onda Larga (370–400 nm)',
-    desc:'La fracción más profunda del espectro UVA. La mayoría de los filtros solares tradicionales no cubren este rango. Filtros como Tinosorb M, Mexoryl XL o Bemotrizinol lo alcanzan.',
-    melasma:'Suma cobertura real contra el daño acumulativo que forma sunspots. L\'Oréal UV Defender y Eucerin Pigment Control cubren este rango.' },
+    desc:'La fracción más profunda del espectro UVA. Casi ningún filtro llega de verdad: la avobenzona tiene su pico en 357 nm y el Tinosorb S se apaga alrededor de 370. Solo dos lo cubren — el Mexoryl 400 (λmax 385, exclusivo de LRP UVMune 400) y el Tinosorb M, que además de absorber dispersa. El Mexoryl XL NO llega: su λmax es 341 y se confunde con el 400 por el nombre.',
+    melasma:'Suma cobertura contra el daño acumulativo que forma los léntigos, pero es un diferenciador de segunda línea: toda la evidencia clínica del tramo sale de L\'Oréal, dueña del único filtro que llega. De tu arsenal solo lo cubren el Anthelios UVMune 400 y el SKIN1004 Hyalu-Cica Water-Fit Sun Serum.' },
   { id:'uva400',
     label:'UVA 400nm',
     title:'UVA 400nm — Cobertura UV completa hasta el límite con la luz visible',
@@ -4109,8 +4121,8 @@ const COMPARE_COLS = [
   { id:'ira',
     label:'IR-A',
     title:'Infrarrojo A — Calor profundo (700–1400 nm)',
-    desc:'Radiación infrarroja que penetra hasta la dermis profunda y genera calor en los tejidos. Solo algunos filtros avanzados como el Heliocare 360 (con tecnología Fernblock) ofrecen protección en este rango.',
-    melasma:'En sunspots el calor tiene un papel menor (a diferencia del melasma, donde sí es detonante). Es un extra agradable, no un criterio de compra.' },
+    desc:'Radiación infrarroja que penetra hasta la dermis profunda y genera calor. La columna sale vacía A PROPÓSITO: la literatura independiente considera prematuro incorporar protección IR a un cosmético, los estudios positivos no separan radiación de calor, y la exposición solar anual a IR-A iguala la de trabajadores de hornos de acero, que no muestran daño crónico. Heliocare, Colorescience e ISDIN lo anuncian; ninguno con evidencia clínica independiente.',
+    melasma:'En léntigos el calor tiene un papel menor (a diferencia del melasma, donde sí es detonante). No es criterio de compra. Ver claude/auditoria-protectores-solares.md §1.10.' },
   { id:'act',
     label:'Activo ✦',
     title:'Activo Despigmentante — Thiamidol (Eucerin)',

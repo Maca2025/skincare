@@ -4,6 +4,11 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v30 — la regla que decide si un producto cuenta como SPF FACIAL deja de mirar
+//   el nombre y mira la CATEGORÍA (el Isdin Wet Skin, corporal, inflaba la barra
+//   de la cara). Y el texto de la tabla comparativa se pone al día con la
+//   auditoría: la columna UVA Largos nombraba dos protectores que NO cubren ese
+//   tramo, y la de IR-A prometía una protección que nadie tiene.
 // v29 — la barra de pestañas se parte en dos: arriba lo que ESCRIBE en la base
 //   (Today · Photos · Stock), abajo lo que la MIRA (Progreso · Historial ·
 //   Rutinas · Capas), con un fondo distinto cada una. Y entra la pestaña
@@ -55,7 +60,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v29';
+const CACHE = 'skincare-shell-v30';
 const SHELL = [
   './',
   './index.html',
