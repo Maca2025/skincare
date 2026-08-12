@@ -33,13 +33,24 @@
     <div class="date" id="hdr-date"></div>
     <button class="theme-btn" id="theme-btn" onclick="cicloTema()" title="Tema: automático / claro / oscuro">🌗</button>
   </div>
-  <div class="tabs">
+  <!-- Dos barras a propósito. Arriba lo que ESCRIBE en la base, abajo lo que la
+       MIRA. El fondo distinto es el que avisa en qué modo estás antes de que
+       leas la etiqueta; por eso el color va en la barra y no en el botón activo.
+       `showTab` no necesitó cambio: ya limpia el estado activo de TODOS los
+       `.tab-btn`, estén en la barra que estén.
+       Los dos límites discutibles: Stock va arriba porque ahí marcas "se me
+       acabó" y das de alta producto nuevo, que es captura; Rutinas va abajo
+       porque se configura una vez y luego se consulta. -->
+  <div class="tabs tabs-hacer">
     <button class="tab-btn active" onclick="showTab('today',this)">☀️ Today</button>
     <button class="tab-btn" onclick="showTab('photos',this)">📸 Photos</button>
+    <button class="tab-btn" onclick="showTab('stock',this)">🧴 Stock</button>
+  </div>
+  <div class="tabs tabs-ver">
     <button class="tab-btn" onclick="showTab('history',this)">📈 Progreso</button>
     <button class="tab-btn" onclick="showTab('log',this)">📋 Historial</button>
-    <button class="tab-btn" onclick="showTab('stock',this)">🧴 Stock</button>
     <button class="tab-btn" onclick="showTab('routines',this)">⚙️ Rutinas</button>
+    <button class="tab-btn" onclick="showTab('capas',this)">🧅 Capas</button>
   </div>
   <!-- Cola offline: se muestra solo si hay registros sin sincronizar.
        Va fuera de las pestañas a propósito, para que se vea en todas. -->
@@ -194,6 +205,202 @@
     <div id="routines-content">
       <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando rutinas...</div>
     </div>
+  </div>
+
+  <!-- CAPAS — cómo superponer dos protectores. El texto sale de la auditoría
+       del 12 de agosto de 2026 (claude/auditoria-protectores-solares.md). -->
+  <div id="tab-capas" class="tab-content">
+
+    <div class="capas-intro">
+      Ningún protector cubre todo el espectro. Superponer dos <b>sí amplía la
+      cobertura</b> — pero no por la razón que suele decirse.
+    </div>
+
+    <div class="capas-combo">
+      <div class="capas-combo-tag">Todos los días</div>
+      <div class="capas-capa">
+        <span class="capas-num">1</span>
+        <div>
+          <div class="capas-prod">Hyalu-Cica Water-Fit Sun Serum</div>
+          <div class="capas-marca">SKIN1004 · aporta el <b>UVA1 largo</b> vía Tinosorb M</div>
+        </div>
+      </div>
+      <div class="capas-capa">
+        <span class="capas-num">2</span>
+        <div>
+          <div class="capas-prod">Pigment Control Tintado</div>
+          <div class="capas-marca">Eucerin · aporta <b>luz visible</b> y <b>Thiamidol</b>, que trata la mancha mientras protege</div>
+        </div>
+      </div>
+      <div class="capas-nota">
+        Es la única pareja del arsenal que cubre las cuatro cosas a la vez: UVB,
+        UVA hasta 400&nbsp;nm, luz visible y despigmentante. El SKIN1004 va abajo
+        porque es el producto más limpio del catálogo — sin fragancia, sin aceites
+        esenciales, sin alcohol denat — y son dos capas diarias sobre piel que
+        además recibe tretinoína.
+      </div>
+    </div>
+
+    <div class="capas-combo alt">
+      <div class="capas-combo-tag">Playa o sol fuerte</div>
+      <div class="capas-capa">
+        <span class="capas-num">1</span>
+        <div>
+          <div class="capas-prod">Anthelios UVMune 400</div>
+          <div class="capas-marca">La Roche-Posay · <b>Mexoryl 400</b>, λmax 385&nbsp;nm</div>
+        </div>
+      </div>
+      <div class="capas-capa">
+        <span class="capas-num">2</span>
+        <div>
+          <div class="capas-prod">Pigment Control Tintado</div>
+          <div class="capas-marca">Eucerin</div>
+        </div>
+      </div>
+      <div class="capas-nota">
+        Sobre el Mexoryl 400 no hay ninguna duda de concentración; sobre el
+        Tinosorb M del SKIN1004 sí (va en posición 7 y su % no se declara).
+        Cuando el sol es el problema, cambias comodidad de piel por certeza de
+        filtro: son dos capas con alcohol denat alto.
+      </div>
+    </div>
+
+    <div class="capas-combo reap">
+      <div class="capas-combo-tag">Para reaplicar a media mañana</div>
+      <div class="capas-capa">
+        <span class="capas-num">↻</span>
+        <div>
+          <div class="capas-prod">Sun Silky UV Stick</div>
+          <div class="capas-marca">NIVEA · DHHB + T150 + Tinosorb S</div>
+        </div>
+      </div>
+      <div class="capas-nota">
+        El único del arsenal que puedes poner encima de cualquier cosa sin
+        pensarlo: <b>sin octinoxato</b>, sin fragancia, sin alcohol. Y el formato
+        stick se aplica presionando en vez de frotando, que es lo que menos
+        perturba la capa de abajo.
+      </div>
+    </div>
+
+    <div class="section" id="sec-capas-fisica">
+      <div class="sec-hdr capas-hdr" onclick="toggleSec('sec-capas-fisica')">
+        <span class="sec-icon">🧪</span>
+        <div class="sec-title">Por qué funciona
+          <div class="sec-sub">Qué suma de verdad y qué no</div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body">
+        <div class="capas-txt">
+          <p><b>Lo que sí suma: el espectro.</b> Dos películas una encima de otra
+          multiplican transmitancias, lo que equivale a que <b>las absorbancias se
+          sumen longitud de onda por longitud de onda</b>. La cobertura resultante
+          es la <i>unión</i> de los dos espectros: si la capa de abajo no absorbe
+          nada entre 380 y 400&nbsp;nm y la de arriba sí, la combinación hereda esa
+          banda. Ninguna capa diluye a la otra.</p>
+
+          <p><b>Lo que no suma: el número.</b> SPF 50 + SPF 50 no es 100. El SPF es
+          el cociente de una integral ponderada, no una cantidad que se apile. El
+          resultado queda entre el mayor de los dos y su producto, y en la práctica
+          mucho más cerca del mayor, porque nadie aplica dosis completa de cada uno.</p>
+
+          <p><b>Y lo mejor documentado: la segunda capa no arrastra la primera.</b>
+          Se midió la masa depositada fotografiando la piel con luz negra. Una
+          aplicación deja <b>0,60&nbsp;mg/cm²</b> y <b>20% de piel descubierta</b>.
+          Dos aplicaciones dejan <b>1,10</b> y <b>9% descubierta</b>. Si la segunda
+          arrastrara la primera, la masa no habría subido.</p>
+
+          <p class="capas-dato">De ahí sale casi toda la ganancia real: no de sumar
+          protección, sino de <b>tapar huecos</b> y de acercarte a la dosis con la
+          que se probó el producto.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-capas-reglas">
+      <div class="sec-hdr capas-hdr-warn" onclick="toggleSec('sec-capas-reglas')">
+        <span class="sec-icon">⚠️</span>
+        <div class="sec-title">Las tres reglas
+          <div class="sec-sub">Lo que arruina el layering</div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body">
+        <div class="capas-txt">
+          <p><b>1 · La segunda capa va a dosis completa, no una pasadita.</b> Es
+          donde más falla la técnica. La transmitancia depende
+          <b>exponencialmente</b> del espesor: una capa testimonial del tintado no
+          te da su espectro, te da casi nada. Si el Eucerin te lo pones «solo para
+          el color», no estás sumando la protección de luz visible.</p>
+
+          <p><b>2 · Nada con octinoxato encima de nada con avobenzona.</b> La
+          fotocicloadición [2+2] entre ambos está documentada: degrada los dos
+          filtros. En capas separadas nadie lo ha estudiado y la interfase es una
+          zona de riesgo de espesor desconocido. No vale la pena averiguarlo.</p>
+
+          <div class="capas-listas">
+            <div class="capas-lista oct">
+              <div class="capas-lista-t">Llevan octinoxato</div>
+              Tocobo Cotton Soft Sun Stick<br>
+              Canmake Mermaid Skin Gel<br>
+              Heliocare 360 Opti-D Gel<br>
+              L'Oréal UV Defender
+            </div>
+            <div class="capas-lista avo">
+              <div class="capas-lista-t">Llevan avobenzona</div>
+              Eucerin Pigment Control<br>
+              Anthelios UVMune 400<br>
+              Anthelios UV AIR Serum<br>
+              Isdin Fusion Water y Color<br>
+              Isdin Wet Skin<br>
+              Anthelios Spray Corporal
+            </div>
+          </div>
+
+          <p><b>3 · Para reaplicar, stick.</b> El de NIVEA. Se aplica presionando
+          en vez de frotando, y no lleva octinoxato, así que va encima de
+          cualquiera de los de la lista de la derecha sin problema.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-capas-limites">
+      <div class="sec-hdr capas-hdr-lim" onclick="toggleSec('sec-capas-limites')">
+        <span class="sec-icon">🚫</span>
+        <div class="sec-title">Lo que el layering no arregla
+          <div class="sec-sub">Y dónde se acaba la evidencia</div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body">
+        <div class="capas-txt">
+          <p><b>No compensa aplicar poco de cada uno.</b> Con 0,5–1,0&nbsp;mg/cm²
+          — que es lo que aplica la gente normal — obtienes entre el <b>25% y el
+          50%</b> del SPF de la etiqueta. Un SPF 50 se comporta como un SPF 12–25.
+          Dos productos a media dosis son peor apuesta que uno bien puesto.</p>
+
+          <p><b>Dos capas del mismo producto tienen más respaldo.</b> Cuatro
+          estudios independientes lo miden y lo recomiendan. Combinar dos
+          productos distintos para unir espectros es física correcta, pero
+          <b>nadie lo ha medido con dos protectores comerciales superpuestos</b> —
+          ni existe norma ISO que lo contemple. La derivación se sostiene; el
+          ensayo no existe.</p>
+
+          <p><b>Y el tinte pesa menos de lo que parece, en tu caso.</b> En léntigos
+          solares la luz visible es prioridad 5 de 6: toda su evidencia clínica
+          está en melasma, hiperpigmentación postinflamatoria y fototipos IV–VI.
+          <b>No hay un solo estudio que muestre luz visible causando léntigos.</b>
+          El Eucerin se gana el lugar sobre todo por el Thiamidol, no por los
+          óxidos de hierro.</p>
+
+          <p class="capas-fuente">Heerfordt 2018 <i>PLoS ONE</i> · Osterwalder &amp;
+          Herzog 2014 <i>PPP</i> · Bimczok 2007 (DGK) · Teramura 2012 <i>CED</i> ·
+          Sayre 2005 y Dondi 2006 <i>Photochem Photobiol</i> · Herzog 2015
+          <i>Pure Appl Chem</i>. Detalle completo en la auditoría de protectores.</p>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 <!-- SPF Facial Picker -->

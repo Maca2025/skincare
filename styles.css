@@ -107,6 +107,13 @@ body {
 .tabs { display: flex; gap: 6px; margin: 0 0 16px; background: var(--veil-s); border-radius: 13px; padding: 4px; }
 .tab-btn { flex: 1; background: none; border: none; padding: 9px 4px; font-size: 12px; font-family: inherit; color: var(--ink-3); cursor: pointer; border-radius: 10px; transition: all 0.2s; font-weight: 500; }
 .tab-btn.active { background: var(--card); color: var(--accent); font-weight: 700; box-shadow: 0 2px 8px var(--sh-m); }
+/* Dos barras: la de arriba ESCRIBE en la base, la de abajo la MIRA. El fondo
+   distinto es lo que avisa en qué modo estás antes de leer la etiqueta — por
+   eso el color va en la barra y no en el botón activo. */
+.tabs-hacer { background: var(--accent-line); margin-bottom: 6px; }
+.tabs-ver   { background: var(--veil-s); }
+.tabs-hacer .tab-btn        { color: var(--accent-ink); }
+.tabs-hacer .tab-btn.active { color: var(--accent-dk); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 /* SECTIONS */
@@ -899,3 +906,58 @@ body {
 .theme-btn:active { transform: scale(.93); }
 .hdr { position: relative; }
 @media (min-width: 520px) { .theme-btn { left: 24px; } }
+
+/* ── PESTAÑA CAPAS ─────────────────────────────────────────────────────────
+   Cómo superponer dos protectores. Texto y criterio en
+   claude/auditoria-protectores-solares.md. */
+.capas-intro { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0 2px 14px; }
+
+.capas-combo { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  padding: 14px 16px 12px; margin-bottom: 12px;
+  box-shadow: inset 3px 0 0 var(--accent), var(--shadow-1); }
+.capas-combo.alt  { box-shadow: inset 3px 0 0 var(--warn), var(--shadow-1); }
+.capas-combo.reap { box-shadow: inset 3px 0 0 var(--teal), var(--shadow-1); }
+
+.capas-combo-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--accent-ink); margin-bottom: 10px; }
+.capas-combo.alt  .capas-combo-tag { color: var(--warn-dk); }
+.capas-combo.reap .capas-combo-tag { color: var(--teal); }
+
+.capas-capa { display: flex; gap: 11px; align-items: flex-start; margin-bottom: 9px; }
+.capas-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 11px;
+  font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.capas-combo.alt  .capas-num { background: var(--warn-soft); color: var(--warn-dk); }
+.capas-combo.reap .capas-num { background: var(--ok-soft);   color: var(--teal); }
+.capas-prod  { font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.3; }
+.capas-marca { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; margin-top: 2px; }
+
+.capas-nota { font-size: 11.5px; color: var(--ink-3); line-height: 1.6;
+  border-top: 1px solid var(--line-soft); padding-top: 9px; margin-top: 10px; }
+
+.capas-hdr      { background: var(--card); box-shadow: inset 3px 0 0 var(--info); }
+.capas-hdr-warn { background: var(--card); box-shadow: inset 3px 0 0 var(--warn); }
+.capas-hdr-lim  { background: var(--card); box-shadow: inset 3px 0 0 var(--ink-3); }
+
+.capas-txt { padding: 4px 16px 16px; }
+.capas-txt p { font-size: 12.5px; color: var(--ink-2); line-height: 1.7; margin: 0 0 11px; }
+.capas-txt p:last-child { margin-bottom: 0; }
+.capas-txt b { color: var(--ink); }
+
+.capas-dato { background: var(--info-soft); border-radius: 12px; padding: 10px 12px; }
+
+.capas-listas { display: flex; gap: 9px; margin: 0 0 13px; }
+.capas-lista { flex: 1; border-radius: 12px; padding: 10px 11px; font-size: 11px;
+  line-height: 1.7; color: var(--ink-2); }
+.capas-lista.oct { background: var(--err-soft); }
+.capas-lista.avo { background: var(--ok-soft); }
+.capas-lista-t { font-size: 9.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; margin-bottom: 5px; }
+.capas-lista.oct .capas-lista-t { color: var(--err-dk); }
+.capas-lista.avo .capas-lista-t { color: var(--ok-dk); }
+
+.capas-fuente { font-size: 10.5px !important; color: var(--ink-4) !important;
+  line-height: 1.6 !important; border-top: 1px solid var(--line-soft);
+  padding-top: 10px; margin-top: 14px !important; }
+
+@media (max-width: 380px) { .capas-listas { flex-direction: column; } }

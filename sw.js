@@ -4,6 +4,11 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v29 — la barra de pestañas se parte en dos: arriba lo que ESCRIBE en la base
+//   (Today · Photos · Stock), abajo lo que la MIRA (Progreso · Historial ·
+//   Rutinas · Capas), con un fondo distinto cada una. Y entra la pestaña
+//   Capas: cómo superponer dos protectores y por qué. Ver
+//   claude/auditoria-protectores-solares.md.
 // v28 — la fila del piso en Progreso: siete puntos de días activos + el conteo
 //       contra diasPiso. Toca app.js y styles.css, y baja los pisos de cuerpo,
 //       manos, pies, cabello y labios en activos-matriz.js.
@@ -50,7 +55,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v28';
+const CACHE = 'skincare-shell-v29';
 const SHELL = [
   './',
   './index.html',
