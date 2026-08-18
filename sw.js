@@ -4,6 +4,11 @@
 // Estrategia: network-first con fallback a cache — así los deploys nuevos en
 // GitHub Pages se ven de inmediato, pero sin red la app sigue abriendo.
 // IMPORTANTE: nunca intercepta peticiones a otros orígenes (Supabase, CDN).
+// v31 — foto del producto en el alta: `products.photo_url` (solo el nombre del
+//   archivo) sobre el bucket PÚBLICO `product-photos`, y la miniatura sustituye
+//   al emoji en Stock. Toca index.html, app.js y styles.css — los tres tienen
+//   que servirse juntos: un index.html viejo no trae `#pf-photo-input` y el
+//   onclick de la miniatura tronaría.
 // v30 — la regla que decide si un producto cuenta como SPF FACIAL deja de mirar
 //   el nombre y mira la CATEGORÍA (el Isdin Wet Skin, corporal, inflaba la barra
 //   de la cara). Y el texto de la tabla comparativa se pone al día con la
@@ -60,7 +65,7 @@
 // obliga al service worker a descartar el shell viejo: sin ello la app puede
 // seguir sirviendo el app.js anterior desde caché y los cambios "no aparecen"
 // aunque los archivos ya estén subidos (pasó con los filtros de Stock).
-const CACHE = 'skincare-shell-v30';
+const CACHE = 'skincare-shell-v31';
 const SHELL = [
   './',
   './index.html',

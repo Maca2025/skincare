@@ -873,6 +873,23 @@ function extractStoragePath(stored) {
   const idx = stored.indexOf(marker);
   return idx === -1 ? stored : stored.slice(idx + marker.length).split('?')[0];
 }
+// ── FOTO DEL PRODUCTO ───────────────────────────────────────────────
+// Bucket aparte del de progreso, y PÚBLICO a propósito. Las fotos de progreso
+// son la cara de Maca: bucket privado y URL firmada que caduca cada hora. La
+// foto de un frasco no es privada, y meterla al bucket privado obligaría a
+// firmar 87 URLs cada vez que se pinta Stock. Con bucket público la URL es fija,
+// el navegador la cachea y la miniatura se ve sin conexión.
+//
+// En `products.photo_url` se guarda SOLO el nombre del archivo — misma regla que
+// `progress_photos.photo_url`: si algún día cambia el proyecto de Supabase, las
+// fotos viejas no se rompen.
+const PRODUCT_PHOTO_BUCKET = 'product-photos';
+function productPhotoSrc(stored) {
+  if (!stored) return '';
+  if (/^https?:\/\//i.test(stored)) return stored;   // por si alguna quedó con URL entera
+  return SUPABASE_URL + '/storage/v1/object/public/' + PRODUCT_PHOTO_BUCKET
+       + '/' + encodeURIComponent(stored);
+}
 async function uploadPhoto() {
   const input = document.getElementById('photo-input');
   if (!input.files[0] || !selectedEncuadre) return;
@@ -4610,7 +4627,9 @@ function invItemHTML(item) {
   const statusCls = status !== 'ok' ? ` status-${cssSafe(status)}` : '';
   return `<div class="inv-item${statusCls}" id="inv-${domId}">
   <div class="inv-row" onclick="toggleInvDetail('${domId}')">
-    <div class="inv-emoji">${esc(item.emoji)}</div>
+    <div class="inv-emoji">${item.photo_url
+      ? `<img class="inv-photo" src="${esc(productPhotoSrc(item.photo_url))}" alt="" loading="lazy">`
+      : esc(item.emoji)}</div>
     <div class="inv-info">
       <div class="inv-name">${esc(item.name)} ${starPickerHTML(item.id, item.my_rating)}</div>
       <div class="inv-brand">${esc(item.brand || '')}${paoBadge(item)}</div>
@@ -4647,6 +4666,75 @@ function renderPfStars() {
   }
   el.innerHTML = out;
 }
+// ── Foto del producto en el alta ─────────────────────────────────────
+// Tres estados que hay que poder distinguir:
+//   pfPhotoFile     → archivo recién elegido, esperando a subirse
+//   pfPhotoExisting → nombre del archivo que YA está en la base (al editar)
+//   los dos en null → sin foto, o se quitó
+// La subida ocurre al GUARDAR, no al elegir: si eliges foto y cierras el modal
+// sin guardar, no queda un archivo huérfano en el bucket.
+let pfPhotoFile = null;
+let pfPhotoExisting = null;
+let pfPhotoPreviewUrl = null;   // objectURL vivo; hay que revocarlo al cambiarlo
+function onPfEmojiInput(input) {
+  // Con foto puesta, la miniatura la está mostrando: escribir un emoji no debe
+  // borrarla. El emoji se guarda igual y reaparece si se quita la foto.
+  if (pfPhotoFile || pfPhotoExisting) return;
+  const box = document.getElementById('emoji-preview');
+  if (box) box.textContent = input.value || '🧴';
+}
+function renderPfPhoto(previewUrl) {
+  const box  = document.getElementById('emoji-preview');
+  const hint = document.getElementById('pf-photo-hint');
+  if (!box) return;
+  const src = previewUrl || (pfPhotoExisting ? productPhotoSrc(pfPhotoExisting) : '');
+  if (src) {
+    box.innerHTML = `<img src="${esc(src)}" alt="">`;
+    box.classList.add('has-photo');
+    if (hint) hint.innerHTML = '📷 Toca la miniatura para cambiarla · '
+      + '<a href="#" onclick="clearProductPhoto();return false">quitar la foto</a>';
+  } else {
+    const emo = document.getElementById('pf-emoji');
+    box.textContent = (emo && emo.value) || '🧴';
+    box.classList.remove('has-photo');
+    if (hint) hint.textContent = '📷 Toca la miniatura para ponerle foto al producto. '
+      + 'Sin foto se usa el emoji.';
+  }
+}
+function previewProductPhoto(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  pfPhotoFile = f;
+  if (pfPhotoPreviewUrl) URL.revokeObjectURL(pfPhotoPreviewUrl);
+  pfPhotoPreviewUrl = URL.createObjectURL(f);
+  renderPfPhoto(pfPhotoPreviewUrl);
+}
+function clearProductPhoto() {
+  // Poner `pfPhotoExisting` en null es lo que hace que al guardar se escriba
+  // `photo_url: null` — o sea, quitar la foto se guarda de verdad.
+  pfPhotoFile = null; pfPhotoExisting = null;
+  if (pfPhotoPreviewUrl) { URL.revokeObjectURL(pfPhotoPreviewUrl); pfPhotoPreviewUrl = null; }
+  const input = document.getElementById('pf-photo-input');
+  if (input) input.value = '';
+  renderPfPhoto(null);
+}
+function resetPfPhoto(existing) {
+  pfPhotoFile = null; pfPhotoExisting = existing || null;
+  if (pfPhotoPreviewUrl) { URL.revokeObjectURL(pfPhotoPreviewUrl); pfPhotoPreviewUrl = null; }
+  const input = document.getElementById('pf-photo-input');
+  if (input) input.value = '';
+  renderPfPhoto(null);
+}
+// Sube la foto pendiente y devuelve el nombre del archivo. LANZA si algo falla,
+// para que saveCustomProduct no guarde el producto creyendo que la foto quedó.
+async function uploadProductPhoto() {
+  const blob = await compressImage(pfPhotoFile);   // 900px, JPEG 0.75 — misma que progreso
+  const filename = `prod-${Date.now()}.jpg`;
+  const { error } = await db.storage.from(PRODUCT_PHOTO_BUCKET)
+    .upload(filename, blob, { contentType: 'image/jpeg' });
+  if (error) throw error;
+  return filename;
+}
 let pfFreq = 'daily';
 let pfDays = new Set();
 function selectPfFreq(freq) {
@@ -4679,6 +4767,7 @@ function openAddProductModal() {
   pfRating = null; renderPfStars();
   resetPfClinicalFields();
   document.getElementById('emoji-preview').textContent = '🧴';
+  resetPfPhoto(null);
   document.querySelector('#add-product-modal .modal-title').textContent = '＋ Nuevo producto';
   const btn = document.getElementById('save-prod-btn');
   btn.disabled = false; btn.textContent = 'Guardar producto';
@@ -4716,6 +4805,7 @@ function openEditProductModal(id) {
     selectPfFreq('daily');
   }
   document.getElementById('emoji-preview').textContent = p.emoji || '🧴';
+  resetPfPhoto(p.photo_url);
   const catSel = document.getElementById('pf-cat');
   const custom = document.getElementById('pf-cat-custom');
   catSel.value = p.category || '';
@@ -4749,14 +4839,33 @@ async function saveCustomProduct() {
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (!cat)  { showToast('⚠️ Elige una categoría', 'error'); return; }
   const btn = document.getElementById('save-prod-btn');
+  const btnLabel = editingProductId ? 'Guardar cambios' : 'Guardar producto';
   btn.disabled = true; btn.textContent = '⏳ Guardando...';
+  // La foto se sube AQUÍ, no al elegirla: así elegir una foto y cerrar el modal
+  // sin guardar no deja archivos huérfanos en el bucket. Si la subida falla se
+  // aborta todo — guardar el producto con la foto perdida sería peor, porque no
+  // habría forma de notar que faltó.
+  const photoBefore = editingProductId
+    ? ((allProducts.find(p => p.id === editingProductId) || {}).photo_url || null)
+    : null;
+  let photoName = pfPhotoExisting;
+  if (pfPhotoFile) {
+    btn.textContent = '⏳ Subiendo foto...';
+    try { photoName = await uploadProductPhoto(); }
+    catch (e) {
+      btn.disabled = false; btn.textContent = btnLabel;
+      showToast('❌ No se pudo subir la foto: ' + (e.message || e), 'error');
+      return;
+    }
+    btn.textContent = '⏳ Guardando...';
+  }
   if (editingProductId) {
     const { data, error } = await db.from('products').update({
       emoji, name, brand: brand || null, category: cat,
       note: note || null, how_to_apply: how || null, why_it_works: why || null,
       clinical_roles: clinicalRoles, schedule_days: scheduleDays,
       opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
-      my_rating: pfRating,
+      my_rating: pfRating, photo_url: photoName,
       // Se apaga la columna VIEJA en cuanto editas el producto. `hasRole` cae a
       // `clinical_role` (singular) cuando `clinical_roles` viene vacío, y el
       // formulario escribe `[]` al destildar todos los roles: sin esta línea,
@@ -4768,6 +4877,12 @@ async function saveCustomProduct() {
     }).eq('id', editingProductId).select().single();
     btn.disabled = false; btn.textContent = 'Guardar cambios';
     if (error) { showToast('❌ ' + error.message, 'error'); return; }
+    // La foto anterior ya no le sirve a nadie: se retira del bucket para que no
+    // se acumulen archivos que ninguna fila referencia. Si falla da igual — el
+    // producto ya quedó bien guardado, esto es solo aseo.
+    if (photoBefore && photoBefore !== photoName) {
+      db.storage.from(PRODUCT_PHOTO_BUCKET).remove([photoBefore]).catch(() => {});
+    }
     const idx = allProducts.findIndex(p => p.id === editingProductId);
     if (idx >= 0) allProducts[idx] = data;
     editingProductId = null;
@@ -4782,7 +4897,7 @@ async function saveCustomProduct() {
     note: note || null, how_to_apply: how || null, why_it_works: why || null,
     clinical_roles: clinicalRoles, schedule_days: scheduleDays,
     opened_at: openedAt, pao_months: paoMonths, started_at: startedAt,
-    my_rating: pfRating,
+    my_rating: pfRating, photo_url: photoName,
     tier: 'ok', tags: [], status: 'ok',
     // El catálogo se lee con `.order('sort_order')` pero la app nunca escribía
     // esta columna, así que todo producto creado desde aquí quedaba con el
@@ -4803,8 +4918,13 @@ async function saveCustomProduct() {
 async function deleteCustomProduct(id) {
   const ok = await confirmSheet('¿Eliminar este producto del inventario?');
   if (!ok) return;
+  const foto = (allProducts.find(p => p.id === id) || {}).photo_url || null;
   const { error } = await db.from('products').delete().eq('id', id);
   if (error) { showToast('❌ Error al eliminar', 'error'); return; }
+  // Primero la fila, después el archivo: si el borrado de la fila falla, la
+  // foto sigue ahí y el producto se ve completo. Al revés quedaría un producto
+  // sin foto y sin manera de saber por qué.
+  if (foto) db.storage.from(PRODUCT_PHOTO_BUCKET).remove([foto]).catch(() => {});
   allProducts = allProducts.filter(p => p.id !== id);
   showToast('🗑️ Producto eliminado', '');
   renderInventory();

@@ -483,14 +483,26 @@
     </div>
     <div class="modal-body">
       <div class="prod-field">
-        <label class="prod-label">Emoji y nombre</label>
+        <label class="prod-label">Foto, emoji y nombre</label>
         <div class="prod-emoji-row">
-          <div class="prod-emoji-preview" id="emoji-preview">🧴</div>
+          <!-- La miniatura ES el selector de foto. Con foto la muestra; sin
+               foto muestra el emoji. Es el mismo recuadro donde vive la
+               identidad visual del producto en Stock, así que no hay dos
+               cosas distintas que llenar. Va aquí dentro y no como campo
+               nuevo a propósito: el layout de 2 columnas del escritorio
+               (styles.css) selecciona los campos por :nth-child, y meter un
+               .prod-field más arriba correría Marca y Categoría. -->
+          <div class="prod-emoji-preview prod-photo-pick" id="emoji-preview"
+            title="Toca para ponerle foto al producto"
+            onclick="document.getElementById('pf-photo-input').click()">🧴</div>
+          <input type="file" id="pf-photo-input" accept="image/*" style="display:none"
+            onchange="previewProductPhoto(this)">
           <input class="prod-input" id="pf-emoji" type="text" placeholder="🧴" maxlength="2"
             style="width:54px;text-align:center;font-size:20px;padding:8px 4px"
-            oninput="document.getElementById('emoji-preview').textContent=this.value||'🧴'">
+            oninput="onPfEmojiInput(this)">
           <input class="prod-input" id="pf-name" type="text" placeholder="Nombre del producto" style="flex:1">
         </div>
+        <div class="field-hint" id="pf-photo-hint"></div>
       </div>
       <div class="prod-field">
         <label class="prod-label">Marca / subtítulo</label>
