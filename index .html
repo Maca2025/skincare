@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#F4EFE8">
+<title>Skincare Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div class="login-wrap" id="login-screen">
+  <div class="login-card">
+    <div class="login-title">✦ Skincare Tracker ✦</div>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-field">
+      <input class="prod-input" id="login-email" type="email" placeholder="Email" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <input class="prod-input" id="login-password" type="password" placeholder="Contraseña" autocomplete="current-password">
+    </div>
+    <button class="save-btn" id="login-btn" onclick="doLogin()" style="margin-bottom:0">Entrar</button>
+  </div>
+</div>
+<div class="phone" id="app-root" style="display:none; position:relative;">
+  <button class="logout-btn" onclick="doLogout()">Salir ↦</button>
+  <div class="hdr">
+    <h1>✦ Skincare Tracker ✦</h1>
+    <div class="date" id="hdr-date"></div>
+    <button class="theme-btn" id="theme-btn" onclick="cicloTema()" title="Tema: automático / claro / oscuro">🌗</button>
+  </div>
+  <!-- Dos barras a propósito. Arriba lo que ESCRIBE en la base, abajo lo que la
+       MIRA. El fondo distinto es el que avisa en qué modo estás antes de que
+       leas la etiqueta; por eso el color va en la barra y no en el botón activo.
+       `showTab` no necesitó cambio: ya limpia el estado activo de TODOS los
+       `.tab-btn`, estén en la barra que estén.
+       Los dos límites discutibles: Stock va arriba porque ahí marcas "se me
+       acabó" y das de alta producto nuevo, que es captura; Rutinas va abajo
+       porque se configura una vez y luego se consulta.
+
+       El envoltorio `.sidebar` (2026-08-17) NO es decorativo. En escritorio,
+       styles.css convierte la navegación en columna con `grid-area: sidebar`.
+       Cuando esa regla la pedían las DOS barras, las dos reclamaban la MISMA
+       área de la rejilla y se apilaban una encima de otra: `.tabs-ver`, que va
+       después en el DOM y tiene fondo opaco, tapaba por completo a
+       `.tabs-hacer` — Today, Photos y Stock desaparecían en la computadora.
+       Ahora el área la ocupa el contenedor y las dos barras se apilan DENTRO.
+       En móvil no cambia nada: `.sidebar` no tiene reglas fuera del bloque de
+       880px. -->
+  <div class="sidebar">
+    <div class="tabs tabs-hacer">
+      <button class="tab-btn active" onclick="showTab('today',this)">☀️ Today</button>
+      <button class="tab-btn" onclick="showTab('photos',this)">📸 Photos</button>
+      <button class="tab-btn" onclick="showTab('stock',this)">🧴 Stock</button>
+    </div>
+    <div class="tabs tabs-ver">
+      <button class="tab-btn" onclick="showTab('history',this)">📈 Progreso</button>
+      <button class="tab-btn" onclick="showTab('log',this)">📋 Historial</button>
+      <button class="tab-btn" onclick="showTab('routines',this)">⚙️ Rutinas</button>
+      <button class="tab-btn" onclick="showTab('capas',this)">🧅 Capas</button>
+    </div>
+  </div>
+  <!-- Cola offline: se muestra solo si hay registros sin sincronizar.
+       Va fuera de las pestañas a propósito, para que se vea en todas. -->
+  <div id="sync-banner" class="sync-banner" style="display:none"></div>
+  <!-- Reaplicar SPF desde cualquier pestaña. Un toque = registrar el último. -->
+  <button id="spf-fab" class="spf-fab" style="display:none" onclick="quickLogSpf()"></button>
+  <!-- TODAY -->
+  <div id="tab-today" class="tab-content active">
+    <div id="today-summary"></div>
+    <div class="backdate-card" id="backdate-card">
+      <div class="backdate-row">
+        <span class="backdate-lbl">🕐 Registrar para:</span>
+        <input type="datetime-local" id="backdate-input" onchange="onBackdateChange()">
+        <button class="backdate-reset" id="backdate-reset-btn" onclick="resetBackdate()" style="display:none">Ahora</button>
+      </div>
+      <div class="backdate-active-note" id="backdate-active-note" style="display:none"></div>
+    </div>
+    <div class="section" id="sec-am">
+      <div class="sec-hdr am-hdr" onclick="toggleSec('sec-am')">
+        <span class="sec-icon">☀️</span>
+        <div class="sec-title">Morning Routine
+          <div class="sec-sub" id="am-sec-sub">Face &amp; Neck <span class="sec-progress" id="prog-am-body"></span></div>
+        </div>
+        <button class="sec-switch-btn" id="am-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('am')" title="Cambiar rutina de hoy">🔄</button>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="am-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+    <div class="section" id="sec-pm">
+      <div class="sec-hdr pm-hdr" onclick="toggleSec('sec-pm')">
+        <span class="sec-icon">🌙</span>
+        <div class="sec-title">Evening Routine
+          <div class="sec-sub" id="pm-sec-sub">Face &amp; Neck <span class="sec-progress" id="prog-pm-body"></span></div>
+        </div>
+        <button class="sec-switch-btn" id="pm-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('pm')" title="Cambiar rutina de hoy">🔄</button>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="pm-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+    <div class="section" id="sec-body-card">
+      <div class="sec-hdr bod-hdr" onclick="toggleSec('sec-body-card')">
+        <span class="sec-icon">🧴</span>
+        <div class="sec-title">Body
+          <div class="sec-sub" id="body-sec-sub">Ducha <span class="sec-progress" id="prog-body-body"></span></div>
+        </div>
+        <button class="sec-switch-btn" id="body-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('body')" title="Cambiar rutina de hoy">🔄</button>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="body-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+    <div class="section" id="sec-feet">
+      <div class="sec-hdr ft-hdr" onclick="toggleSec('sec-feet')">
+        <span class="sec-icon">🦶</span>
+        <div class="sec-title">Feet
+          <div class="sec-sub" id="feet-sec-sub">Nightly · ~15 min <span class="sec-progress" id="prog-feet-body"></span></div>
+        </div>
+        <button class="sec-switch-btn" id="feet-switch-btn" style="display:none" onclick="event.stopPropagation();openRoutineSwitch('feet')" title="Cambiar rutina de hoy">🔄</button>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body" id="feet-body">
+        <div class="tap-hint">Tap ● to check off · Tap step for how-to</div>
+      </div>
+    </div>
+    <div class="reapp-card">
+      <h3>🔄 Reaplicaciones</h3>
+      <div id="spf-reminder-wrap"></div>
+      <div id="reapp-repeat-wrap"></div>
+      <div id="reapp-categories-wrap"></div>
+      <div id="reapp-history"></div>
+    </div>
+    <div class="notes-card">
+      <div class="notes-label">📝 Notes for today</div>
+      <div class="skin-state-label">¿Cómo está tu piel hoy?</div>
+      <div class="skin-state-row" id="skin-state-row"></div>
+      <div class="skin-state-label">☀️ Exposición solar de hoy</div>
+      <div class="skin-state-row" id="sun-exposure-row"></div>
+      <textarea class="notes-ta" id="daily-notes" placeholder="How did your skin feel? Any reactions, observations..."></textarea>
+    </div>
+    <button class="save-btn" id="save-btn" onclick="saveNote()">💾 Guardar nota</button>
+  </div>
+  <!-- PHOTOS -->
+  <div id="tab-photos" class="tab-content">
+    <div class="upload-card">
+      <h3>📸 Agregar foto de progreso</h3>
+      <div class="photo-type-section">
+        <div class="photo-type-label">Encuadre</div>
+        <div class="photo-type-grid" id="photo-type-grid"></div>
+      </div>
+      <div class="photo-drop">
+        <input type="file" id="photo-input" accept="image/*" onchange="previewPhoto(this)">
+        <div class="photo-drop-icon">📷</div>
+        <div class="photo-drop-text">Toca para tomar foto o elegir de galería</div>
+        <div class="photo-drop-sub">Misma luz y ángulo cada semana para comparar bien</div>
+      </div>
+      <div class="photo-preview-wrap" id="photo-preview-wrap">
+        <img id="photo-preview" src="" alt="Preview">
+        <!-- Foto anterior de la MISMA área, superpuesta translúcida, para que
+             el encuadre coincida. Una silueta genérica no alinea nada. -->
+        <img id="photo-ghost" src="" alt="" style="display:none">
+        <svg id="photo-guide-overlay" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid meet"
+          style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0.55">
+          <ellipse cx="50" cy="55" rx="26" ry="34" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <path d="M 20 133 Q 24 96 50 94 Q 76 96 80 133" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <line x1="50" y1="10" x2="50" y2="125" stroke="#FFFFFF" stroke-width="0.7" stroke-dasharray="2 4"/>
+        </svg>
+      </div>
+      <button class="mini-action-btn" id="photo-guide-btn" style="margin-top:8px;display:none" onclick="togglePhotoGuide()">📐 Guía de encuadre (mismo ángulo cada semana)</button>
+      <textarea class="caption-input" id="photo-caption" placeholder="Nota (opcional) — ej. 'Semana 3 · mejilla izquierda mejorando'"></textarea>
+      <button class="upload-btn" id="upload-btn" onclick="uploadPhoto()" disabled>Subir foto</button>
+    </div>
+    <div class="week-card">
+      <h3>This Week</h3>
+      <div class="week-grid" id="week-grid">
+        <div class="loading-state"><span class="spinner">⟳</span></div>
+      </div>
+    </div>
+    <!-- Mapa de manchas: seguimiento individual, aparte de la galería por área -->
+    <div id="spots-content"></div>
+    <div id="photo-gallery-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando fotos...</div>
+    </div>
+  </div>
+  <!-- HISTORY / PROGRESO -->
+  <div id="tab-history" class="tab-content">
+    <div id="history-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Loading your history...</div>
+    </div>
+    <!-- Línea de tiempo de tratamiento. Contenedor propio: loadHistory() tiene
+         un orden de declaración delicado (regla 17) y no conviene tocarla. -->
+    <div id="hitos-content"></div>
+  </div>
+  <!-- LOG / HISTORIAL DE APLICACIONES -->
+  <div id="tab-log" class="tab-content">
+    <div id="log-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Loading your history...</div>
+    </div>
+  </div>
+  <!-- STOCK -->
+  <div id="tab-stock" class="tab-content">
+    <div id="inventory-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando inventario...</div>
+    </div>
+  </div>
+  <!-- RUTINAS -->
+  <div id="tab-routines" class="tab-content">
+    <div id="routines-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando rutinas...</div>
+    </div>
+  </div>
+  <!-- CAPAS — cómo superponer dos protectores. El texto sale de la auditoría
+       del 12 de agosto de 2026 (claude/auditoria-protectores-solares.md). -->
+  <div id="tab-capas" class="tab-content">
+    <div class="capas-intro">
+      Ningún protector cubre todo el espectro. Superponer dos <b>sí amplía la
+      cobertura</b> — pero no por la razón que suele decirse.
+    </div>
+    <div class="capas-combo">
+      <div class="capas-combo-tag">Todos los días</div>
+      <div class="capas-capa">
+        <span class="capas-num">1</span>
+        <div>
+          <div class="capas-prod">Hyalu-Cica Water-Fit Sun Serum</div>
+          <div class="capas-marca">SKIN1004 · aporta el <b>UVA1 largo</b> vía Tinosorb M</div>
+        </div>
+      </div>
+      <div class="capas-capa">
+        <span class="capas-num">2</span>
+        <div>
+          <div class="capas-prod">Pigment Control Tintado</div>
+          <div class="capas-marca">Eucerin · aporta <b>luz visible</b> y <b>Thiamidol</b>, que trata la mancha mientras protege</div>
+        </div>
+      </div>
+      <div class="capas-nota">
+        Es la única pareja del arsenal que cubre las cuatro cosas a la vez: UVB,
+        UVA hasta 400&nbsp;nm, luz visible y despigmentante. El SKIN1004 va abajo
+        porque es el producto más limpio del catálogo — sin fragancia, sin aceites
+        esenciales, sin alcohol denat — y son dos capas diarias sobre piel que
+        además recibe tretinoína.
+      </div>
+    </div>
+    <div class="capas-combo alt">
+      <div class="capas-combo-tag">Playa o sol fuerte</div>
+      <div class="capas-capa">
+        <span class="capas-num">1</span>
+        <div>
+          <div class="capas-prod">Anthelios UVMune 400</div>
+          <div class="capas-marca">La Roche-Posay · <b>Mexoryl 400</b>, λmax 385&nbsp;nm</div>
+        </div>
+      </div>
+      <div class="capas-capa">
+        <span class="capas-num">2</span>
+        <div>
+          <div class="capas-prod">Pigment Control Tintado</div>
+          <div class="capas-marca">Eucerin</div>
+        </div>
+      </div>
+      <div class="capas-nota">
+        Sobre el Mexoryl 400 no hay ninguna duda de concentración; sobre el
+        Tinosorb M del SKIN1004 sí (va en posición 7 y su % no se declara).
+        Cuando el sol es el problema, cambias comodidad de piel por certeza de
+        filtro: son dos capas con alcohol denat alto.
+      </div>
+    </div>
+    <div class="capas-combo reap">
+      <div class="capas-combo-tag">Para reaplicar a media mañana</div>
+      <div class="capas-capa">
+        <span class="capas-num">↻</span>
+        <div>
+          <div class="capas-prod">Sun Silky UV Stick</div>
+          <div class="capas-marca">NIVEA · DHHB + T150 + Tinosorb S</div>
+        </div>
+      </div>
+      <div class="capas-nota">
+        El único del arsenal que puedes poner encima de cualquier cosa sin
+        pensarlo: <b>sin octinoxato</b>, sin fragancia, sin alcohol. Y el formato
+        stick se aplica presionando en vez de frotando, que es lo que menos
+        perturba la capa de abajo.
+      </div>
+    </div>
+    <div class="section" id="sec-capas-fisica">
+      <div class="sec-hdr capas-hdr" onclick="toggleSec('sec-capas-fisica')">
+        <span class="sec-icon">🧪</span>
+        <div class="sec-title">Por qué funciona
+          <div class="sec-sub">Qué suma de verdad y qué no</div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body">
+        <div class="capas-txt">
+          <p><b>Lo que sí suma: el espectro.</b> Dos películas una encima de otra
+          multiplican transmitancias, lo que equivale a que <b>las absorbancias se
+          sumen longitud de onda por longitud de onda</b>. La cobertura resultante
+          es la <i>unión</i> de los dos espectros: si la capa de abajo no absorbe
+          nada entre 380 y 400&nbsp;nm y la de arriba sí, la combinación hereda esa
+          banda. Ninguna capa diluye a la otra.</p>
+          <p><b>Lo que no suma: el número.</b> SPF 50 + SPF 50 no es 100. El SPF es
+          el cociente de una integral ponderada, no una cantidad que se apile. El
+          resultado queda entre el mayor de los dos y su producto, y en la práctica
+          mucho más cerca del mayor, porque nadie aplica dosis completa de cada uno.</p>
+          <p><b>Y lo mejor documentado: la segunda capa no arrastra la primera.</b>
+          Se midió la masa depositada fotografiando la piel con luz negra. Una
+          aplicación deja <b>0,60&nbsp;mg/cm²</b> y <b>20% de piel descubierta</b>.
+          Dos aplicaciones dejan <b>1,10</b> y <b>9% descubierta</b>. Si la segunda
+          arrastrara la primera, la masa no habría subido.</p>
+          <p class="capas-dato">De ahí sale casi toda la ganancia real: no de sumar
+          protección, sino de <b>tapar huecos</b> y de acercarte a la dosis con la
+          que se probó el producto.</p>
+        </div>
+      </div>
+    </div>
+    <div class="section" id="sec-capas-reglas">
+      <div class="sec-hdr capas-hdr-warn" onclick="toggleSec('sec-capas-reglas')">
+        <span class="sec-icon">⚠️</span>
+        <div class="sec-title">Las tres reglas
+          <div class="sec-sub">Lo que arruina el layering</div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body">
+        <div class="capas-txt">
+          <p><b>1 · La segunda capa va a dosis completa, no una pasadita.</b> Es
+          donde más falla la técnica. La transmitancia depende
+          <b>exponencialmente</b> del espesor: una capa testimonial del tintado no
+          te da su espectro, te da casi nada. Si el Eucerin te lo pones «solo para
+          el color», no estás sumando la protección de luz visible.</p>
+          <p><b>2 · Nada con octinoxato encima de nada con avobenzona.</b> La
+          fotocicloadición [2+2] entre ambos está documentada: degrada los dos
+          filtros. En capas separadas nadie lo ha estudiado y la interfase es una
+          zona de riesgo de espesor desconocido. No vale la pena averiguarlo.</p>
+          <div class="capas-listas">
+            <div class="capas-lista oct">
+              <div class="capas-lista-t">Llevan octinoxato</div>
+              Tocobo Cotton Soft Sun Stick<br>
+              Canmake Mermaid Skin Gel<br>
+              Heliocare 360 Opti-D Gel<br>
+              L'Oréal UV Defender
+            </div>
+            <div class="capas-lista avo">
+              <div class="capas-lista-t">Llevan avobenzona</div>
+              Eucerin Pigment Control<br>
+              Anthelios UVMune 400<br>
+              Anthelios UV AIR Serum<br>
+              Isdin Fusion Water y Color<br>
+              Isdin Wet Skin<br>
+              Anthelios Spray Corporal
+            </div>
+          </div>
+          <p><b>3 · Para reaplicar, stick.</b> El de NIVEA. Se aplica presionando
+          en vez de frotando, y no lleva octinoxato, así que va encima de
+          cualquiera de los de la lista de la derecha sin problema.</p>
+        </div>
+      </div>
+    </div>
+    <div class="section" id="sec-capas-limites">
+      <div class="sec-hdr capas-hdr-lim" onclick="toggleSec('sec-capas-limites')">
+        <span class="sec-icon">🚫</span>
+        <div class="sec-title">Lo que el layering no arregla
+          <div class="sec-sub">Y dónde se acaba la evidencia</div>
+        </div>
+        <span class="sec-arrow">⌄</span>
+      </div>
+      <div class="sec-body">
+        <div class="capas-txt">
+          <p><b>No compensa aplicar poco de cada uno.</b> Con 0,5–1,0&nbsp;mg/cm²
+          — que es lo que aplica la gente normal — obtienes entre el <b>25% y el
+          50%</b> del SPF de la etiqueta. Un SPF 50 se comporta como un SPF 12–25.
+          Dos productos a media dosis son peor apuesta que uno bien puesto.</p>
+          <p><b>Dos capas del mismo producto tienen más respaldo.</b> Cuatro
+          estudios independientes lo miden y lo recomiendan. Combinar dos
+          productos distintos para unir espectros es física correcta, pero
+          <b>nadie lo ha medido con dos protectores comerciales superpuestos</b> —
+          ni existe norma ISO que lo contemple. La derivación se sostiene; el
+          ensayo no existe.</p>
+          <p><b>Y el tinte pesa menos de lo que parece, en tu caso.</b> En léntigos
+          solares la luz visible es prioridad 5 de 6: toda su evidencia clínica
+          está en melasma, hiperpigmentación postinflamatoria y fototipos IV–VI.
+          <b>No hay un solo estudio que muestre luz visible causando léntigos.</b>
+          El Eucerin se gana el lugar sobre todo por el Thiamidol, no por los
+          óxidos de hierro.</p>
+          <p class="capas-fuente">Heerfordt 2018 <i>PLoS ONE</i> · Osterwalder &amp;
+          Herzog 2014 <i>PPP</i> · Bimczok 2007 (DGK) · Teramura 2012 <i>CED</i> ·
+          Sayre 2005 y Dondi 2006 <i>Photochem Photobiol</i> · Herzog 2015
+          <i>Pure Appl Chem</i>. Detalle completo en la auditoría de protectores.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- SPF Facial Picker -->
+<div class="modal-overlay" id="spf-modal" onclick="closeModal('spf-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">🌞 ¿Cuál(es) SPF facial aplicaste?</div>
+      <button class="modal-close" onclick="closeModal('spf-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="spf-picker-body"></div>
+  </div>
+</div>
+<!-- Body SPF Picker -->
+<div class="modal-overlay" id="body-spf-modal" onclick="closeModal('body-spf-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">☀️ ¿Cuál(es) SPF corporal aplicaste?</div>
+      <button class="modal-close" onclick="closeModal('body-spf-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="body-spf-picker-body"></div>
+  </div>
+</div>
+<!-- SPF Comparison -->
+<div class="modal-overlay" id="compare-modal" onclick="closeModal('compare-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📊 Comparativa — Manchas solares</div>
+      <button class="modal-close" onclick="closeModal('compare-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="compare-body"></div>
+  </div>
+</div>
+<!-- Reclassify Photo -->
+<div class="modal-overlay" id="reclassify-modal" onclick="closeModal('reclassify-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">✏️ ¿Qué área es esta foto?</div>
+      <button class="modal-close" onclick="closeModal('reclassify-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="reclassify-body"></div>
+  </div>
+</div>
+<!-- Generic Product Picker -->
+<div class="modal-overlay" id="product-picker-modal" onclick="closeModal('product-picker-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="product-picker-title">Elegir producto</div>
+      <button class="modal-close" onclick="closeModal('product-picker-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="product-picker-body"></div>
+  </div>
+</div>
+<!-- Zonas de una aplicación ya registrada (se abre desde el renglón 📍 del paso) -->
+<div class="modal-overlay" id="zonas-modal" onclick="closeModal('zonas-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📍 Zonas de aplicación</div>
+      <button class="modal-close" onclick="closeModal('zonas-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="zone-pick-sub" id="zonas-modal-sub"></div>
+      <div class="zone-pick-chips" id="zonas-modal-chips"></div>
+      <button class="save-btn" id="zonas-modal-save" onclick="saveZonasEditor()" style="margin-top:10px;margin-bottom:0">Guardar zonas</button>
+    </div>
+  </div>
+</div>
+<!-- Add Product Modal -->
+<div class="modal-overlay" id="add-product-modal" onclick="closeModal('add-product-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">＋ Nuevo producto</div>
+      <button class="modal-close" onclick="closeModal('add-product-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="prod-field">
+        <label class="prod-label">Foto, emoji y nombre</label>
+        <div class="prod-emoji-row">
+          <!-- La miniatura ES el selector de foto. Con foto la muestra; sin
+               foto muestra el emoji. Es el mismo recuadro donde vive la
+               identidad visual del producto en Stock, así que no hay dos
+               cosas distintas que llenar. Va aquí dentro y no como campo
+               nuevo a propósito: el layout de 2 columnas del escritorio
+               (styles.css) selecciona los campos por :nth-child, y meter un
+               .prod-field más arriba correría Marca y Categoría. -->
+          <div class="prod-emoji-preview prod-photo-pick" id="emoji-preview"
+            title="Toca para ponerle foto al producto"
+            onclick="document.getElementById('pf-photo-input').click()">🧴</div>
+          <input type="file" id="pf-photo-input" accept="image/*" style="display:none"
+            onchange="previewProductPhoto(this)">
+          <input class="prod-input" id="pf-emoji" type="text" placeholder="🧴" maxlength="2"
+            style="width:54px;text-align:center;font-size:20px;padding:8px 4px"
+            oninput="onPfEmojiInput(this)">
+          <input class="prod-input" id="pf-name" type="text" placeholder="Nombre del producto" style="flex:1">
+        </div>
+        <div class="field-hint" id="pf-photo-hint"></div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Marca / subtítulo</label>
+        <input class="prod-input" id="pf-brand" type="text" placeholder="Ej: Isdin · SPF50">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Categoría</label>
+        <select class="prod-input prod-select" id="pf-cat" onchange="toggleCustomCat(this)"></select>
+        <input class="prod-input" id="pf-cat-custom" type="text" placeholder="Nombre de la nueva categoría" style="display:none;margin-top:8px">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Roles clínicos (opcional, puedes marcar varios)</label>
+        <div class="clinrole-grid" id="pf-clinical-roles">
+          <label class="clinrole-chip"><input type="checkbox" value="despigmentacion" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🎯 Despigmentación</label>
+          <label class="clinrole-chip"><input type="checkbox" value="regeneracion_celular" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🔬 Renovación celular (retinol/tretinoína)</label>
+          <label class="clinrole-chip"><input type="checkbox" value="barrera" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 💧 Barrera reparadora</label>
+          <label class="clinrole-chip"><input type="checkbox" value="spf_facial" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🛡️ SPF Facial</label>
+          <label class="clinrole-chip"><input type="checkbox" value="textura_poros" onchange="this.closest('.clinrole-chip').classList.toggle('on', this.checked)"> 🔍 Textura / Poros</label>
+        </div>
+        <div class="field-hint">Marca los que apliquen — se usan para tu adherencia de manchas en Progreso. Si no marcas ninguno, la app intenta adivinar por el nombre (menos preciso).</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">¿Cada cuánto se aplica?</label>
+        <div class="seg-row" id="pf-freq-row">
+          <button type="button" class="seg-btn" data-freq="daily" onclick="selectPfFreq('daily')">Todos los días</button>
+          <button type="button" class="seg-btn" data-freq="days" onclick="selectPfFreq('days')">Días específicos</button>
+        </div>
+        <div class="day-row" id="pf-day-row" style="display:none;margin-top:8px">
+          <button type="button" class="day-chip" data-dow="0" onclick="togglePfDay(0)">D</button>
+          <button type="button" class="day-chip" data-dow="1" onclick="togglePfDay(1)">L</button>
+          <button type="button" class="day-chip" data-dow="2" onclick="togglePfDay(2)">M</button>
+          <button type="button" class="day-chip" data-dow="3" onclick="togglePfDay(3)">X</button>
+          <button type="button" class="day-chip" data-dow="4" onclick="togglePfDay(4)">J</button>
+          <button type="button" class="day-chip" data-dow="5" onclick="togglePfDay(5)">V</button>
+          <button type="button" class="day-chip" data-dow="6" onclick="togglePfDay(6)">S</button>
+        </div>
+        <div class="field-hint">Solo afecta el cálculo de adherencia — ej. un producto "días pares" cuenta 100% si lo aplicas cada vez que toca, no cada día del calendario. Si no marcas nada aquí pero el producto ya es un paso fijo de alguna rutina, se usa el calendario de esa rutina automáticamente.</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Desde cuándo lo usas (opcional)</label>
+        <input class="prod-input" id="pf-started" type="date">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Tu calificación</label>
+        <div class="star-pick star-pick-lg" id="pf-rating"></div>
+        <div class="field-hint">Completamente subjetiva: qué tanto te gusta. No afecta ningún cálculo de la app. Toca la misma estrella otra vez para quitarla.</div>
+        <div class="field-hint">Permite relacionar cambios en tu piel con la entrada de este producto</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Caducidad (opcional)</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1">
+            <input class="prod-input" id="pf-opened" type="date">
+            <div class="field-hint">Fecha de apertura</div>
+          </div>
+          <div style="flex:1">
+            <input class="prod-input" id="pf-pao" type="number" min="1" max="36" placeholder="Ej: 12">
+            <div class="field-hint">Vida en meses (PAO del envase)</div>
+          </div>
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Descripción del producto</label>
+        <textarea class="prod-input prod-ta" id="pf-note" placeholder="Para qué sirve, beneficios principales, ingredientes clave..."></textarea>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Cómo aplicar</label>
+        <textarea class="prod-input prod-ta" id="pf-how" placeholder="Pasos de aplicación, cantidad, frecuencia, precauciones..."></textarea>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Por qué funciona</label>
+        <textarea class="prod-input prod-ta" id="pf-why" placeholder="Mecanismo activo, ingredientes clave, qué hace a nivel de piel..."></textarea>
+      </div>
+      <button class="save-btn" id="save-prod-btn" onclick="saveCustomProduct()" style="margin-top:4px">Guardar producto</button>
+    </div>
+  </div>
+</div>
+<!-- Add Routine Modal -->
+<div class="modal-overlay" id="add-routine-modal" onclick="closeModal('add-routine-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">＋ Nueva rutina</div>
+      <button class="modal-close" onclick="closeModal('add-routine-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="prod-field">
+        <label class="prod-label">Emoji y nombre</label>
+        <div class="prod-emoji-row">
+          <div class="prod-emoji-preview" id="rf-emoji-preview">✨</div>
+          <input class="prod-input" id="rf-emoji" type="text" placeholder="✨" maxlength="2"
+            style="width:54px;text-align:center;font-size:20px;padding:8px 4px"
+            oninput="document.getElementById('rf-emoji-preview').textContent=this.value||'✨'">
+          <input class="prod-input" id="rf-name" type="text" placeholder="Nombre de la rutina" style="flex:1">
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Sección del día</label>
+        <div class="seg-row" id="rf-section-row">
+          <button type="button" class="seg-btn" data-sec="am" onclick="selectRoutineSection('am')">Mañana</button>
+          <button type="button" class="seg-btn" data-sec="pm" onclick="selectRoutineSection('pm')">Noche</button>
+          <button type="button" class="seg-btn" data-sec="body" onclick="selectRoutineSection('body')">Cuerpo</button>
+          <button type="button" class="seg-btn" data-sec="feet" onclick="selectRoutineSection('feet')">Pies</button>
+        </div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Días de la semana</label>
+        <div class="day-row" id="rf-day-row">
+          <button type="button" class="day-chip" data-dow="0" onclick="toggleRoutineDay(0)">D</button>
+          <button type="button" class="day-chip" data-dow="1" onclick="toggleRoutineDay(1)">L</button>
+          <button type="button" class="day-chip" data-dow="2" onclick="toggleRoutineDay(2)">M</button>
+          <button type="button" class="day-chip" data-dow="3" onclick="toggleRoutineDay(3)">X</button>
+          <button type="button" class="day-chip" data-dow="4" onclick="toggleRoutineDay(4)">J</button>
+          <button type="button" class="day-chip" data-dow="5" onclick="toggleRoutineDay(5)">V</button>
+          <button type="button" class="day-chip" data-dow="6" onclick="toggleRoutineDay(6)">S</button>
+        </div>
+        <div class="field-hint">Ninguno seleccionado = todos los días. (M = martes, X = miércoles)</div>
+      </div>
+      <button class="save-btn" id="save-routine-btn" onclick="saveNewRoutine()" style="margin-top:4px">Guardar rutina</button>
+    </div>
+  </div>
+</div>
+<!-- Add Step Modal -->
+<div class="modal-overlay" id="add-step-modal" onclick="closeModal('add-step-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">＋ Nuevo paso</div>
+      <button class="modal-close" onclick="closeModal('add-step-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sf-routine-id">
+      <div class="prod-field">
+        <label class="prod-label">Tipo de producto</label>
+        <select class="prod-input prod-select" id="sf-cat" onchange="onStepCatChange()"></select>
+      </div>
+      <div class="prod-field" id="sf-product-field" style="display:none">
+        <label class="prod-label">Producto</label>
+        <select class="prod-input prod-select" id="sf-product">
+          <option value="">— Sin fijar · rotar cada día —</option>
+        </select>
+        <div class="field-hint">Sin fijar = eliges el producto cada día en Today. Fija uno si quieres que ese paso siempre use el mismo.</div>
+      </div>
+      <div class="prod-field" id="sf-info-field" style="display:none">
+        <label class="prod-label">Nombre del paso</label>
+        <input class="prod-input" id="sf-info-name" type="text" placeholder="Ej: Esperar 15 min · piel seca">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Aplicación en esta rutina</label>
+        <textarea class="prod-input prod-ta" id="sf-how" placeholder="Cómo aplicarlo en esta rutina específica..."></textarea>
+      </div>
+      <button class="save-btn" id="save-step-btn" onclick="saveNewStep()" style="margin-top:4px">Guardar paso</button>
+    </div>
+  </div>
+</div>
+<!-- Edit Application -->
+<div class="modal-overlay" id="edit-app-modal" onclick="closeModal('edit-app-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">✏️ Editar registro</div>
+      <button class="modal-close" onclick="closeModal('edit-app-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ea-id">
+      <div class="prod-field">
+        <label class="prod-label">Producto</label>
+        <select class="prod-input prod-select" id="ea-product"></select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Fecha y hora</label>
+        <input class="prod-input" id="ea-datetime" type="datetime-local">
+      </div>
+      <button class="save-btn" onclick="saveEditedApplication()" style="margin-top:4px;margin-bottom:0">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+<!-- Cambiar rutina del día (override manual, solo para el día que se ve) -->
+<div class="modal-overlay" id="routine-switch-modal" onclick="closeModal('routine-switch-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="routine-switch-title">🔄 Cambiar rutina de hoy</div>
+      <button class="modal-close" onclick="closeModal('routine-switch-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="routine-switch-body"></div>
+  </div>
+</div>
+<!-- Guía de manchas solares -->
+<div class="modal-overlay" id="guide-modal" onclick="closeModal('guide-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📖 Guía · Manchas solares</div>
+      <button class="modal-close" onclick="closeModal('guide-modal')">✕</button>
+    </div>
+    <div class="modal-body guide-body">
+      <h4>¿Qué son los lentigos solares?</h4>
+      <p>Acumulaciones localizadas de melanina causadas por daño UV acumulado a lo largo de años. Son planos, de borde definido y color café uniforme, y aparecen donde más sol recibes: cara, brazos, manos y escote. A diferencia del melasma, <strong>no dependen de hormonas ni del calor</strong> — su causa es casi puramente UV, por eso el SPF diario es la mitad del tratamiento.</p>
+      <h4>Cronología realista con tópicos</h4>
+      <p>Con tretinoína + despigmentante (azelaico/Thiamidol) + SPF constante:</p>
+      <p><strong>Semanas 0–4</strong> · adaptación: la piel tolera los activos, puede haber resequedad ligera.<br>
+      <strong>Semanas 4–8</strong> · mejora textura y luminosidad general; las manchas aún casi igual.<br>
+      <strong>Semanas 8–16</strong> · aclarado gradual y visible de los lentigos más superficiales.<br>
+      <strong>Semana 16+</strong> · mantenimiento. Los lentigos viejos o profundos suelen aclarar solo parcialmente con tópicos — ahí es donde los procedimientos en consultorio brillan.</p>
+      <h4>🚨 Cuándo enseñarle una mancha a tu dermatóloga PRONTO</h4>
+      <p>La regla ABCDE: <strong>A</strong>simetría (una mitad distinta a la otra), <strong>B</strong>ordes irregulares o borrosos, <strong>C</strong>olor no uniforme (varios tonos en la misma mancha), <strong>D</strong>iámetro &gt;6 mm y creciendo, <strong>E</strong>volución (cambia de forma/color, se abulta, pica o sangra).</p>
+      <p><strong>Una mancha nueva que se ve "diferente" a todas tus demás manchas merece dermatoscopia</strong> — no la trates con despigmentantes sin que la revisen primero.</p>
+      <h4>Procedimientos en consultorio</h4>
+      <p>Para lentigos son muy efectivos y de bajo riesgo (a diferencia del melasma, donde el láser puede empeorarlo):</p>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table class="guide-table">
+        <tr><th></th><th>❄️ Crioterapia</th><th>💡 IPL</th><th>⚡ Láser Q-switched</th></tr>
+        <tr><td>Qué es</td><td>Nitrógeno líquido congela la lesión</td><td>Pulsos de luz intensa de amplio espectro</td><td>Pulsos láser ultra-cortos que rompen el pigmento</td></tr>
+        <tr><td>Sesiones típicas</td><td>1–2</td><td>1–3</td><td>1–2</td></tr>
+        <tr><td>Recuperación</td><td>Costra 5–10 días</td><td>Manchas se oscurecen y descaman ~1 semana</td><td>Costra fina pocos días</td></tr>
+        <tr><td>Ideal para</td><td>Lentigos aislados y gruesos; opción más económica</td><td>Múltiples lentigos + mejora general del tono</td><td>Lentigos definidos; máxima precisión</td></tr>
+        <tr><td>Ojo (fototipos III–VI)</td><td>Riesgo de hipo/hiperpigmentación en piel morena</td><td>Requiere calibración cuidadosa; riesgo de HPI si se agresiva</td><td>Preferir Nd:YAG 1064 nm en piel morena; riesgo de HPI manejable</td></tr>
+      </table>
+      </div>
+      <p style="margin-top:10px">HPI = hiperpigmentación post-inflamatoria. En cualquier procedimiento: SPF estricto antes y después, e idealmente pre-tratamiento con tus despigmentantes.</p>
+      <p class="guide-disclaimer">Contenido educativo para preparar tu consulta — las decisiones de tratamiento son con tu dermatóloga.</p>
+    </div>
+  </div>
+</div>
+<!-- Photo Slider Compare -->
+<div class="modal-overlay" id="slider-modal" onclick="closeModal('slider-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="slider-title">🔀 Comparar fotos</div>
+      <button class="modal-close" onclick="closeModal('slider-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="slider-body"></div>
+  </div>
+</div>
+<!-- Confirm sheet (reemplaza confirm() nativo) -->
+<div class="modal-overlay" id="spot-modal" onclick="closeModal('spot-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="spot-modal-title">＋ Nueva mancha</div>
+      <button class="modal-close" onclick="closeModal('spot-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sp-id">
+      <div class="prod-field">
+        <label class="prod-label">Nombre</label>
+        <input class="prod-input" id="sp-name" type="text" placeholder="Ej: Pómulo derecho, la grande">
+        <div class="field-hint">Un nombre que reconozcas dentro de seis meses.</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Zona de tratamiento</label>
+        <select class="prod-input prod-select" id="sp-territorio" onchange="onSpotTerritorioChange()"></select>
+        <div class="field-hint">Es la zona a la que le aplicas producto. Con esto la mancha puede decirte cuánto estímulo ha recibido.</div>
+      </div>
+      <div class="prod-field" id="sp-encuadre-field">
+        <label class="prod-label">Encuadre de la foto</label>
+        <select class="prod-input prod-select" id="sp-encuadre" onchange="onSpotEncuadreChange()"></select>
+        <div class="field-hint">Desde qué ángulo la fotografías. Es lo que permite recortar la misma región en cada foto.</div>
+      </div>
+      <div class="prod-field" id="sp-lateralidad-field">
+        <label class="prod-label">Lado</label>
+        <select class="prod-input prod-select" id="sp-lateralidad"></select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Ubicación</label>
+        <div class="field-hint" id="sp-map-hint">Toca sobre la foto para marcar dónde está.</div>
+        <div class="spot-map-wrap" id="sp-map-wrap" onclick="placeSpotMarker(event)">
+          <img id="sp-map-img" src="" alt="">
+          <div class="spot-marker" id="sp-map-marker" style="display:none"></div>
+        </div>
+        <button class="mini-action-btn" id="sp-remark-btn" style="display:none;margin-top:8px"
+          onclick="remarkOnLatest()">🔄 Volver a marcar sobre la foto más reciente</button>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Estado</label>
+        <select class="prod-input prod-select" id="sp-status">
+          <option value="activa">Activa</option>
+          <option value="aclarando">Aclarando</option>
+          <option value="resuelta">Resuelta</option>
+          <option value="vigilancia">Preguntar en consulta</option>
+        </select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Desde cuándo la notas (opcional)</label>
+        <input class="prod-input" id="sp-first" type="date">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Notas (opcional)</label>
+        <textarea class="prod-input prod-ta" id="sp-notes" placeholder="Cómo es, si cambió, qué te dijeron en consulta..."></textarea>
+      </div>
+      <button class="save-btn" id="save-spot-btn" onclick="saveSpot()">Guardar mancha</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="obs-modal" onclick="closeModal('obs-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="obs-modal-title">Registrar cómo se ve</div>
+      <button class="modal-close" onclick="closeModal('obs-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ob-spot-id">
+      <div class="prod-field">
+        <label class="prod-label">Fecha</label>
+        <input class="prod-input" id="ob-date" type="date">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">¿Qué tan marcada la ves hoy?</label>
+        <div class="skin-state-row" id="ob-shade-row"></div>
+        <div class="field-hint">Es tu apreciación a simple vista, no una medición. Sirve para ver la dirección a lo largo de meses.</div>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Notas (opcional)</label>
+        <textarea class="prod-input prod-ta" id="ob-notes" placeholder="Con qué luz la viste, si notaste algo distinto..."></textarea>
+      </div>
+      <button class="save-btn" id="save-obs-btn" onclick="saveObservation()">Guardar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="hito-modal" onclick="closeModal('hito-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="hito-modal-title">＋ Nuevo hito</div>
+      <button class="modal-close" onclick="closeModal('hito-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="hf-id">
+      <div class="prod-field">
+        <label class="prod-label">Tipo</label>
+        <select class="prod-input prod-select" id="hf-type"></select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Fecha</label>
+        <input class="prod-input" id="hf-date" type="date">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Título</label>
+        <input class="prod-input" id="hf-title" type="text" placeholder="Ej: Consulta con la dermatóloga">
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Producto relacionado (opcional)</label>
+        <select class="prod-input prod-select" id="hf-product"></select>
+      </div>
+      <div class="prod-field">
+        <label class="prod-label">Notas (opcional)</label>
+        <textarea class="prod-input prod-ta" id="hf-notes" placeholder="Qué se decidió, qué te indicaron, cómo reaccionó tu piel..."></textarea>
+      </div>
+      <button class="save-btn" id="save-hito-btn" onclick="saveHito()">Guardar hito</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="confirm-modal" onclick="confirmAnswer(false)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="confirm-body">
+      <div class="confirm-msg" id="confirm-msg"></div>
+      <div class="confirm-row">
+        <button class="confirm-cancel" onclick="confirmAnswer(false)">Cancelar</button>
+        <button class="confirm-ok" id="confirm-ok" onclick="confirmAnswer(true)">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="pure.js"></script>
+<script src="activos-matriz.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
