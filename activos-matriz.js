@@ -340,7 +340,7 @@ const PRODUCT_ZONAS = {
   'a6451499-e856-4494-b68b-acdbbc038824': ['cara'],  // Poremizing Clay Stick Mask
   'dbe863ae-eb6d-42ad-9565-26cc6ed6e86f': ['cara'],  // Poremizing Light Gel Cream
   '844e871d-3993-47ac-9fbc-d4fe3e7d6a82': ['cara', 'cuello', 'manos'],  // Probio-Cica Glow Sun Ampoule
-  '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['cara', 'cuello'],  // Retin-A Tretinoína 0.025%
+  '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['manos'],  // Retin-A Tretinoína 0.025% — reasignada a manos y antebrazos el 18-sep-2026
   '05f7037d-f73b-4ff8-9081-c64afb2c5cf2': ['cuerpo'],  // Retinol Overnight Lotion
   'a5953eaf-73e5-4ba9-80fa-9979641b62b8': ['cara'],  // Revitalift Laser Day Cream
   '83fb4617-acd4-404c-80e5-f4dae81accb6': ['cara'],  // SA Cleanser
@@ -471,6 +471,13 @@ const ZONAS_APTAS_OVERRIDE = {
   // que elegir entre las dos cosas.
   '6cfe7393-865c-4af0-b1bf-5d90e7cd52de': ['manos'],  // Turmeric Lemon Kojic Acid Soap
   '106e6207-662c-451d-ac3c-5c8c1db73883': ['manos'],  // Sadoer Kojic Acid Hand Cream
+  // 18-sep-2026: la dermatóloga retira el adapaleno y deja la cara con la
+  // tretinoína 0.1%. El 0.025% se reasigna a MANOS Y ANTEBRAZOS. Hizo falta
+  // el override porque '💊 Activos' solo abre cara y cuello. Antes de mover
+  // PRODUCT_ZONAS se rellenaron con 'cara, cuello' las 9 aplicaciones (de 19)
+  // que no traían zona explícita: sin eso, este cambio habría reescrito como
+  // manos meses de uso que fue en cara.
+  '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577': ['manos'],  // Retin-A Tretinoína 0.025%
   // Confirmado por la usuaria: los usa en CUERPO pese a su categoría facial.
   '05f7037d-f73b-4ff8-9081-c64afb2c5cf2': ['cuerpo'],  // Retinol Overnight Lotion
   '50e32222-59b0-4b20-ad26-23b552f91239': ['cuerpo'],  // Salicylic Acid 2% Spray
