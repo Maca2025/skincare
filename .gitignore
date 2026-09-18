@@ -4,3 +4,7 @@
 
 # Lo mismo, en subcarpetas.
 **/.DS_Store
+
+# copias descargadas del repo, no van a git
+skincare-main/
+skincare-main*.zip

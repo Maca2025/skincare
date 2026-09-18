@@ -125,6 +125,7 @@ const PRODUCT_DOSE = {
   '4a9ab636-db1f-424f-bcfc-7abc237c673c': { barrera: 45 },  // 345 Relief Cream Mist
   '7454f16a-51b3-44c9-b392-4d97b50038b8': { barrera: 35 },  // Aceite de Ducha PH5
   '6447629f-d5f2-4a83-b011-006b25cf18e3': { queratolitico: 90 },  // Aceite Urea 60%
+  '0e30f2d7-ffc0-4d3e-879e-ff935c0edd2b': { textura: 95, firmeza: 85, aclarado: 75 },  // Adaferin Gel adapaleno 0.3%
   '5a327857-b34e-439d-95dc-b9461e8e8c62': { proteccion: null },  // Anthelios Spray Invisible SPF50+ Corporal
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': { proteccion: null, aclarado: 25 },  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': { proteccion: null },  // Anthelios UVMune 400 SPF50
@@ -147,6 +148,16 @@ const PRODUCT_DOSE = {
   '3b90cc0e-7170-4f62-9e99-c582510d6361': { barrera: 55 },  // Ceramide Eye Cream Stick
   '22b2bb98-8431-4d40-8ffe-08f02f3db40b': { barrera: 65, aclarado: 15 },  // Cerave Eye Repair Cream
   '44b6586f-754c-49a0-b6f6-867d77bd2e44': { queratolitico: 45 },  // Crema con Lanolina
+  'ce3327a3-a5d5-4737-8a2c-00f630a5a723': { firmeza: 50, barrera: 25 },  // epii HPT6 Ultra Drop 10%
+  'c1c5984b-79ce-4b94-9596-9b877ce2d2de': { proteccion: null },  // Fusion Water Magic Repair Color SPF 50
+  '9acbf2d9-0ce6-47e3-ada4-234a62449c9d': { aclarado: 65, firmeza: 45, textura: 15 },  // Isdinceutics Flavo-C Intense
+  '08a6aa3b-46b0-482b-b5a9-d31171a2954c': { textura: 55, firmeza: 50, aclarado: 35, barrera: 25 },  // Isdinceutics Retinal Eyes
+  'ce90f3f8-20be-4530-9ea7-acd695ab4501': { aclarado: 50, barrera: 45, textura: 20 },  // JUMISO Niacinamide 20 Serum
+  'ee1f9f7f-dd3d-4dc0-87f2-a1713e18862a': { aclarado: 85, textura: 35 },  // Kisocare Ácido Azelaico 20%
+  '311c4c36-c4cb-4812-9abf-1e2e7851f0c0': { barrera: 35, aclarado: 25, firmeza: 25 },  // Mary&May Tranexamic + Glutathione Eye Cream
+  '75c24f04-cd51-40c8-a8c2-26b6aa66da70': { firmeza: 45, barrera: 50, aclarado: 25 },  // Numbuzin Essence No.9 NAD+ Bio Lifting-sil
+  '8448938e-685f-4efd-bdb9-63738f216b3f': { barrera: 55, firmeza: 40, aclarado: 30, textura: 15 },  // Numbuzin Eye Cream No.9 NAD+ Retinol Volumetox
+  '77523cc9-38dd-4016-9148-51343d36ccf7': { textura: 100, firmeza: 90, aclarado: 90 },  // Retin-A Tretinoína 0.1%
   'bc090811-c158-4bd2-b97a-6f83f0de7a24': { firmeza: 60, textura: 50, barrera: 30 },  // Retinol Body Cream (Vit E, Té Verde, Aloe)
   'ccea1f6a-4935-44ef-a70a-e332bc9b2b9c': { barrera: 70 },  // Crema Hidratante Diaria
   'd944830f-82e8-434e-8409-dd7a89997fd9': { barrera: 40, firmeza: 20 },  // Crema Reafirmante Cuello
@@ -212,6 +223,7 @@ const PRODUCT_DOSE = {
   // glicólico 7% = 65). Sin `barrera`: panthenol, centella y alantoína calman,
   // pero apuntarle barrera a una fórmula con alcohol denat en tercer lugar
   // sería inventar.
+  'bffee3b5-000c-4a65-a9cb-815c27f96f42': { barrera: 45, firmeza: 20 },  // Ureadin Fusion Serum Lift Antiarrugas
   'a6422a1a-1588-4490-bc03-d2b80ade8ff5': { textura: 60, aclarado: 25 },  // Zero Pore Pad 2.0
   '50e32222-59b0-4b20-ad26-23b552f91239': { textura: 70 },  // Salicylic Acid 2% Spray
   // Niacinamida medida en 2.7-4%, panthenol y ceramidas NP/AP/EOP con
@@ -250,6 +262,7 @@ const PRODUCT_ZONAS = {
   '4a9ab636-db1f-424f-bcfc-7abc237c673c': ['cara'],  // 345 Relief Cream Mist
   '7454f16a-51b3-44c9-b392-4d97b50038b8': ['cuerpo'],  // Aceite de Ducha PH5
   '6447629f-d5f2-4a83-b011-006b25cf18e3': ['pies'],  // Aceite Urea 60%
+  '0e30f2d7-ffc0-4d3e-879e-ff935c0edd2b': ['cara'],  // Adaferin Gel adapaleno 0.3%
   '5a327857-b34e-439d-95dc-b9461e8e8c62': ['cuerpo', 'manos'],  // Anthelios Spray Invisible SPF50+ Corporal
   'd62e61a3-0715-44c3-95bb-a402ca0f73cc': ['cara', 'cuello', 'manos'],  // Anthelios UV AIR Serum SPF 50+ (Tono Medio Natural)
   '57ff2048-f0d3-42a6-a9e5-8e56fb8a564e': ['cara', 'cuello', 'manos'],  // Anthelios UVMune 400 SPF50
@@ -272,6 +285,16 @@ const PRODUCT_ZONAS = {
   '3b90cc0e-7170-4f62-9e99-c582510d6361': ['cara'],  // Ceramide Eye Cream Stick
   '22b2bb98-8431-4d40-8ffe-08f02f3db40b': ['cara'],  // Cerave Eye Repair Cream
   '44b6586f-754c-49a0-b6f6-867d77bd2e44': ['pies'],  // Crema con Lanolina
+  'ce3327a3-a5d5-4737-8a2c-00f630a5a723': ['cara', 'cuello'],  // epii HPT6 Ultra Drop 10%
+  'c1c5984b-79ce-4b94-9596-9b877ce2d2de': ['cara', 'cuello', 'manos'],  // Fusion Water Magic Repair Color SPF 50
+  '9acbf2d9-0ce6-47e3-ada4-234a62449c9d': ['cara', 'cuello'],  // Isdinceutics Flavo-C Intense
+  '08a6aa3b-46b0-482b-b5a9-d31171a2954c': ['cara'],  // Isdinceutics Retinal Eyes
+  'ce90f3f8-20be-4530-9ea7-acd695ab4501': ['cara', 'cuello'],  // JUMISO Niacinamide 20 Serum
+  'ee1f9f7f-dd3d-4dc0-87f2-a1713e18862a': ['cara', 'cuello'],  // Kisocare Ácido Azelaico 20%
+  '311c4c36-c4cb-4812-9abf-1e2e7851f0c0': ['cara'],  // Mary&May Tranexamic + Glutathione Eye Cream
+  '75c24f04-cd51-40c8-a8c2-26b6aa66da70': ['cara', 'cuello'],  // Numbuzin Essence No.9 NAD+ Bio Lifting-sil
+  '8448938e-685f-4efd-bdb9-63738f216b3f': ['cara'],  // Numbuzin Eye Cream No.9 NAD+ Retinol Volumetox
+  '77523cc9-38dd-4016-9148-51343d36ccf7': ['cara', 'cuello'],  // Retin-A Tretinoína 0.1%
   'bc090811-c158-4bd2-b97a-6f83f0de7a24': ['cuerpo'],  // Retinol Body Cream (Vit E, Té Verde, Aloe)
   'ccea1f6a-4935-44ef-a70a-e332bc9b2b9c': ['cara', 'cuerpo'],  // Crema Hidratante Diaria
   'd944830f-82e8-434e-8409-dd7a89997fd9': ['cuello'],  // Crema Reafirmante Cuello
@@ -330,6 +353,7 @@ const PRODUCT_ZONAS = {
   // Solo cara por defecto. La categoría lo hace apto también en cuello, así que
   // el chip está ahí cuando lo quieras — pero con limoneno y aceites esenciales
   // encima de piel más fina, la preselección no debería empujarte a diario.
+  'bffee3b5-000c-4a65-a9cb-815c27f96f42': ['cara', 'cuello'],  // Ureadin Fusion Serum Lift Antiarrugas
   'a6422a1a-1588-4490-bc03-d2b80ade8ff5': ['cara'],  // Zero Pore Pad 2.0
   '50e32222-59b0-4b20-ad26-23b552f91239': ['cuerpo'],  // Salicylic Acid 2% Spray
   // Cara y cuello: sin ácidos y con ceramidas, es de lo más seguro que puede
@@ -357,6 +381,10 @@ const PRODUCT_ZONAS = {
 const IRRITANTES = new Set([
   '70f8c5ee-c241-41d4-bfe4-2cf4d52a7577',  // Retin-A Tretinoína 0.025%
   '05f7037d-f73b-4ff8-9081-c64afb2c5cf2',  // Retinol Overnight Lotion
+  // Alta del 17-ago (que nunca llegó al archivo) y bloque A del 18-sep-2026.
+  '77523cc9-38dd-4016-9148-51343d36ccf7',  // Retin-A Tretinoína 0.1%
+  '0e30f2d7-ffc0-4d3e-879e-ff935c0edd2b',  // Adaferin Gel adapaleno 0.3%
+  '08a6aa3b-46b0-482b-b5a9-d31171a2954c',  // Isdinceutics Retinal Eyes — retinal, contorno de ojos
   '110a2828-a348-41f3-93b6-bc2b7612d731',  // Toner AHA BHA PHA + Niacinamide 2%
   '86cd48aa-fab8-43bf-8275-534d625268e8',  // Glycolic Acid 7%
   '8d0912a7-441d-4e03-a344-e16076334dbe',  // Skin Perfecting 2% BHA
