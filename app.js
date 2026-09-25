@@ -7,8 +7,7 @@
 // Esta key es "publishable" y es seguro exponerla SOLO si RLS está activado
 // con políticas en todas las tablas y en el bucket. Ver supabase-hardening.sql
 // (corre ese script en el SQL Editor de Supabase si no lo has hecho).
-const SUPABASE_URL = 'https://psvphqieczrlbovwnxgi.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_V4eBcTHlVl4JTj4EFszfTg_ReJU1Wy4';
+// SUPABASE_URL y SUPABASE_KEY viven en config.js (compartido con escritorio.html).
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── DATE STATE ───────────────────────────────────────────────────────────────

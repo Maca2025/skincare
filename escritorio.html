@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skincare · Escritorio</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="escritorio.css">
+<!--
+  Interfaz de COMPUTADORA del Skincare Tracker. Misma base de datos, mismo
+  inicio de sesión y mismos motores (pure.js, activos-matriz.js) que la app del
+  celular (index.html). Reparto de trabajo: aquí se configura y se registra en
+  lote; el celular registra en el momento. Ver claude/escritorio-propuesta.md.
+-->
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <form class="login-card" id="login-form" autocomplete="on">
+    <div class="logo">Skincare<span>.</span></div>
+    <p class="muted">Versión de escritorio. Entra con la misma cuenta del celular.</p>
+    <label class="lbl" for="login-email">Correo
+      <input class="field" id="login-email" type="email" autocomplete="username" required>
+    </label>
+    <label class="lbl" for="login-password">Contraseña
+      <input class="field" id="login-password" type="password" autocomplete="current-password" required>
+    </label>
+    <p id="login-error" class="login-error" hidden></p>
+    <button class="btn pri" id="login-btn" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div id="app" class="app" hidden>
+  <nav class="side" aria-label="Secciones">
+    <div class="logo">Skincare<span>.</span></div>
+    <button class="navb" data-go="registro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 12"/></svg>Registro<kbd>1</kbd></button>
+    <button class="navb" data-go="rutinas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="5" height="18" rx="1.5"/><rect x="10" y="3" width="5" height="12" rx="1.5"/><rect x="17" y="3" width="4" height="15" rx="1.5"/></svg>Rutinas<kbd>2</kbd></button>
+    <button class="navb" data-go="catalogo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h18M3 12h18M3 19h18M8 3v18"/></svg>Catálogo<kbd>3</kbd></button>
+    <button class="navb" data-go="fotos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 5l1.5-2h5L16 5"/></svg>Fotos<kbd>4</kbd></button>
+    <button class="navb" data-go="revisar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Revisar<kbd>5</kbd></button>
+    <div class="sidefoot">
+      <div id="estado" class="estado"><span class="dot"></span>Conectando…</div>
+      <div id="conteos" class="conteos"></div>
+      <div><a href="index.html">Abrir la app del celular</a> · <button class="linkb" id="logout" type="button">Salir</button></div>
+    </div>
+  </nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<div class="angosta" aria-hidden="true">
+  <p>Esta versión está pensada para una pantalla de computadora.</p>
+  <p><a href="index.html">Abrir la app del celular</a></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="pure.js"></script>
+<script src="activos-matriz.js"></script>
+<script src="escritorio.js"></script>
+</body>
+</html>

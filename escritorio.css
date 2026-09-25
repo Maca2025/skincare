@@ -1,0 +1,100 @@
+/* ============================================================================
+   Skincare Tracker — escritorio.css
+   Hoja propia de la interfaz de computadora. NO comparte estilos con la del
+   celular (styles.css): es otro lenguaje visual a propósito.
+   Regla heredada de styles.css: ningún color literal fuera de los tokens.
+   ============================================================================ */
+:root{
+  color-scheme:light;
+  --ground:#ECEFEC; --panel:#FFFFFF; --panel2:#F5F7F5; --line:#D5DBD6; --line2:#E7EBE8;
+  --ink:#15201B; --ink2:#46524C; --ink3:#66726C;
+  --side:#15201B; --sideInk:#DCE3DE; --sideDim:#93A098; --sideAct:#2A3832; --sideAccent:#7FA2E8;
+  --accent:#2B50A0; --accentSoft:#E3EAF7; --accentInk:#FFFFFF;
+  --done:#2F5D4A; --doneInk:#FFFFFF; --doneSoft:#DDEBE3;
+  --warn:#7A5200; --warnSoft:#F7EBCB; --warnLine:#E0C27A;
+  --bad:#8E2F2F; --badSoft:#F6DEDB; --ok:#6FBF95;
+  --brand:#3F63A8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#101614; --panel:#18201D; --panel2:#1D2622; --line:#2E3934; --line2:#25302B;
+    --ink:#E6ECE8; --ink2:#B4BFB9; --ink3:#8E9A94;
+    --side:#0B100E; --sideInk:#DCE3DE; --sideDim:#7F8C85; --sideAct:#22302A;
+    --accent:#7FA2E8; --accentSoft:#1F2B45; --accentInk:#0B1220;
+    --done:#5FA284; --doneInk:#0B120F; --doneSoft:#1D3329;
+    --warn:#E8C26A; --warnSoft:#33290F; --warnLine:#6B5520;
+    --bad:#EC9C92; --badSoft:#3A1F1C;
+    --brand:#8FB0EE;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#101614; --panel:#18201D; --panel2:#1D2622; --line:#2E3934; --line2:#25302B;
+  --ink:#E6ECE8; --ink2:#B4BFB9; --ink3:#8E9A94;
+  --side:#0B100E; --sideInk:#DCE3DE; --sideDim:#7F8C85; --sideAct:#22302A;
+  --accent:#7FA2E8; --accentSoft:#1F2B45; --accentInk:#0B1220;
+  --done:#5FA284; --doneInk:#0B120F; --doneSoft:#1D3329;
+  --warn:#E8C26A; --warnSoft:#33290F; --warnLine:#6B5520;
+  --bad:#EC9C92; --badSoft:#3A1F1C;
+  --brand:#8FB0EE;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--ground);color:var(--ink);font:14px/1.45 'IBM Plex Sans',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.disp{font-family:'Bricolage Grotesque','IBM Plex Sans',sans-serif}
+.muted{color:var(--ink3)}
+.small{font-size:12.5px}
+
+/* ── login ── */
+.login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px 26px;display:flex;flex-direction:column;gap:14px}
+.login-card .logo{color:var(--ink);padding:0}
+.login-error{margin:0;color:var(--bad);background:var(--badSoft);border-radius:8px;padding:8px 10px;font-size:13px}
+
+/* ── estructura ── */
+.app{display:flex;min-height:100%}
+nav.side{width:216px;flex-shrink:0;background:var(--side);color:var(--sideInk);display:flex;flex-direction:column;gap:2px;padding:24px 12px 18px;position:sticky;top:0;height:100vh}
+.logo{font-family:'Bricolage Grotesque',sans-serif;font-weight:650;font-size:22px;padding:0 10px 22px;letter-spacing:-.01em}
+.logo span{color:var(--sideAccent)}
+.navb{display:flex;align-items:center;gap:11px;padding:10px;border-radius:8px;border:0;background:transparent;color:var(--sideDim);text-align:left;font-size:14px}
+.navb:hover{color:var(--sideInk)}
+.navb[aria-current="page"]{background:var(--sideAct);color:var(--sideInk);font-weight:500}
+.navb kbd{margin-left:auto;font:11px 'IBM Plex Mono',monospace;opacity:.7}
+.navb svg{width:18px;height:18px;flex-shrink:0}
+.sidefoot{margin-top:auto;border-top:1px solid var(--sideAct);padding:14px 10px 0;font-size:12.5px;color:var(--sideDim);display:flex;flex-direction:column;gap:8px}
+.sidefoot a,.linkb{color:var(--sideAccent);background:none;border:0;padding:0;font-size:12.5px;text-decoration:underline}
+.estado{display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--sideDim)}
+.estado.ok .dot{background:var(--ok)}
+.estado.err{color:var(--badSoft)} .estado.err .dot{background:var(--bad)}
+.conteos{line-height:1.6}
+main{flex:1;min-width:0;display:flex;flex-direction:column;outline:none}
+
+/* ── piezas comunes ── */
+.hdr{display:flex;align-items:flex-end;gap:10px;padding:26px 30px 16px;border-bottom:1px solid var(--line)}
+.hdr .grow{flex:1}
+.eyebrow{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:650;font-size:30px;letter-spacing:-.02em;margin:4px 0 0;text-wrap:balance}
+.btn{height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:13.5px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover{border-color:var(--ink3)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accentInk);font-weight:600}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.lbl{font-size:11.5px;font-weight:600;color:var(--ink3);display:flex;flex-direction:column;gap:4px}
+.field{height:38px;border:1px solid var(--line);border-radius:8px;padding:0 10px;background:var(--panel);font-size:14px;font-weight:400;color:var(--ink)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.pronto{margin:30px;padding:26px 28px;max-width:640px;display:flex;flex-direction:column;gap:8px}
+.pronto p{margin:0;color:var(--ink2);line-height:1.55}
+
+/* ── pantalla angosta: esta interfaz no es para celular ── */
+.angosta{display:none}
+@media (max-width: 899px){
+  .app{display:none!important}
+  .angosta{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:100%;padding:24px 16px;text-align:center;color:var(--ink2)}
+}
