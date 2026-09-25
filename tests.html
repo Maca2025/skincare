@@ -542,6 +542,18 @@ t('rutinasDelDia: am sin calendario', rutinasDelDia(_R, 5).am.id, 'a');
 t('nombreRegistroPaso: paso fijo usa "emoji nombre"', nombreRegistroPaso({}, _P[0]), '💊 Retin-A');
 t('isoLocal: vuelve al mismo día local', localDateOfISO(isoLocal('2026-09-21', '22:00')), '2026-09-21');
 
+// ============================================================================
+// NOTAS (la batería completa vive en tests-notas.js)
+// ============================================================================
+group('📝 Notas');
+const _NID = 'ecef5283-7bdd-460b-a9a8-ccb917942c4c';
+const _NP = [{ id: _NID, name: 'Finacea 15%', status: 'ok' }];
+const _Npor = { [_NID]: _NP[0] };
+t('renderNota: etiqueta con el nombre actual', renderNota(`@[${_NID}]`, _Npor).includes('>Finacea 15%</span>'), true);
+t('renderNota: escapa HTML escrito', renderNota('<b>x</b>', _Npor), '<p>&lt;b&gt;x&lt;/b&gt;</p>');
+t('notaDeEdicion: nombre → id', notaDeEdicion('@[Finacea 15%]', _NP).cuerpo, `@[${_NID}]`);
+t('notaAEdicion: id → nombre', notaAEdicion(`@[${_NID}]`, _Npor), '@[Finacea 15%]');
+
 // ── fin ──
 finish();
 </script>

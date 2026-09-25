@@ -71,7 +71,9 @@
 // v37 — app.js usa funciones nuevas de pure.js (productoDeNombre,
 // zonasRegistroDe, rutinasDelDia), compartidas con el registro en lote de
 // escritorio. app.js nuevo con pure.js viejo en caché no arrancaría.
-const CACHE = 'skincare-shell-v37';
+// v38 — pure.js gana las funciones de NOTAS (renderNota y compañía), que
+// comparten la computadora (escribe) y el celular (lee). Sección Notas.
+const CACHE = 'skincare-shell-v38';
 const SHELL = [
   './',
   './index.html',

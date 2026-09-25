@@ -10,6 +10,7 @@
 //
 // Paso 1 (24-sep-2026): la base — sesión, menú, conexión verificada.
 // Paso 2 (24-sep-2026): Registro en lote → escritorio-registro.js.
+// Notas (25-sep-2026): información suelta con productos insertados → escritorio-notas.js.
 // ============================================================================
 (function () {
 'use strict';
@@ -29,7 +30,8 @@ const PANTALLAS = {
   fotos:    { titulo: 'Estudio de fotos', paso: 5,
     texto: 'Alinear las fotos de cada sesión contra su foto base, sin modificar el original, y compararlas.' },
   revisar:  { titulo: 'Revisar y corregir', paso: 6,
-    texto: 'El historial como tabla editable, las barras de progreso por zona y el reporte para la dermatóloga.' }
+    texto: 'El historial como tabla editable, las barras de progreso por zona y el reporte para la dermatóloga.' },
+  notas:    { titulo: 'Notas', paso: 0, texto: '' }
 };
 const ORDEN = Object.keys(PANTALLAS);
 const KEY_PANTALLA = 'escritorio-pantalla';
@@ -38,13 +40,13 @@ let actual = 'registro';
 try { const g = localStorage.getItem(KEY_PANTALLA); if (PANTALLAS[g]) actual = g; } catch (e) {}
 
 // Pantallas ya construidas: cada una es un módulo con montar(elemento, db).
-const MODULOS = { registro: window.Registro };
+const MODULOS = { registro: window.Registro, notas: window.Notas };
 
 function pintar() {
   const p = PANTALLAS[actual];
   const main = $('main');
   main.dataset.pantalla = actual;
-  main.onclick = null; main.onchange = null;
+  main.onclick = null; main.onchange = null; main.oninput = null; main.onmousedown = null;
   document.querySelectorAll('.navb').forEach(b => {
     if (b.dataset.go === actual) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -58,7 +60,10 @@ function pintar() {
      </section>`;
 }
 function ir(nombre) {
-  if (!PANTALLAS[nombre]) return;
+  if (!PANTALLAS[nombre] || nombre === actual) return;
+  // Una pantalla con trabajo sin guardar (una nota a medias) puede frenar el cambio.
+  const m = MODULOS[actual];
+  if (m && m.puedeSalir && !m.puedeSalir()) return;
   actual = nombre;
   try { localStorage.setItem(KEY_PANTALLA, nombre); } catch (e) {}
   pintar();

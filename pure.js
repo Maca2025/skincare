@@ -753,3 +753,155 @@ function filaAplicacionLote({ nombre, prod, fecha, hora, stepId, lote, orden }) 
     notes: LOTE_PREFIJO + lote
   };
 }
+
+// ============================================================================
+// NOTAS — texto libre con productos del stock insertados (tabla `notas`).
+// Compartido por las dos interfaces: la computadora escribe y lee, el celular
+// solo lee. UNA sola regla de cómo se ve una nota, aquí.
+//
+// Cómo se guarda `notas.cuerpo` (texto plano, una línea = un renglón):
+//   # Título           ## Subtítulo          > Aviso (recuadro rojo)
+//   1. Paso numerado   - Viñeta  (con espacios delante = dentro del renglón de arriba)
+//   **negrita**        {{⏱ Espera 5 min}}     @[uuid-del-producto]
+// El producto se guarda por su id, NO por su nombre: si se renombra en el
+// catálogo, la nota muestra el nombre nuevo sola. Al editar, el id se
+// muestra como @[Nombre] y al guardar se vuelve a convertir en id.
+// ============================================================================
+const NOTA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function notaNorm(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+// Una etiqueta de producto. `crudo` es lo que había entre @[ y ].
+function notaChip(crudo, porId) {
+  const p = porId && porId[crudo];
+  if (p) {
+    const out = p.status === 'out';
+    const tit = [p.brand, p.category, out ? 'agotado' : ''].filter(Boolean).join(' · ');
+    return `<span class="nt-pr${out ? ' out' : ''}" data-prod="${esc(p.id)}" title="${esc(tit)}">${esc(p.name)}</span>`;
+  }
+  if (NOTA_UUID.test(crudo)) return `<span class="nt-pr borrado">producto borrado</span>`;
+  return `<span class="nt-pr falta" title="No encontré este producto en el catálogo">¿${esc(crudo)}?</span>`;
+}
+
+// Formato dentro de un renglón. Se escapa TODO primero; las marcas (** {{ @[)
+// no llevan caracteres que esc() toque, así que sobreviven al escape.
+function notaInline(texto, porId) {
+  const chips = [];
+  let h = String(texto == null ? '' : texto).replace(/@\[([^\]\n]+)\]/g, (m, x) => {
+    chips.push(notaChip(x.trim(), porId));
+    return '\u0000' + (chips.length - 1) + '\u0000';
+  });
+  h = esc(h)
+    .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+    .replace(/\{\{([^}\n]+)\}\}/g, (m, x) => `<span class="nt-espera">${x.trim()}</span>`);
+  return h.replace(/\u0000(\d+)\u0000/g, (m, i) => chips[Number(i)]);
+}
+
+// cuerpo guardado → HTML. porId: { id → producto }.
+function renderNota(cuerpo, porId) {
+  const out = [];
+  let lista = null;   // { tipo:'ol'|'ul', start, items:[{ html, sub:{tipo, items[]} | null }] }
+  let parr = null;    // renglones del párrafo en curso
+  let aviso = null;   // renglones del aviso en curso
+  const cerrarLista = () => {
+    if (!lista) return;
+    const li = lista.items.map(it => {
+      const sub = it.sub ? `<${it.sub.tipo}>${it.sub.items.map(x => `<li>${x}</li>`).join('')}</${it.sub.tipo}>` : '';
+      return `<li>${it.html}${sub}</li>`;
+    }).join('');
+    const start = lista.tipo === 'ol' && lista.start > 1 ? ` start="${lista.start}"` : '';
+    out.push(`<${lista.tipo}${start}>${li}</${lista.tipo}>`);
+    lista = null;
+  };
+  const cerrarParr = () => { if (parr) { out.push(`<p>${parr.join('<br>')}</p>`); parr = null; } };
+  const cerrarAviso = () => { if (aviso) { out.push(`<div class="nt-aviso">${aviso.join('<br>')}</div>`); aviso = null; } };
+  const cerrarTodo = () => { cerrarLista(); cerrarParr(); cerrarAviso(); };
+
+  String(cuerpo == null ? '' : cuerpo).replace(/\r/g, '').split('\n').forEach(crudo => {
+    const linea = crudo.replace(/\s+$/, '');
+    let m;
+    if (!linea.trim()) { cerrarTodo(); return; }
+    if ((m = linea.match(/^\s*##\s+(.*)$/))) { cerrarTodo(); out.push(`<h3>${notaInline(m[1], porId)}</h3>`); return; }
+    if ((m = linea.match(/^\s*#\s+(.*)$/)))  { cerrarTodo(); out.push(`<h2>${notaInline(m[1], porId)}</h2>`); return; }
+    if ((m = linea.match(/^\s*>\s?(.*)$/)))  { cerrarLista(); cerrarParr(); (aviso = aviso || []).push(notaInline(m[1], porId)); return; }
+    const ol = linea.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
+    const ul = linea.match(/^(\s*)[-•*]\s+(.*)$/);
+    if (ol || ul) {
+      cerrarParr(); cerrarAviso();
+      const tipo = ol ? 'ol' : 'ul';
+      const sangria = (ol || ul)[1].length > 0;
+      const html = notaInline(ol ? ol[3] : ul[2], porId);
+      if (sangria && lista && lista.items.length) {
+        const ult = lista.items[lista.items.length - 1];
+        if (!ult.sub) ult.sub = { tipo, items: [] };
+        ult.sub.items.push(html);
+        return;
+      }
+      if (!lista || lista.tipo !== tipo) { cerrarLista(); lista = { tipo, start: ol ? Number(ol[2]) : 1, items: [] }; }
+      lista.items.push({ html, sub: null });
+      return;
+    }
+    cerrarLista(); cerrarAviso();
+    (parr = parr || []).push(notaInline(linea.trim(), porId));
+  });
+  cerrarTodo();
+  return out.join('\n');
+}
+
+// ids de producto que aparecen en una nota (sin repetir, en orden).
+function productosDeNota(cuerpo) {
+  const vistos = [];
+  String(cuerpo == null ? '' : cuerpo).replace(/@\[([^\]\n]+)\]/g, (m, x) => {
+    x = x.trim();
+    if (NOTA_UUID.test(x) && vistos.indexOf(x) === -1) vistos.push(x);
+    return m;
+  });
+  return vistos;
+}
+
+// Guardado → lo que se ve en el editor: @[id] pasa a @[Nombre actual].
+function notaAEdicion(cuerpo, porId) {
+  return String(cuerpo == null ? '' : cuerpo).replace(/@\[([^\]\n]+)\]/g, (m, x) => {
+    const p = porId && porId[x.trim()];
+    return p ? `@[${p.name}]` : m;
+  });
+}
+
+// Editor → guardado: @[Nombre] pasa a @[id]. `preferidos` (nombre normalizado
+// → id) resuelve nombres repetidos con el producto que se eligió en el menú.
+// Lo que no se pueda resolver con certeza se deja igual y se reporta en
+// `faltan`: quien llama decide no guardar hasta que se corrija.
+function notaDeEdicion(texto, productos, preferidos) {
+  const porId = {}, porNombre = {};
+  (productos || []).forEach(p => {
+    porId[p.id] = p;
+    const k = notaNorm(p.name);
+    (porNombre[k] = porNombre[k] || []).push(p);
+  });
+  const faltan = [];
+  const cuerpo = String(texto == null ? '' : texto).replace(/\r/g, '').replace(/@\[([^\]\n]+)\]/g, (m, x) => {
+    x = x.trim();
+    if (porId[x]) return `@[${x}]`;
+    const k = notaNorm(x);
+    const pref = preferidos && preferidos[k];
+    if (pref && porId[pref]) return `@[${pref}]`;
+    const c = porNombre[k] || [];
+    if (c.length === 1) return `@[${c[0].id}]`;
+    if (faltan.indexOf(x) === -1) faltan.push(x);
+    return m;
+  });
+  return { cuerpo, faltan };
+}
+
+// Productos que coinciden con lo tecleado después de "@" (nombre o marca,
+// sin acentos). Los agotados van al final.
+function buscarProductosNota(productos, q, max) {
+  const n = notaNorm(q);
+  const r = (productos || []).filter(p => !n || notaNorm((p.brand || '') + ' ' + p.name).indexOf(n) !== -1);
+  r.sort((a, b) => ((a.status === 'out') - (b.status === 'out')) ||
+    (notaNorm(a.name).indexOf(n) === 0 ? 0 : 1) - (notaNorm(b.name).indexOf(n) === 0 ? 0 : 1) ||
+    String(a.name).localeCompare(String(b.name), 'es'));
+  return r.slice(0, max || 8);
+}
