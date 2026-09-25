@@ -51,6 +51,7 @@
     <button class="tab-btn" onclick="showTab('log',this)">📋 Historial</button>
     <button class="tab-btn" onclick="showTab('routines',this)">⚙️ Rutinas</button>
     <button class="tab-btn" onclick="showTab('capas',this)">🧅 Capas</button>
+    <button class="tab-btn" onclick="showTab('notas',this)">📝 Notas</button>
   </div>
   <!-- Cola offline: se muestra solo si hay registros sin sincronizar.
        Va fuera de las pestañas a propósito, para que se vea en todas. -->
@@ -204,6 +205,13 @@
   <div id="tab-routines" class="tab-content">
     <div id="routines-content">
       <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando rutinas...</div>
+    </div>
+  </div>
+
+  <!-- NOTAS — solo lectura; se escriben en escritorio.html. -->
+  <div id="tab-notas" class="tab-content">
+    <div id="notas-content">
+      <div class="loading-state"><span class="spinner">⟳</span><br><br>Cargando notas...</div>
     </div>
   </div>
 
@@ -404,6 +412,17 @@
   </div>
 </div>
 <!-- SPF Facial Picker -->
+<!-- Ficha de un producto tocado dentro de una nota. -->
+<div class="modal-overlay" id="nota-prod-modal" onclick="closeModal('nota-prod-modal')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="nota-prod-title"></div>
+      <button class="modal-close" onclick="closeModal('nota-prod-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="nota-prod-body"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="spf-modal" onclick="closeModal('spf-modal')">
   <div class="modal-sheet" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>

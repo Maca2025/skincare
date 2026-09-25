@@ -4249,6 +4249,7 @@ function showTab(name, btn) {
   if (name === 'history') loadHitos();
   if (name === 'stock'   && !inventoryLoaded) loadInventory();
   if (name === 'routines' && !routinesLoaded) loadRoutines();
+  if (name === 'notas') loadNotas();
 }
 let toastTimer;
 let _undoFn = null;
@@ -4958,6 +4959,66 @@ async function setInvStatus(productId, newStatus) {
     showToast('❌ Error al guardar', 'error');
   }
 }
+// ── NOTAS (solo lectura) ─────────────────────────────────────────────────────
+// Se escriben en la computadora (escritorio-notas.js); aquí solo se leen.
+// Cómo se ve una nota lo decide renderNota (pure.js), la misma regla que usa
+// la computadora: nunca una copia aquí. Se vuelven a pedir cada vez que se
+// abre la pestaña, porque cambian desde la otra interfaz.
+let allNotas = [];
+let notaAbierta = null;
+async function loadNotas() {
+  const el = document.getElementById('notas-content');
+  if (!el) return;
+  if (!allNotas.length) el.innerHTML = '<div class="loading-state"><span class="spinner">⟳</span></div>';
+  const { data, error } = await db.from('notas').select('*').order('sort_order').order('created_at');
+  if (error) { el.innerHTML = `<div class="tap-hint">No se pudieron cargar las notas: ${esc(error.message)}</div>`; return; }
+  allNotas = data || [];
+  if (notaAbierta && !allNotas.some(n => n.id === notaAbierta)) notaAbierta = null;
+  renderNotas();
+}
+function notasPorId() {
+  const m = {}; allProducts.forEach(p => { m[p.id] = p; }); return m;
+}
+function renderNotas() {
+  const el = document.getElementById('notas-content');
+  if (!el) return;
+  const n = allNotas.find(x => x.id === notaAbierta);
+  if (n) {
+    el.innerHTML = `
+<button class="rout-back-btn" onclick="cerrarNota()">← Notas</button>
+<div class="nota-cel-tit">${esc((n.emoji ? n.emoji + ' ' : '') + n.titulo)}</div>
+<article class="nt-doc nt-cel" onclick="notaClic(event)">${renderNota(n.cuerpo, notasPorId())}</article>`;
+    return;
+  }
+  el.innerHTML = allNotas.length
+    ? `<div class="nota-cel-lista">${allNotas.map(x => `
+<button class="nota-cel-item" onclick="abrirNota('${jsAttrEsc(x.id)}')">
+  <span>${esc((x.emoji ? x.emoji + ' ' : '') + x.titulo)}</span><span class="nota-cel-fl">›</span>
+</button>`).join('')}</div>
+<div class="tap-hint">Las notas se escriben desde la computadora.</div>`
+    : '<div class="tap-hint">Todavía no hay notas. Se escriben desde la computadora (escritorio.html → Notas).</div>';
+}
+function abrirNota(id) { notaAbierta = id; renderNotas(); window.scrollTo(0, 0); }
+function cerrarNota() { notaAbierta = null; renderNotas(); }
+// Tocar una etiqueta de producto abre su ficha, SOLO LECTURA. No se reusa
+// invItemDetailHTML a propósito: trae los botones Editar y Eliminar producto,
+// y desde una nota no debe poder borrarse nada (regla: nunca borrar un producto).
+function notaClic(ev) {
+  const chip = ev.target.closest('[data-prod]');
+  if (!chip) return;
+  const p = allProducts.find(x => x.id === chip.dataset.prod);
+  if (!p) return;
+  const st = { ok: '✅ Tengo', low: '⚠️ Por reponer', out: '❌ Sin stock' }[p.status] || '';
+  document.getElementById('nota-prod-title').textContent = `${p.emoji || ''} ${p.name}`.trim();
+  document.getElementById('nota-prod-body').innerHTML =
+    `<div class="nota-prod-meta">${esc([p.brand, p.category, st].filter(Boolean).join(' · '))}</div>` +
+    ((p.note ? `<div class="nota-prod-sec">${fmtRich(p.note)}</div>` : '') +
+     (p.how_to_apply ? `<div class="nota-prod-sec"><b>Cómo aplicar</b><br>${fmtRich(p.how_to_apply)}</div>` : '') +
+     (p.why_it_works ? `<div class="nota-prod-sec"><b>Por qué funciona</b><br>${fmtRich(p.why_it_works)}</div>` : '')
+     || '<div class="tap-hint">Este producto no tiene notas ni instrucciones todavía.</div>');
+  openModal('nota-prod-modal');
+}
+
 // ── ROUTINE EDITOR ───────────────────────────────────────────────────────────
 let routinesLoaded = false;
 let allRoutines = [];

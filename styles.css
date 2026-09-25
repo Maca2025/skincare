@@ -971,3 +971,30 @@ body {
   padding-top: 10px; margin-top: 14px !important; }
 
 @media (max-width: 380px) { .capas-listas { flex-direction: column; } }
+
+/* ── NOTAS (25-sep) — solo lectura. Las clases nt-* las produce renderNota
+   (pure.js); escritorio.css lleva su versión. Letra chica a propósito: Maca
+   la pidió así para que quepa más en la pantalla. ── */
+.nota-cel-lista { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.nota-cel-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.nota-cel-fl { color: var(--ink-4); font-size: 18px; }
+.nota-cel-tit { font-size: 14px; font-weight: 700; color: var(--ink); margin: -6px 0 6px; line-height: 1.3; }
+.nt-cel { font-size: 11px; line-height: 1.45; color: var(--ink-2); background: var(--card); border: 1px solid var(--line-soft); border-radius: 12px; padding: 8px 12px 12px; }
+.nt-cel h2 { font-size: 12.5px; font-weight: 700; color: var(--ink); margin: 12px 0 2px; }
+.nt-cel h2:first-child { margin-top: 2px; }
+.nt-cel h3 { font-size: 11.5px; font-weight: 700; color: var(--ink); margin: 10px 0 1px; }
+.nt-cel p { margin: 2px 0 6px; }
+.nt-cel ol, .nt-cel ul { margin: 2px 0 6px; padding-left: 16px; }
+.nt-cel li { margin: 2px 0; }
+.nt-cel li ul, .nt-cel li ol { margin: 1px 0 2px; }
+.nt-cel b { color: var(--ink); }
+.nt-cel .nt-espera { background: var(--warn-soft); color: var(--ink); border-radius: 4px; padding: 0 4px; font-weight: 600; }
+.nt-cel .nt-aviso { background: var(--err-soft); color: var(--ink); border-radius: 8px; padding: 6px 9px; margin: 8px 0; }
+.nt-cel .nt-pr { display: inline; background: var(--ok-soft); color: var(--ink); border-radius: 999px; padding: 0 6px; font-size: 10.5px; font-weight: 600; cursor: pointer; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.nt-cel .nt-pr.out { background: var(--bg-soft); color: var(--ink-3); }
+.nt-cel .nt-pr.out::after { content: " · agotado"; font-size: 9px; text-transform: uppercase; }
+.nt-cel .nt-pr.falta { background: var(--warn-soft); cursor: default; }
+.nt-cel .nt-pr.borrado { background: var(--err-soft); color: var(--err); cursor: default; }
+.nota-prod-meta { font-size: 12px; color: var(--ink-3); margin-bottom: 10px; }
+.nota-prod-sec { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-bottom: 12px; }
+.nota-prod-sec b { color: var(--ink); }

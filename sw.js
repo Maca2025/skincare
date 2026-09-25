@@ -73,7 +73,9 @@
 // escritorio. app.js nuevo con pure.js viejo en caché no arrancaría.
 // v38 — pure.js gana las funciones de NOTAS (renderNota y compañía), que
 // comparten la computadora (escribe) y el celular (lee). Sección Notas.
-const CACHE = 'skincare-shell-v38';
+// v39 — pestaña Notas en el celular (solo lectura): index.html, app.js y
+// styles.css cambian juntos.
+const CACHE = 'skincare-shell-v39';
 const SHELL = [
   './',
   './index.html',
