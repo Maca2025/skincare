@@ -33,19 +33,22 @@
 </div>
 
 <div id="app" class="app" hidden>
-  <nav class="side" aria-label="Secciones">
+  <header class="top">
     <div class="logo">Skincare<span>.</span></div>
-    <button class="navb" data-go="registro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 12"/></svg>Registro<kbd>1</kbd></button>
-    <button class="navb" data-go="rutinas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="5" height="18" rx="1.5"/><rect x="10" y="3" width="5" height="12" rx="1.5"/><rect x="17" y="3" width="4" height="15" rx="1.5"/></svg>Rutinas<kbd>2</kbd></button>
-    <button class="navb" data-go="catalogo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h18M3 12h18M3 19h18M8 3v18"/></svg>Catálogo<kbd>3</kbd></button>
-    <button class="navb" data-go="fotos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 5l1.5-2h5L16 5"/></svg>Fotos<kbd>4</kbd></button>
-    <button class="navb" data-go="revisar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Revisar<kbd>5</kbd></button>
-    <div class="sidefoot">
+    <nav class="tabs" aria-label="Secciones">
+      <button class="navb" data-go="registro">Registro<kbd>1</kbd></button>
+      <button class="navb" data-go="rutinas">Rutinas<kbd>2</kbd></button>
+      <button class="navb" data-go="catalogo">Catálogo<kbd>3</kbd></button>
+      <button class="navb" data-go="fotos">Fotos<kbd>4</kbd></button>
+      <button class="navb" data-go="revisar">Revisar<kbd>5</kbd></button>
+    </nav>
+    <div class="topfoot">
       <div id="estado" class="estado"><span class="dot"></span>Conectando…</div>
       <div id="conteos" class="conteos"></div>
-      <div><a href="index.html">Abrir la app del celular</a> · <button class="linkb" id="logout" type="button">Salir</button></div>
+      <a href="index.html">App del celular</a>
+      <button class="linkb" id="logout" type="button">Salir</button>
     </div>
-  </nav>
+  </header>
   <main id="main" tabindex="-1"></main>
 </div>
 
@@ -58,6 +61,7 @@
 <script src="config.js"></script>
 <script src="pure.js"></script>
 <script src="activos-matriz.js"></script>
+<script src="escritorio-registro.js"></script>
 <script src="escritorio.js"></script>
 </body>
 </html>

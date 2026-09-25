@@ -525,6 +525,23 @@ t('spotTrend: si solo queda una válida, no concluye',
   spotTrend([{ observed_at: '2026-01-01', shade: 5 },
              { observed_at: '2026-02-01', shade: null }]), null);
 
+// ============================================================================
+// COMPARTIDO CELULAR ↔ ESCRITORIO (la batería completa vive en tests-lote.js)
+// ============================================================================
+group('🖥️ Compartido con escritorio');
+const _P = [{ id: 'p1', emoji: '💊', name: 'Retin-A', logged_as: '💊 Tretinoína' }, { id: 'p2', emoji: '🌞', name: 'UVMune' }];
+t('productoDeNombre: logged_as', productoDeNombre(_P, '💊 Tretinoína').id, 'p1');
+t('productoDeNombre: "emoji nombre"', productoDeNombre(_P, '🌞 UVMune').id, 'p2');
+t('productoDeNombre: desconocido', productoDeNombre(_P, 'x'), null);
+const _R = [{ id: 'a', section_key: 'am', sort_order: 1, schedule_days: null },
+            { id: 't', section_key: 'pm', sort_order: 2, schedule_days: [1] },
+            { id: 'z', section_key: 'pm', sort_order: 3, schedule_days: [2] }];
+t('rutinasDelDia: pm del lunes', rutinasDelDia(_R, 1).pm.id, 't');
+t('rutinasDelDia: pm del martes', rutinasDelDia(_R, 2).pm.id, 'z');
+t('rutinasDelDia: am sin calendario', rutinasDelDia(_R, 5).am.id, 'a');
+t('nombreRegistroPaso: paso fijo usa "emoji nombre"', nombreRegistroPaso({}, _P[0]), '💊 Retin-A');
+t('isoLocal: vuelve al mismo día local', localDateOfISO(isoLocal('2026-09-21', '22:00')), '2026-09-21');
+
 // ── fin ──
 finish();
 </script>

@@ -112,11 +112,9 @@ function zonaLabel(z) {
 // si mañana PRODUCT_ZONAS cambia, los registros viejos conservan lo que pasó.
 // El precio es que un default equivocado queda congelado en el histórico, así
 // que el renglón de zonas del paso es tocable para corregirlo.
+// La regla vive en pure.js (zonasRegistroDe), compartida con escritorio.js.
 function zonasDeProducto(prod, elegidas) {
-  if (!prod) return Array.isArray(elegidas) ? [...new Set(elegidas.filter(Boolean))] : [];
-  const aptas = (typeof zonasAptasDe === 'function') ? zonasAptasDe(prod) : [];
-  const def = (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[prod.id]) || [];
-  return resolveZonas(elegidas, aptas, def, ZONAS_ORDEN);
+  return zonasRegistroDe(prod, elegidas, ZONAS_ORDEN);
 }
 function zonasAptasDeNombre(name) {
   const p = productByLoggedName(name);
@@ -2395,14 +2393,9 @@ function stepProductOf(s) {
 // Un registro guarda un STRING (product_name), no el id. Esta es la ÚNICA
 // resolución string → producto; todo lo que necesite marca, categoría o id de
 // un registro pasa por aquí (si se duplica, se desincroniza).
+// La resolución vive en pure.js (productoDeNombre), compartida con escritorio.js.
 function productByLoggedName(name) {
-  if (!name) return null;
-  const n = String(name).trim();
-  return allProducts.find(p =>
-    (p.logged_as && p.logged_as === n) ||
-    (`${p.emoji} ${p.name}` === n) ||
-    (p.name === n)
-  ) || null;
+  return productoDeNombre(allProducts, name);
 }
 function productIdForLoggedName(name) {
   const p = productByLoggedName(name);
@@ -5550,17 +5543,13 @@ async function loadTodayRoutines(dateStr) {
   const { data: routines } = await db.from('routines')
     .select('*').eq('active', true).order('sort_order');
   allRoutinesCache = routines || [];
-  const dayRoutines = (routines || []).filter(r =>
-    !r.schedule_days || r.schedule_days.includes(dow)
-  );
-  const bySection = {};
-  dayRoutines.forEach(r => { if (!bySection[r.section_key]) bySection[r.section_key] = r; });
-  const bodyRoutines = dayRoutines
-    .filter(r => r.section_key === 'body')
-    .sort((a, b) => a.sort_order - b.sort_order);
-  const feetRoutines = dayRoutines
-    .filter(r => r.section_key === 'feet')
-    .sort((a, b) => a.sort_order - b.sort_order);
+  // Qué rutina toca: la regla vive en pure.js (rutinasDelDia), compartida con
+  // el registro en lote de escritorio.js. Aquí solo se le suman los cambios
+  // manuales del día (override), que son del teléfono y no son dato.
+  const delDia = rutinasDelDia(routines || [], dow);
+  const bySection = { am: delDia.am, pm: delDia.pm };
+  const bodyRoutines = delDia.body;
+  const feetRoutines = delDia.feet;
   // Override manual: si hay una rutina elegida a mano para este día/sección,
   // reemplaza la selección automática (sin tocar schedule_days en la base).
   const ov = routineOverrides[dateStr] || {};

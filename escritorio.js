@@ -9,6 +9,7 @@
 // a pure.js y lo usan las dos. Nunca una copia aquí.
 //
 // Paso 1 (24-sep-2026): la base — sesión, menú, conexión verificada.
+// Paso 2 (24-sep-2026): Registro en lote → escritorio-registro.js.
 // ============================================================================
 (function () {
 'use strict';
@@ -36,18 +37,25 @@ const KEY_PANTALLA = 'escritorio-pantalla';
 let actual = 'registro';
 try { const g = localStorage.getItem(KEY_PANTALLA); if (PANTALLAS[g]) actual = g; } catch (e) {}
 
+// Pantallas ya construidas: cada una es un módulo con montar(elemento, db).
+const MODULOS = { registro: window.Registro };
+
 function pintar() {
   const p = PANTALLAS[actual];
-  $('main').innerHTML =
+  const main = $('main');
+  main.dataset.pantalla = actual;
+  main.onclick = null; main.onchange = null;
+  document.querySelectorAll('.navb').forEach(b => {
+    if (b.dataset.go === actual) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  if (MODULOS[actual]) { MODULOS[actual].montar(main, db); return; }
+  main.innerHTML =
     `<div class="hdr"><div class="grow"><div class="eyebrow">${esc(p.titulo)}</div><h1>${esc(p.titulo)}</h1></div></div>
      <section class="card pronto">
        <div class="eyebrow">En construcción · paso ${p.paso}</div>
        <p>${esc(p.texto)}</p>
      </section>`;
-  document.querySelectorAll('.navb').forEach(b => {
-    if (b.dataset.go === actual) b.setAttribute('aria-current', 'page');
-    else b.removeAttribute('aria-current');
-  });
 }
 function ir(nombre) {
   if (!PANTALLAS[nombre]) return;
@@ -90,8 +98,8 @@ async function verificarConexion() {
   }
   est.className = 'estado ok';
   est.innerHTML = '<span class="dot"></span>Conectado a tu base';
-  $('conteos').innerHTML =
-    `${prod.count} productos · ${rut.count} rutinas<br>${apps.count} aplicaciones en 7 días<br>${fotos.count} fotos`;
+  $('conteos').textContent =
+    `${prod.count} productos · ${rut.count} rutinas · ${apps.count} aplicaciones en 7 días · ${fotos.count} fotos`;
 }
 
 // ── SESIÓN (la misma cuenta y la misma sesión que la app del celular) ─────────

@@ -68,7 +68,10 @@
 // v36 — la conexión a Supabase sale de app.js a config.js, compartido con la
 // nueva interfaz de computadora (escritorio.html). El celular no cambia de
 // comportamiento, pero app.js ya no arranca sin config.js en caché.
-const CACHE = 'skincare-shell-v36';
+// v37 — app.js usa funciones nuevas de pure.js (productoDeNombre,
+// zonasRegistroDe, rutinasDelDia), compartidas con el registro en lote de
+// escritorio. app.js nuevo con pure.js viejo en caché no arrancaría.
+const CACHE = 'skincare-shell-v37';
 const SHELL = [
   './',
   './index.html',

@@ -639,3 +639,117 @@ function resolveZonas(elegidas, aptas, porDefecto, orden) {
   if (interDef.length) return ordenarZonas(interDef, orden);
   return [];
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// COMPARTIDO ENTRE LAS DOS INTERFACES — celular (app.js) y escritorio
+// (escritorio.js). Todo lo que decide QUÉ se escribe en product_applications
+// o QUÉ rutina toca un día vive aquí UNA sola vez. app.js conserva sus nombres
+// de siempre (productByLoggedName, zonasDeProducto…) como envolturas de una
+// línea, para no tocar a sus llamadores. (2026-09-24)
+// ══════════════════════════════════════════════════════════════════════════
+
+// Un registro guarda un STRING (product_name), no el id. Esta es la ÚNICA
+// resolución string → producto. Acepta las tres formas históricas:
+// `logged_as`, "emoji nombre" y el nombre pelón.
+function productoDeNombre(productos, name) {
+  if (!name) return null;
+  const n = String(name).trim();
+  return (productos || []).find(p =>
+    (p.logged_as && p.logged_as === n) ||
+    (`${p.emoji} ${p.name}` === n) ||
+    (p.name === n)
+  ) || null;
+}
+
+// Zonas que se ESCRIBEN para un producto. `elegidas` = lo marcado a mano, o
+// null cuando no hubo elección (paso fijo, lote): entonces van sus zonas por
+// defecto, ya como dato. Lee `zonasAptasDe` y `PRODUCT_ZONAS` de
+// activos-matriz.js en tiempo de ejecución (pure.js se carga antes).
+function zonasRegistroDe(prod, elegidas, orden) {
+  if (!prod) return Array.isArray(elegidas) ? [...new Set(elegidas.filter(Boolean))] : [];
+  const aptas = (typeof zonasAptasDe === 'function') ? zonasAptasDe(prod) : [];
+  const def = (typeof PRODUCT_ZONAS !== 'undefined' && PRODUCT_ZONAS[prod.id]) || [];
+  return resolveZonas(elegidas, aptas, def, orden);
+}
+
+// ¿Qué rutina toca un día de la semana? La regla del celular, sin los cambios
+// manuales del día (esos viven en el localStorage del teléfono y no son dato):
+//   · am y pm → UNA: la primera por sort_order cuyo calendario incluye el día
+//               (o que no tiene calendario: null). Un arreglo VACÍO no toca
+//               nunca — así lo leía loadTodayRoutines y se conserva.
+//   · body y feet → TODAS las que tocan, en orden.
+// `dow` 0 = domingo … 6 = sábado, como Date.getDay().
+function rutinasDelDia(rutinas, dow) {
+  const del = (rutinas || [])
+    .filter(r => r.active !== false)
+    .filter(r => !r.schedule_days || r.schedule_days.map(Number).includes(dow))
+    .slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const primera = sec => del.find(r => r.section_key === sec) || null;
+  return {
+    am: primera('am'),
+    pm: primera('pm'),
+    body: del.filter(r => r.section_key === 'body'),
+    feet: del.filter(r => r.section_key === 'feet')
+  };
+}
+
+// El producto de un paso fijo: por product_id, o por nombre para los pasos
+// viejos que nacieron sin id. Espejo de `stepProductOf` + el respaldo por
+// nombre de `dbStepHTML` en app.js.
+function productoDePaso(step, productos) {
+  if (!step) return null;
+  const ps = productos || [];
+  return (step.product_id && ps.find(p => p.id === step.product_id)) ||
+         ps.find(p => p.name === step.name) || null;
+}
+
+// El string que el celular escribe al palomear un paso FIJO: el texto visible
+// del paso, "emoji nombre" del producto (o del paso, si es informativo como
+// "Agua tibia"). Ojo: NO es `logged_as` — así lo escribe `checkStep` desde
+// siempre y la hidratación de los pasos informativos depende de ese texto.
+function nombreRegistroPaso(step, prod) {
+  const emoji = prod ? (prod.emoji || '') : ((step && step.emoji) || '');
+  const name  = prod ? prod.name : ((step && step.name) || '');
+  return `${emoji} ${name}`.trim();
+}
+// El string que escribe el PICKER al elegir un producto de categoría.
+function nombreRegistroProducto(prod) {
+  return prod ? (prod.logged_as || `${prod.emoji} ${prod.name}`) : '';
+}
+
+// Clave de "renglón" para agrupar el mismo paso a través de rutinas distintas
+// de una sección (la Noche de tretinoína y la de azelaico tienen cada una su
+// propio paso de limpiador, con ids distintos, pero es el mismo renglón).
+function clavePaso(step) {
+  if (!step) return '';
+  if (step.picker_category) return 'cat:' + step.picker_category;
+  if (step.product_id) return 'prod:' + step.product_id;
+  return 'nom:' + String(step.name || '').trim();
+}
+
+// Fecha local (YYYY-MM-DD) + hora local ("HH:MM") → ISO en UTC, para
+// `applied_at`. Nunca toISOString().split() para sacar fechas: aquí se va de
+// local a UTC, que es la única dirección segura.
+function isoLocal(dateStr, hhmm) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const [h, mi] = String(hhmm || '12:00').split(':').map(Number);
+  return new Date(y, m - 1, d, h || 0, mi || 0, 0, 0).toISOString();
+}
+
+// Una fila de product_applications registrada EN LOTE desde escritorio.
+// Idéntica a la que escribe el celular al palomear un paso (source 'rutina',
+// routine_step_id, zonas por defecto ya como dato), más `notes` con la marca
+// del lote para poder deshacerlo completo. `notes` no lo lee nadie más.
+const LOTE_PREFIJO = 'lote-escritorio:';
+function filaAplicacionLote({ nombre, prod, fecha, hora, stepId, lote, orden }) {
+  const zonas = zonasRegistroDe(prod, null, orden);
+  return {
+    product_name: nombre,
+    product_id: prod ? prod.id : null,
+    applied_at: isoLocal(fecha, hora),
+    source: 'rutina',
+    routine_step_id: stepId || null,
+    zones: zonas.length ? zonas : null,
+    notes: LOTE_PREFIJO + lote
+  };
+}
