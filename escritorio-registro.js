@@ -215,14 +215,19 @@ function pintar() {
       } else {
         izq = `<b>${esc(((f.paso.emoji || '') + ' ' + (f.paso.name || '')).trim())}</b><i>paso sin producto</i>`;
       }
+      if (sec.key === 'body' || sec.key === 'feet') {
+        const r = S.rutinas.find(x => x.id === f.paso.routine_id);
+        if (r) izq = izq.replace('</i>', ` · ${esc(r.name)}</i>`);
+      }
       html += `<div class="g-row"><div class="g-prod">${izq}</div>`;
       f.celdas.forEach(c => {
         const sel = S.sel[c.d] ? ' sel' : '';
         let b;
-        if (c.estado === 'off') b = `<span class="cb off" aria-hidden="true">—</span>`;
+        if (c.d > M.t) b = `<span class="cb off" aria-hidden="true"></span>`;
+        else if (c.estado === 'off') b = `<span class="cb off" aria-hidden="true">—</span>`;
         else if (c.estado === 'futuro') b = `<span class="cb off" aria-hidden="true"></span>`;
         else if (c.estado === 'hecho') b = `<span class="cb done" title="${esc(c.ya)}" aria-label="${esc(nombreDia(c.d) + ': registrado, ' + c.ya)}">${I.check}</span>`;
-        else b = `<button class="cb ${c.estado === 'borrador' ? 'draft' : 'due'}" data-a="celda" data-k="${c.d}|${c.p.id}" aria-label="${esc(nombreDia(c.d) + ': ' + (c.estado === 'borrador' ? 'en borrador' : 'tocaba y falta'))}">${c.estado === 'borrador' ? I.plus : ''}</button>`;
+        else b = `<button class="cb ${c.estado === 'borrador' ? 'draft' : 'due'}" data-a="celda" data-k="${c.d}|${c.p.id}" aria-label="${esc(nombreDia(c.d) + ': ' + (c.estado === 'borrador' ? 'en borrador' : 'tocaba y falta'))}">${c.estado === 'borrador' ? I.check : ''}</button>`;
         html += `<div class="g-cell${sel}">${b}</div>`;
       });
       html += `</div>`;
@@ -236,10 +241,18 @@ function pintar() {
       }
     });
   });
-  html += `</div><div class="legend"><span><i class="sw done"></i>Ya registrado</span><span><i class="sw draft"></i>En borrador</span><span><i class="sw due"></i>Tocaba y no está</span><span><i class="sw off"></i>No tocaba ese día</span></div></section>`;
+  html += `</div><div class="legend"><span><i class="sw done"></i>Ya registrado</span><span><i class="sw draft"></i>Se va a registrar al guardar</span><span><i class="sw due"></i>Tocaba y no está</span><span><i class="sw off"></i>No tocaba ese día</span></div></section>`;
   html += panelDerecho(M);
   html += `</div>`;
+  // Repintar reemplaza el HTML: sin esto la cuadrícula volvía a la primera
+  // fila con cada clic y se perdía el lugar.
+  const g0 = raiz.querySelector('.grid'), a0 = raiz.querySelector('aside.rp');
+  const pos = { g: g0 ? g0.scrollTop : 0, gl: g0 ? g0.scrollLeft : 0, a: a0 ? a0.scrollTop : 0, m: raiz.scrollTop };
   raiz.innerHTML = html;
+  const g1 = raiz.querySelector('.grid'), a1 = raiz.querySelector('aside.rp');
+  if (g1) { g1.scrollTop = pos.g; g1.scrollLeft = pos.gl; }
+  if (a1) a1.scrollTop = pos.a;
+  raiz.scrollTop = pos.m;
 }
 function borradorValido(M) {
   // Solo cuenta lo que sigue pendiente en la cuadrícula visible.
