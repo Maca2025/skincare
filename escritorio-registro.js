@@ -183,7 +183,7 @@ function pintar() {
   let html = `<div class="hdr"><div class="grow"><div class="eyebrow">Registro en lote</div>
     <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
       <button class="btn iconb" data-a="sem" data-v="-1" aria-label="Semana anterior">${I.izq}</button>
-      <h1 style="margin:0">${tituloSemana()}</h1>
+      <h1>${tituloSemana()}</h1>
       <button class="btn iconb" data-a="sem" data-v="1" aria-label="Semana siguiente" ${esActual ? 'disabled' : ''}>${I.der}</button>
       ${esActual ? '' : '<button class="btn sm" data-a="semhoy">Ir a esta semana</button>'}
     </div></div>
@@ -197,7 +197,7 @@ function pintar() {
   M.dias.forEach(d => {
     const fut = d > M.t, n = M.conteo[d];
     const s = fut ? '' : (n ? n + (n === 1 ? ' registro' : ' registros') : 'vacío');
-    html += `<button class="dayb${!fut && !n ? ' miss' : ''}${d === M.t ? ' hoy' : ''}" data-a="dia" data-d="${d}" aria-pressed="${!!S.sel[d]}" ${fut ? 'disabled' : ''}>
+    html += `<button class="dayb${!fut && !n ? ' miss' : ''}${d === M.t ? ' hoy' : ''}" title="${s}" data-a="dia" data-d="${d}" aria-pressed="${!!S.sel[d]}" ${fut ? 'disabled' : ''}>
       <span class="d">${DOW_CORTO[dowDe(d)]}</span><span class="n">${Number(d.slice(8))}</span><span class="s">${s}</span></button>`;
   });
   html += `</div>`;

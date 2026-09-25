@@ -154,3 +154,49 @@ aside.rp{width:320px;flex-shrink:0;border-left:1px solid var(--line);background:
 .note{background:var(--panel2);border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--ink2);line-height:1.55}
 .horas{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cargando{padding:40px 30px;color:var(--ink3)}
+
+/* ══ DENSIDAD (24-sep): Maca prefiere eficiencia a elegancia — títulos chicos,
+   filas bajas, todo en un renglón. Estas reglas van al final a propósito y
+   ganan sobre las de arriba; si se ajusta la densidad, se ajusta AQUÍ. ══ */
+body{font-size:13px}
+header.top{height:44px;gap:16px;padding:0 14px}
+.logo{font-size:17px}
+.navb{padding:0 11px;font-size:13px}
+.hdr{padding:8px 16px;gap:8px;align-items:center}
+.hdr .eyebrow{display:none}
+h1{font-size:17px;margin:0;letter-spacing:-.01em}
+.btn{height:30px;padding:0 10px;font-size:12.5px;border-radius:7px}
+.btn.sm{height:26px;padding:0 8px;font-size:12px}
+.iconb{width:28px;height:28px}
+.reg-main{padding:8px 12px 10px 16px;gap:8px}
+.alert{padding:5px 10px;font-size:12.5px;border-radius:7px;gap:8px}
+.g-row{grid-template-columns:minmax(260px,340px) repeat(7,minmax(46px,1fr))}
+.g-head .hint{padding:4px 10px;font-size:11px}
+.dayb{padding:3px 0 4px;flex-direction:row;justify-content:center;gap:5px;align-items:baseline}
+.dayb .n{font-size:14px;font-weight:600}
+.dayb .d{font-size:10px}
+.dayb .s{display:none}
+.g-grp{padding:3px 10px;font-size:10.5px}
+.g-prod{padding:2px 10px;flex-direction:row;align-items:center;gap:6px}
+.g-prod b{font-size:12.5px;flex:0 1 auto;min-width:0}
+.g-prod i{font-size:11px;flex:0 100 auto;min-width:0}
+.pickb{margin:0;font-size:11px;padding:0 6px;flex-shrink:1;min-width:40px}
+.g-cell{min-height:26px}
+.cb{width:34px;height:20px;border-radius:4px}
+.cb svg{width:12px;height:12px}
+.pickrow{padding:6px 10px;gap:6px}
+.chip{height:24px;padding:0 9px;font-size:12px}
+.legend{font-size:11.5px;gap:14px}
+.sw{width:18px;height:11px}
+aside.rp{width:260px;padding:12px 14px;gap:10px}
+.big{font-size:34px}
+.sumrow{padding:4px 0;font-size:12.5px}
+.note{padding:8px 10px;font-size:11.5px}
+.field{height:30px;font-size:13px}
+.g-prod{justify-content:flex-start}
+.g-prod b{flex:0 0 auto;max-width:60%}
+.pickb{flex:0 1 auto;max-width:55%}
+.horas{grid-template-columns:1fr 1fr;gap:6px}
+.horas .field{width:100%;min-width:0;padding:0 6px}
+.g-row{grid-template-columns:minmax(300px,440px) repeat(7,minmax(46px,1fr))}
+.g-prod b{max-width:72%}
